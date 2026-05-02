@@ -148,7 +148,17 @@ tr:hover td{background:#fef9f7}
 .radar-age.old{background:#fef2f2;color:var(--red)}
 .radar-channels{display:flex;gap:3px}
 
-/* ── Competition / v48 ───────────────────────── */
+/* ── Compact platform snapshot cards (v49) ────── */
+.snap-mini-card{
+  flex:1;min-width:120px;max-width:200px;
+  background:var(--s1);border:1px solid var(--b1);border-radius:10px;
+  padding:10px 12px;display:flex;flex-direction:column;gap:2px;
+}
+.snap-mini-plat{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:800;color:var(--t2);margin-bottom:4px}
+.snap-mini-val{font-size:20px;font-weight:900;color:var(--tx);line-height:1}
+.snap-mini-growth{font-size:13px;font-weight:800;color:var(--grn)}
+.snap-mini-sub{font-size:9px;color:var(--t3);margin-top:2px}
+@media(max-width:480px){.snap-mini-card{max-width:none;min-width:calc(50% - 5px)}}
 .comp-grid{display:grid;grid-template-columns:1fr;gap:11px}
 @media(min-width:640px){.comp-grid{grid-template-columns:1fr 1fr}}
 @media(min-width:900px){.comp-grid{grid-template-columns:1fr 1fr 1fr}}
@@ -666,7 +676,7 @@ tr:hover td{background:#fef9f7}
         </div>
       </div>
 
-      <!-- COMMUNITY / COMPETITION — v48 -->
+      <!-- COMMUNITY / COMPETITION — v49 -->
       <div class="pg" id="pg-community">
 
         <!-- ── Header ── -->
@@ -681,7 +691,7 @@ tr:hover td{background:#fef9f7}
           </div>
         </div>
 
-        <!-- ── Active competition timer ── -->
+        <!-- ── Active competition timer (only when active) ── -->
         <div id="comp-timer-wrap" style="display:none;margin-bottom:14px">
           <div class="comp-timer">
             <div class="label" id="comp-name-display">תחרות פעילה</div>
@@ -693,17 +703,6 @@ tr:hover td{background:#fef9f7}
               <button class="btn" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:11px" onclick="openEndCompModal()">🏁 סיים תחרות</button>
             </div>
           </div>
-        </div>
-
-        <!-- ── Threshold setting ── -->
-        <div class="tw" style="padding:12px;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span style="font-size:12px;font-weight:800;color:var(--tx)">🎯 רף זכייה:</span>
-          <div style="display:flex;align-items:center;gap:6px">
-            <input type="number" id="comp-goal-input" class="ifield" style="width:70px;text-align:center" min="1" max="100">
-            <span style="font-size:11px;color:var(--t2)">נקודות</span>
-            <button class="btn sm" onclick="saveCompGoal()">שמור</button>
-          </div>
-          <span id="comp-goal-display" style="font-size:11px;color:var(--t3)">נוכחי: 7</span>
         </div>
 
         <!-- ── Summary cards ── -->
@@ -725,31 +724,27 @@ tr:hover td{background:#fef9f7}
           </div>
         </div>
 
-        <!-- ── Platform snapshots ── -->
-        <div class="comp-grid" style="margin-bottom:14px">
-          <div class="snapshot-card">
-            <div class="snapshot-plat"><span style="color:#1558c0">📘</span>פייסבוק</div>
-            <div style="font-size:11px;color:var(--t2);margin-bottom:8px">נתונים אוטומטיים מתוסף הכרום</div>
-            <div style="font-size:20px;font-weight:900;color:var(--tx)" id="snap-fb-count">—</div>
-            <div style="font-size:10px;color:var(--t3)" id="snap-fb-label">עוקבים נוכחיים</div>
+        <!-- ── Platform snapshot cards (compact, auto-calculated) ── -->
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <!-- FB: auto from Chrome extension -->
+          <div class="snap-mini-card">
+            <div class="snap-mini-plat"><span>📘</span>פייסבוק</div>
+            <div class="snap-mini-val" id="snap-fb-count">—</div>
+            <div class="snap-mini-sub" id="snap-fb-label">עוקבים (תוסף כרום)</div>
           </div>
-          <div class="snapshot-card">
-            <div class="snapshot-plat"><span style="color:#e1306c">📷</span>אינסטגרם</div>
-            <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-              <div class="fg" style="flex:1;margin-bottom:0"><label style="font-size:9px;color:var(--t2)">ראשוני</label><input type="number" id="snap-ig-start" class="ifield" placeholder="0" style="font-size:12px"></div>
-              <div class="fg" style="flex:1;margin-bottom:0"><label style="font-size:9px;color:var(--t2)">נוכחי</label><input type="number" id="snap-ig-now" class="ifield" placeholder="0" style="font-size:12px"></div>
-            </div>
-            <button class="btn sec sm full" onclick="calcSnapshot('ig')">חשב עלייה</button>
-            <div id="snap-ig-result" style="display:none;margin-top:6px;font-weight:800;font-size:14px;color:var(--grn);text-align:center"></div>
+          <!-- IG: auto from followers dashboard -->
+          <div class="snap-mini-card">
+            <div class="snap-mini-plat"><span style="color:#e1306c">📷</span>אינסטגרם</div>
+            <div class="snap-mini-val" id="snap-ig-now-disp">—</div>
+            <div class="snap-mini-growth" id="snap-ig-growth"></div>
+            <div class="snap-mini-sub">עוקבים · <span id="snap-ig-base-disp">—</span> בתחילה</div>
           </div>
-          <div class="snapshot-card">
-            <div class="snapshot-plat"><span style="color:#0369a1">✈️</span>טלגרם</div>
-            <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-              <div class="fg" style="flex:1;margin-bottom:0"><label style="font-size:9px;color:var(--t2)">ראשוני</label><input type="number" id="snap-tg-start" class="ifield" placeholder="0" style="font-size:12px"></div>
-              <div class="fg" style="flex:1;margin-bottom:0"><label style="font-size:9px;color:var(--t2)">נוכחי</label><input type="number" id="snap-tg-now" class="ifield" placeholder="0" style="font-size:12px"></div>
-            </div>
-            <button class="btn sec sm full" onclick="calcSnapshot('tg')">חשב עלייה</button>
-            <div id="snap-tg-result" style="display:none;margin-top:6px;font-weight:800;font-size:14px;color:var(--grn);text-align:center"></div>
+          <!-- TG: auto from followers dashboard -->
+          <div class="snap-mini-card">
+            <div class="snap-mini-plat"><span style="color:#0369a1">✈️</span>טלגרם</div>
+            <div class="snap-mini-val" id="snap-tg-now-disp">—</div>
+            <div class="snap-mini-growth" id="snap-tg-growth"></div>
+            <div class="snap-mini-sub">עוקבים · <span id="snap-tg-base-disp">—</span> בתחילה</div>
           </div>
         </div>
 
@@ -769,8 +764,18 @@ tr:hover td{background:#fef9f7}
           </div>
         </div>
 
-        <!-- ── Leaderboard ── -->
+        <!-- ── Leaderboard — threshold row sits directly above table ── -->
         <div class="tw">
+          <!-- Threshold: only shown when competition is active -->
+          <div id="comp-goal-row" style="display:none;padding:10px 12px;border-bottom:1px solid var(--b1);display:none;align-items:center;gap:10px;flex-wrap:wrap;background:var(--s2)">
+            <span style="font-size:12px;font-weight:800;color:var(--tx)">🎯 רף זכייה:</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="number" id="comp-goal-input" class="ifield" style="width:70px;text-align:center" min="1" max="100">
+              <span style="font-size:11px;color:var(--t2)">נקודות</span>
+              <button class="btn sm" onclick="saveCompGoal()">שמור</button>
+            </div>
+            <span id="comp-goal-display" style="font-size:11px;color:var(--t3)">נוכחי: 7</span>
+          </div>
           <div class="ttbar comm-ttbar" style="justify-content:space-between">
             <span style="font-size:13px;font-weight:800;color:var(--tx)">📋 לוח המובילים</span>
             <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
@@ -2903,8 +2908,19 @@ async function renderCommunityTab(){
 function _renderCompTimer(){
   var cmp=_getCmp();
   var wrap=document.getElementById('comp-timer-wrap');
+  var goalRow=document.getElementById('comp-goal-row');
   if(!wrap)return;
-  if(!cmp.endDate){wrap.style.display='none';return;}
+
+  var isActive=!!(cmp.endDate);
+
+  // Timer visibility
+  if(!isActive){
+    wrap.style.display='none';
+    // Hide threshold row when no active competition
+    if(goalRow)goalRow.style.display='none';
+    return;
+  }
+
   var endTs=new Date(cmp.endDate).getTime();
   var now=Date.now();
   var daysLeft=Math.max(0,Math.ceil((endTs-now)/(86400000)));
@@ -2913,6 +2929,61 @@ function _renderCompTimer(){
   if(nd)nd.textContent=cmp.name||'תחרות פעילה';
   var dl=document.getElementById('comp-days-left');
   if(dl)dl.textContent=daysLeft===0?'היום!':daysLeft;
+
+  // Show threshold row only when competition is active
+  if(goalRow){goalRow.style.display='flex';}
+  var gi=document.getElementById('comp-goal-input');
+  if(gi&&!gi.value)gi.value=_getGoal();
+  var gd=document.getElementById('comp-goal-display');
+  if(gd)gd.textContent='נוכחי: '+_getGoal();
+
+  // Auto-refresh platform snapshots from G.followers
+  _refreshSnapshots();
+}
+
+/* ── Read live follower counts and compute growth ── */
+function _getLatestFollower(key){
+  var hist=G.followers&&G.followers[key]?G.followers[key]:[];
+  if(!hist.length)return null;
+  return hist[hist.length-1].val;
+}
+
+function _refreshSnapshots(){
+  var cmp=_getCmp();
+
+  // Instagram
+  var igNow=_getLatestFollower('ig');
+  var igStart=cmp.igStart||null;
+  var igNowEl=document.getElementById('snap-ig-now-disp');
+  var igBaseEl=document.getElementById('snap-ig-base-disp');
+  var igGrowthEl=document.getElementById('snap-ig-growth');
+  if(igNowEl)igNowEl.textContent=igNow!=null?igNow.toLocaleString():'—';
+  if(igBaseEl)igBaseEl.textContent=igStart!=null?igStart.toLocaleString():'—';
+  if(igGrowthEl){
+    if(igNow!=null&&igStart!=null){
+      var igDiff=igNow-igStart;
+      var igPct=igStart?((igDiff/igStart)*100).toFixed(1):'—';
+      igGrowthEl.textContent=(igDiff>=0?'+':'')+igDiff.toLocaleString()+' ('+igPct+'%)';
+      igGrowthEl.style.color=igDiff>=0?'var(--grn)':'var(--red)';
+    }else{igGrowthEl.textContent='';}
+  }
+
+  // Telegram
+  var tgNow=_getLatestFollower('tg');
+  var tgStart=cmp.tgStart||null;
+  var tgNowEl=document.getElementById('snap-tg-now-disp');
+  var tgBaseEl=document.getElementById('snap-tg-base-disp');
+  var tgGrowthEl=document.getElementById('snap-tg-growth');
+  if(tgNowEl)tgNowEl.textContent=tgNow!=null?tgNow.toLocaleString():'—';
+  if(tgBaseEl)tgBaseEl.textContent=tgStart!=null?tgStart.toLocaleString():'—';
+  if(tgGrowthEl){
+    if(tgNow!=null&&tgStart!=null){
+      var tgDiff=tgNow-tgStart;
+      var tgPct=tgStart?((tgDiff/tgStart)*100).toFixed(1):'—';
+      tgGrowthEl.textContent=(tgDiff>=0?'+':'')+tgDiff.toLocaleString()+' ('+tgPct+'%)';
+      tgGrowthEl.style.color=tgDiff>=0?'var(--grn)':'var(--red)';
+    }else{tgGrowthEl.textContent='';}
+  }
 }
 
 function adjustCompDays(delta){
@@ -2943,34 +3014,51 @@ function _saveNewComp(){
   var start=document.getElementById('nc-start')?.value||'';
   var end=document.getElementById('nc-end')?.value||'';
   var goal=parseInt(document.getElementById('nc-goal')?.value)||7;
-  _saveCmp({name,startDate:start,endDate:end,goal});
+
+  // v49: auto-snapshot current follower counts as the competition baseline
+  var igStart=_getLatestFollower('ig')||0;
+  var tgStart=_getLatestFollower('tg')||0;
+
+  _saveCmp({name,startDate:start,endDate:end,goal,igStart,tgStart});
   closeModal();
   _renderCompTimer();
   saveCompGoal();
-  toast('✅ תחרות נשמרה!','ok');
+  toast('✅ תחרות נשמרה! סנאפשוט IG:'+igStart+' TG:'+tgStart,'ok');
 }
 
 /* ── End competition modal ────────────────────── */
 function openEndCompModal(){
-  var snapIg=parseInt(document.getElementById('snap-ig-now')?.value)||0;
-  var snapTg=parseInt(document.getElementById('snap-tg-now')?.value)||0;
+  // v49: read current values from G.followers (no manual input fields anymore)
+  var igNow=_getLatestFollower('ig')||0;
+  var tgNow=_getLatestFollower('tg')||0;
+  var cmp=_getCmp();
+  var igStart=cmp.igStart||0,tgStart=cmp.tgStart||0;
+  var igDiff=igNow-igStart,tgDiff=tgNow-tgStart;
   var winners=COMM.data.filter(function(r){return r.isWinner;});
   var body='<div style="margin-bottom:12px;font-size:13px;font-weight:800;color:var(--tx)">סיכום תחרות 🏁</div>'
     +'<div style="background:var(--s2);border-radius:8px;padding:12px;margin-bottom:10px">'
     +'<div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:8px">זוכים ('+winners.length+')</div>'
     +winners.map(function(r,i){return'<div style="padding:4px 0;font-size:12px;font-weight:800">'+rankEmj(i+1)+' '+esc(r.name)+' — '+r.count+' נקודות</div>';}).join('')
     +'</div>'
-    +'<div class="row"><div class="fg"><label>אינסטגרם סופי</label><input type="number" id="end-ig" class="ifield" value="'+snapIg+'"></div>'
-    +'<div class="fg"><label>טלגרם סופי</label><input type="number" id="end-tg" class="ifield" value="'+snapTg+'"></div></div>';
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div style="background:var(--s2);border-radius:8px;padding:10px;text-align:center">'
+      +'<div style="font-size:10px;color:var(--t2);font-weight:800">📷 אינסטגרם</div>'
+      +'<div style="font-size:22px;font-weight:900;color:'+(igDiff>=0?'var(--grn)':'var(--red)')+'">+'+(igDiff)+'</div>'
+      +'<div style="font-size:10px;color:var(--t3)">'+igStart+' → '+igNow+'</div></div>'
+    +'<div style="background:var(--s2);border-radius:8px;padding:10px;text-align:center">'
+      +'<div style="font-size:10px;color:var(--t2);font-weight:800">✈️ טלגרם</div>'
+      +'<div style="font-size:22px;font-weight:900;color:'+(tgDiff>=0?'var(--grn)':'var(--red)')+'">+'+(tgDiff)+'</div>'
+      +'<div style="font-size:10px;color:var(--t3)">'+tgStart+' → '+tgNow+'</div></div>'
+    +'</div>';
   openModal('🏁 סיים תחרות',body,
     '<button class="btn sec" onclick="closeModal()">ביטול</button>'
     +'<button class="btn" style="background:var(--red);color:#fff" onclick="_confirmEndComp()">סיים ואפס</button>');
 }
 function rankEmj(n){return n===1?'🥇':n===2?'🥈':n===3?'🥉':n+'.';}
 function _confirmEndComp(){
-  var igEnd=parseInt(document.getElementById('end-ig')?.value)||0;
-  var tgEnd=parseInt(document.getElementById('end-tg')?.value)||0;
   var cmp=_getCmp();
+  var igEnd=_getLatestFollower('ig')||0;
+  var tgEnd=_getLatestFollower('tg')||0;
   var igStart=cmp.igStart||0,tgStart=cmp.tgStart||0;
   var winners=COMM.data.filter(function(r){return r.isWinner;});
   closeModal();
@@ -3117,9 +3205,16 @@ function openReferrerModal(id){
   var listHTML=refs.length
     ?refs.map(function(ref){
         var name=ref.name||ref.joinName||ref.NAME||'—';
+        var nameEn=ref.nameEn||ref.name_en||ref.NAME_EN||'';
         var date=ref.joinDate||ref.date||'';
         if(date){try{date=new Date(date).toLocaleDateString('he-IL');}catch(e){}}
-        return'<div class="referral-list-item"><span class="referral-name">'+esc(name)+'</span><span class="referral-date">'+esc(date)+'</span></div>';
+        return'<div class="referral-list-item">'
+          +'<div>'
+            +'<div class="referral-name">'+esc(name)+'</div>'
+            +(nameEn?'<div style="font-size:9px;color:var(--t3)">'+esc(nameEn)+'</div>':'')
+          +'</div>'
+          +'<span class="referral-date">'+esc(date)+'</span>'
+        +'</div>';
       }).join('')
     :'<div class="empty" style="padding:16px;font-size:11px">אין פרטי הפניות</div>';
   var badge=r.isWinner
