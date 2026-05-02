@@ -1091,7 +1091,7 @@ async function loadData(){
 
   // Build posts
   _setLoadStep('בונה רשימת פוסטים...');
-  G.posts=[];G.dateMap={};G.filtered=[];
+  G.posts=[];G.dateMap={};G.filtered=[];_dmSets={}; // v44: clear Set index too
   const allRows=(d.rows||[]).slice(1);
   console.log('[loadData] sheets rows:',allRows.length);
 
@@ -1124,17 +1124,23 @@ async function loadData(){
 
   _setLoadStep('מרנדר דשבורד...');
   setSS('מחובר — '+G.posts.length+' פוסטים',true);
-  populateCats();renderDash();filterPosts();renderCal();
-  populateCartCatFilter();renderCartTable();renderCartItems();
-  document.getElementById('nbposts').textContent=G.posts.length;
-  _setLoadStep('');
-  console.timeEnd('loadData');
+
+  // v44: defer heavy render to next animation frame so browser paints "מחובר" first
+  requestAnimationFrame(function(){
+    populateCats();renderDash();filterPosts();renderCal();
+    populateCartCatFilter();renderCartTable();renderCartItems();
+    var nb=document.getElementById('nbposts');if(nb)nb.textContent=G.posts.length;
+    _setLoadStep('');
+    console.log('[v44 loadData] done — posts:'+G.posts.length+', dateMapKeys:'+Object.keys(G.dateMap).length);
+    console.timeEnd('loadData');
+  });
 }
-// dateMap helper — isolated per platform, deduped in all[]
+// v44 PERF: dateMap helper — O(1) dedup with Set instead of indexOf O(n)
+var _dmSets={}; // parallel Set index for dedup — cleared with dateMap in loadData
 function _dmAdd(num,bucket,post){
-  if(!G.dateMap[num])G.dateMap[num]={fb:[],tg:[],ig:[],all:[]};
+  if(!G.dateMap[num]){G.dateMap[num]={fb:[],tg:[],ig:[],all:[]};_dmSets[num]=new Set();}
   G.dateMap[num][bucket].push(post);
-  if(G.dateMap[num].all.indexOf(post)===-1)G.dateMap[num].all.push(post);
+  if(!_dmSets[num].has(post)){_dmSets[num].add(post);G.dateMap[num].all.push(post);}
 }
 
 // BUG 1 FIX: write uses no-cors to avoid CORS errors, updates local state optimistically
@@ -1190,7 +1196,6 @@ function renderDash(){
 
   // v34: todayNum computed ONCE, guaranteed pure integer via getTodayNum()
   var todayNum=getTodayNum();
-  console.log('[v34 renderDash] todayNum=',todayNum,'type=',typeof todayNum,'posts=',n);
 
   // v35: Single-pass counters — queue logic is DATE-ONLY, independent of status
   var cDraft=0,cFB=0,cTG=0,cIG=0,cFBq=0,cTGq=0,cIGq=0;
@@ -1231,8 +1236,6 @@ function renderDash(){
       }
     }
   }
-  console.log('[v35 renderDash] todayNum=',todayNum,'cFBq=',cFBq,'cFB=',cFB,'cTGq=',cTGq,'cIGq=',cIGq,'cDraft=',cDraft);
-
   document.getElementById('st-total').textContent=n;
   document.getElementById('st-draft').textContent=cDraft;
   // Fix 5: "מתוכנן להיום" = posts with _dateE.num === todayNum (FB only)
@@ -2641,20 +2644,31 @@ async function fetchCommunityData(){
 }
 
 /* ── Parse the JSON into COMM.data (spam filtered) ──────────────── */
-// Expected GAS response shape:
-// { ok:true, referrers:[{name, count, referrals:[{name, joinDate}], isSpam?}] }
+// GAS response shape (flexible — accepts many field name variants):
+// { ok:true, referrers:[{name, count|points|POINTS|referrals_count, referrals:[{name, joinDate}], isSpam?}] }
 function _parseCommData(json){
-  var raw = json.referrers || json.data || json.rows || [];
+  var raw = json.referrers || json.data || json.leaderboard || json.rows || [];
   COMM.data = raw.filter(function(r){
-    // Exclude spam: IS_SPAM or isSpam flag
-    return !r.IS_SPAM && !r.isSpam && !r.spam;
+    return !r.IS_SPAM && !r.isSpam && !r.spam && !r.SPAM;
   }).map(function(r, idx){
+    // v44: accept any of these field names for the count/points value
+    var cnt = Number(
+      r.points      || r.POINTS      ||
+      r.count       || r.COUNT       ||
+      r.referrals_count || r.REFERRALS_COUNT ||
+      r.total       || r.TOTAL       || 0
+    );
+    var name = r.name || r.NAME || r.referrer || r.REFERRER || r.referrerName || '—';
+    var refs = Array.isArray(r.referrals) ? r.referrals
+             : Array.isArray(r.members)   ? r.members
+             : Array.isArray(r.joined)    ? r.joined
+             : [];
     return {
       id:        idx,
-      name:      r.name || r.referrer || r.NAME || '—',
-      count:     Number(r.count || r.COUNT || r.referrals_count || 0),
-      referrals: Array.isArray(r.referrals) ? r.referrals : [],
-      isWinner:  Number(r.count || r.COUNT || r.referrals_count || 0) >= REFERRAL_GOAL,
+      name:      String(name).trim(),
+      count:     cnt,
+      referrals: refs,
+      isWinner:  cnt >= REFERRAL_GOAL,   // v44: >= 7 (REFERRAL_GOAL), never hardcoded 10
     };
   });
   // Sort: winners first, then by count desc
@@ -2662,6 +2676,7 @@ function _parseCommData(json){
     if(b.isWinner !== a.isWinner) return b.isWinner ? 1 : -1;
     return b.count - a.count;
   });
+  console.log('[v44 _parseCommData] entries:',COMM.data.length,'winners:',COMM.data.filter(function(r){return r.isWinner;}).length);
 }
 
 /* ── Update summary cards ────────────────────────────────────────── */
