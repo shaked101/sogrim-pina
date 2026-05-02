@@ -814,6 +814,13 @@ const COMMUNITY_GAS_URL = 'https://script.google.com/macros/s/AKfycbw9Fp5aweV_ul
 const REFERRAL_GOAL = 7; // מספר הפניות לזכאות לפרס
 
 // ════════════════════════════════════════════════
+// POSTS GAS URL — v45: hardcoded fallback so the app works on Vercel
+// without the user configuring anything in Settings.
+// If the user saves a different URL in Settings it takes priority.
+// ════════════════════════════════════════════════
+const POSTS_GAS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbw9Fp5aweV_ul-_nq-GxHyWiSqyXY_Fq6kuDWo5uBnuw8CDyt5NwYnJURMoazDyFWI/exec';
+
+// ════════════════════════════════════════════════
 // STATE — read followers from localStorage FIRST, never overwrite
 // ════════════════════════════════════════════════
 let G={
@@ -864,6 +871,13 @@ const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&g
 const gv=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
 const getCfg=()=>JSON.parse(localStorage.getItem('sp_cfg')||'{}');
 const saveCfg=obj=>{const c=getCfg();localStorage.setItem('sp_cfg',JSON.stringify({...c,...obj}));};
+
+// v45: always returns a usable URL — localStorage first, then hardcoded fallback
+// This ensures the app works on Vercel without any manual configuration.
+function getPostsUrl(){
+  const fromStorage = (getCfg().url||'').trim();
+  return fromStorage || POSTS_GAS_URL_DEFAULT;
+}
 const safeNum=v=>{const n=parseFloat((v||'').toString().replace(/[^\d.\-]/g,''));return isNaN(n)?0:n;};
 
 // ════════════════════════════════════════════════
@@ -1069,31 +1083,34 @@ async function loadData(){
   console.time('loadData');
   setSS('טוען...',false);
   _setLoadStep('מושך נתוני פוסטים...');
-  const c=getCfg();
-  if(!c.url){setSS('לא מוגדר',false);_setLoadStep('');return;}
 
-  // v43: NO try/catch wrapping the whole function.
-  // Errors propagate to window.onerror / unhandledrejection → visible red banner.
-  // Each step has its own narrow catch only for HTTP/JSON errors.
+  // v45: getPostsUrl() = localStorage URL → hardcoded fallback
+  // Never silently returns early when localStorage is empty (Vercel first visit)
+  const url = getPostsUrl() + '?action=all&_t=' + Date.now();
 
   let d;
   try{
-    const url=c.url+'?action=all&_t='+Date.now();
-    const r=await fetch(url,{cache:'no-store'});
+    const r = await fetch(url, {cache:'no-store'});
     if(!r.ok) throw new Error('HTTP '+r.status+' מה-Apps Script');
     _setLoadStep('מפענח נתונים...');
-    d=await r.json();
+    d = await r.json();
     if(d.error) throw new Error('Apps Script החזיר שגיאה: '+d.error);
   }catch(e){
-    setSS('שגיאת fetch: '+e.message,false);
-    throw e;   // ← let global catcher show it
+    // v45: on any fetch/parse failure → load demo posts immediately
+    // The UI never stays stuck on a spinner
+    console.warn('[v45 loadData] fetch failed:', e.message, '→ loading demo posts');
+    setSS('נתוני דמו ('+e.message+')',false);
+    _loadDemoPosts();
+    _setLoadStep('');
+    console.timeEnd('loadData');
+    return;
   }
 
   // Build posts
   _setLoadStep('בונה רשימת פוסטים...');
-  G.posts=[];G.dateMap={};G.filtered=[];_dmSets={}; // v44: clear Set index too
+  G.posts=[];G.dateMap={};G.filtered=[];_dmSets={};
   const allRows=(d.rows||[]).slice(1);
-  console.log('[loadData] sheets rows:',allRows.length);
+  console.log('[v45 loadData] sheets rows:',allRows.length);
 
   var validRows=[];
   for(var ri=0;ri<allRows.length;ri++){
@@ -1103,11 +1120,8 @@ async function loadData(){
     var eng=(row[COL.ENG]||'').toString().trim();
     if(heb||eng)validRows.push(row);
   }
-  console.log('[loadData] valid rows:',validRows.length);
-  if(validRows.length>1000){
-    console.warn('[loadData] capping rows to 1000');
-    validRows.length=1000;
-  }
+  console.log('[v45 loadData] valid rows:',validRows.length);
+  if(validRows.length>1000){console.warn('[v45] capping rows to 1000');validRows.length=1000;}
 
   G.posts=new Array(validRows.length);
   for(var i=0;i<validRows.length;i++){
@@ -1120,18 +1134,16 @@ async function loadData(){
     if(p._dateTG)_dmAdd(p._dateTG.num,'tg',p);
     if(p._dateIG)_dmAdd(p._dateIG.num,'ig',p);
   }
-  console.log('[loadData] dateMap keys:',Object.keys(G.dateMap).length);
+  console.log('[v45 loadData] dateMap keys:',Object.keys(G.dateMap).length);
 
   _setLoadStep('מרנדר דשבורד...');
   setSS('מחובר — '+G.posts.length+' פוסטים',true);
 
-  // v44: defer heavy render to next animation frame so browser paints "מחובר" first
   requestAnimationFrame(function(){
     populateCats();renderDash();filterPosts();renderCal();
     populateCartCatFilter();renderCartTable();renderCartItems();
     var nb=document.getElementById('nbposts');if(nb)nb.textContent=G.posts.length;
     _setLoadStep('');
-    console.log('[v44 loadData] done — posts:'+G.posts.length+', dateMapKeys:'+Object.keys(G.dateMap).length);
     console.timeEnd('loadData');
   });
 }
@@ -1143,11 +1155,61 @@ function _dmAdd(num,bucket,post){
   if(!_dmSets[num].has(post)){_dmSets[num].add(post);G.dateMap[num].all.push(post);}
 }
 
-// BUG 1 FIX: write uses no-cors to avoid CORS errors, updates local state optimistically
+// ════════════════════════════════════════════════
+// DEMO POSTS — v45: shown when GAS fetch fails (CORS / network / Vercel cold start)
+// Gives the user something to see immediately instead of a stuck spinner.
+// Uses the same column structure as real Sheets data (COL map).
+// ════════════════════════════════════════════════
+function _loadDemoPosts(){
+  // Build 6 demo rows — same sparse array format as Google Sheets rows
+  function _row(heb,price,cat,fbS,tgs,img,dateE){
+    var r=new Array(21).fill('');
+    r[COL.HEB]=heb; r[COL.PRICE]=price; r[COL.CAT]=cat;
+    r[COL.FB_S]=fbS; r[COL.TG_S]=tgs;
+    r[COL.IMG]=img||''; r[COL.COL_E]=dateE||'';
+    return r;
+  }
+  var today=new Date();
+  var future=new Date(today); future.setDate(today.getDate()+5);
+  var past=new Date(today);   past.setDate(today.getDate()-35);
+  var fmt=function(d){return d.getFullYear()+'-'
+    +String(d.getMonth()+1).padStart(2,'0')+'-'
+    +String(d.getDate()).padStart(2,'0')+'T12:00:00.000Z';};
+
+  var demoRows=[
+    _row('מטען מגנטי לאייפון','8.99','טכנולוגיה','פורסם','פורסם','',fmt(past)),
+    _row('כד מים תרמי 1L','12.50','בית ועיצוב','פורסם','פורסם','',fmt(past)),
+    _row('רצועת שעון סיליקון','3.20','אביזרי רכב','מאושר','','',fmt(future)),
+    _row('מנורת לד USB','6.80','בית ועיצוב','','טיוטה','',''),
+    _row('קליפס לאוזניות','2.10','טכנולוגיה','','','',''),
+    _row('שמיכת פליז מיני','14.00','בית ועיצוב','פורסם','פורסם','',fmt(past)),
+  ];
+
+  G.posts=[];G.dateMap={};G.filtered=[];_dmSets={};
+  G.posts=demoRows.map(function(row,i){
+    var p={row:i+2,data:row,_isDemo:true};
+    p._dateE =parseDateIL(row[COL.COL_E]);
+    p._dateTG=null; p._dateIG=null;
+    if(p._dateE)_dmAdd(p._dateE.num,'fb',p);
+    return p;
+  });
+
+  setSS('נתוני דמו — חבר את המערכת להגדרות',false);
+  toast('⚠️ מציג נתוני דמו. הגדר את ה-Apps Script URL בהגדרות.','warn');
+
+  requestAnimationFrame(function(){
+    populateCats();renderDash();filterPosts();renderCal();
+    populateCartCatFilter();renderCartTable();renderCartItems();
+    var nb=document.getElementById('nbposts');if(nb)nb.textContent=G.posts.length+' (דמו)';
+  });
+}
+
+// writeSheet — uses getPostsUrl() so it works even when localStorage is empty
 async function writeSheet(rowNum,updates){
-  const c=getCfg();if(!c.url){toast('Apps Script לא מוגדר','err');return false;}
+  const url=getPostsUrl();
+  if(!url){toast('Apps Script לא מוגדר','err');return false;}
   try{
-    await fetch(c.url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',row:rowNum,updates})});
+    await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',row:rowNum,updates})});
     // Optimistic update — assume success since no-cors gives opaque response
     const p=G.posts.find(x=>x.row===rowNum);
     if(p){for(const[col,val]of Object.entries(updates))p.data[parseInt(col)-1]=val;}
@@ -2506,6 +2568,11 @@ function fillSettings(){
   const c=getCfg();
   const m={'s-url':'url','s-sname':'sheetName','s-make-wh':'makeWebhook','s-fb-url':'fbUrl','s-tg-url':'tgUrl','s-ig-url':'igUrl'};
   for(const[id,key]of Object.entries(m)){const e=document.getElementById(id);if(e&&c[key])e.value=c[key];}
+  // v45: if no URL in localStorage, show the hardcoded fallback so user knows what's active
+  const urlEl=document.getElementById('s-url');
+  if(urlEl&&!urlEl.value&&POSTS_GAS_URL_DEFAULT){
+    urlEl.placeholder='ברירת מחדל: '+POSTS_GAS_URL_DEFAULT.slice(0,60)+'...';
+  }
 }
 // ════════════════════════════════════════════════
 // COMMUNITY — תחרות הפניות (v39)
