@@ -818,7 +818,7 @@ const REFERRAL_GOAL = 7; // מספר הפניות לזכאות לפרס
 // without the user configuring anything in Settings.
 // If the user saves a different URL in Settings it takes priority.
 // ════════════════════════════════════════════════
-const POSTS_GAS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbwPscBzB5hJAiRn49Cu3IjSChVBbqDEYurVNAyKE2q5NLUiOdNOP9AG9EPFvZPdytgq/exec';
+const POSTS_GAS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbw9Fp5aweV_ul-_nq-GxHyWiSqyXY_Fq6kuDWo5uBnuw8CDyt5NwYnJURMoazDyFWI/exec';
 
 // ════════════════════════════════════════════════
 // STATE — read followers from localStorage FIRST, never overwrite
@@ -1090,7 +1090,23 @@ async function loadData(){
 
   let d;
   try{
-    const r = await fetch(url, {cache:'no-store'});
+  // v46 CORS FIX:
+  // From Vercel (https://), cache:'no-store' adds a Cache-Control header → non-simple
+  // request → browser sends OPTIONS preflight → Apps Script ignores OPTIONS → blocked.
+  // From file://, the browser skips CORS checks entirely → worked locally.
+  //
+  // Fix: use the SAME options as fetchCommunityData which already works on Vercel:
+  //   ✅ mode: 'cors'        — explicit cross-origin
+  //   ✅ redirect: 'follow'  — follow Apps Script 302 to googleusercontent.com
+  //   ✅ Accept header only  — simple request, no preflight
+  //   ✅ _t= query param     — cache-bust WITHOUT headers (key insight)
+  //   ❌ cache:'no-store'   — REMOVED: adds Cache-Control header → preflight → blocked
+  const r = await fetch(url, {
+    method:   'GET',
+    mode:     'cors',
+    redirect: 'follow',
+    headers:  { 'Accept': 'application/json' },
+  });
     if(!r.ok) throw new Error('HTTP '+r.status+' מה-Apps Script');
     _setLoadStep('מפענח נתונים...');
     d = await r.json();
