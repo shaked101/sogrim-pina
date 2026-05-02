@@ -318,7 +318,13 @@ tr:hover td{background:#fef9f7}
     <div class="login-sub">גישה מורשית בלבד</div>
     <input class="login-field" id="pw-in" type="password" placeholder="סיסמה...">
     <button class="login-btn" id="login-btn">כניסה ←</button>
-    <div id="login-loading" style="display:none;margin-top:12px;display:none;align-items:center;justify-content:center;gap:8px;color:var(--t2);font-size:12px"><div class="spin" style="width:16px;height:16px;border-width:2px"></div>טוען נתונים...</div>
+    <div id="login-loading" style="display:none;margin-top:12px;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--t2);font-size:12px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="spin" style="width:16px;height:16px;border-width:2px"></div>
+        <span>טוען נתונים...</span>
+      </div>
+      <div id="load-step-text" style="font-size:10px;color:var(--t3);min-height:14px"></div>
+    </div>
     <div class="login-err" id="login-err">סיסמה שגויה</div>
   </div>
 </div>
@@ -737,6 +743,66 @@ tr:hover td{background:#fef9f7}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
 // ════════════════════════════════════════════════
+// GLOBAL ERROR CATCHER — v43
+// Catches ALL uncaught errors AND unhandled promise rejections.
+// Renders a giant red banner so nothing hides silently.
+// ════════════════════════════════════════════════
+(function(){
+  function _showErr(title, detail){
+    // Remove existing banner first so repeated errors don't stack
+    var old = document.getElementById('__global_err_banner');
+    if(old) old.remove();
+
+    var b = document.createElement('div');
+    b.id = '__global_err_banner';
+    b.style.cssText = [
+      'position:fixed','top:0','left:0','right:0','z-index:99999',
+      'background:#b91c1c','color:#fff','font-family:monospace',
+      'font-size:13px','padding:14px 16px','direction:ltr',
+      'max-height:50vh','overflow-y:auto','box-shadow:0 4px 24px rgba(0,0,0,.5)',
+      'white-space:pre-wrap','word-break:break-all'
+    ].join(';');
+
+    b.innerHTML =
+      '<div style="font-size:16px;font-weight:900;margin-bottom:8px;direction:rtl">'
+      + '🚨 שגיאת JavaScript — ' + _esc(title)
+      + '</div>'
+      + '<div style="font-size:11px;opacity:.85;margin-bottom:8px">' + _esc(detail) + '</div>'
+      + '<button onclick="this.parentNode.remove()" style="'
+        + 'background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);'
+        + 'color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px'
+      + '">סגור</button>';
+
+    // Insert before everything else so it's always visible
+    var first = document.body ? document.body.firstChild : null;
+    if(first) document.body.insertBefore(b, first);
+    else document.addEventListener('DOMContentLoaded', function(){ document.body.insertBefore(b, document.body.firstChild); });
+
+    console.error('[GLOBAL ERROR]', title, detail);
+  }
+
+  function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // Synchronous errors (syntax errors, runtime crashes in non-async code)
+  window.onerror = function(msg, src, line, col, err){
+    var stack = err && err.stack ? '\n\nStack:\n' + err.stack : '';
+    _showErr(
+      msg,
+      'קובץ: ' + (src||'?') + '  שורה: ' + (line||'?') + ':' + (col||'?') + stack
+    );
+    return false; // don't suppress default browser logging
+  };
+
+  // Unhandled Promise rejections — async fetch failures, etc.
+  window.addEventListener('unhandledrejection', function(ev){
+    var reason = ev.reason;
+    var msg    = reason instanceof Error ? reason.message : String(reason);
+    var stack  = reason instanceof Error && reason.stack ? '\n\nStack:\n' + reason.stack : '';
+    _showErr('Unhandled Promise Rejection: ' + msg, stack);
+  });
+})();
+
+// ════════════════════════════════════════════════
 // COLUMN MAP
 // ════════════════════════════════════════════════
 const COL={HEB:0,ENG:1,PRICE:2,LINK:3,COL_E:4,CAT:5,STATUS:6,BOUGHT:7,TAGS:8,CONTENT:9,MSGID:10,COL_L:11,IMG:12,COL_N:13,RATING:14,TG_S:15,COL_Q:16,FB_S:17,COL_S:18,IG_S:19,COL_IG_D:20};
@@ -952,11 +1018,21 @@ function tryLogin(){
   }
 }
 
+// ── Step indicator — updates the login loading text ──────────────
+// Also updates the syncpill while app is running
+function _setLoadStep(msg){
+  var ld=document.getElementById('load-step-text');
+  if(ld) ld.textContent=msg||'';
+  // While app is running, also reflect in the sync pill
+  if(msg) setSS(msg,false);
+}
+
 function bootApp(){
   document.getElementById('dash-date').textContent=new Date().toLocaleDateString('he-IL',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   initCart();updateCartBadge();
   fillSettings();renderFCards();renderCatCards();
-  // Fix 5: auto-load saved stats from localStorage if available
+
+  // Auto-load saved stats from localStorage if available
   try{
     const saved=localStorage.getItem('sp_statsData');
     if(saved){
@@ -968,7 +1044,6 @@ function bootApp(){
         const dashEl=document.getElementById('stats-dash');
         if(dropEl)dropEl.style.display='none';
         if(dashEl)dashEl.style.display='block';
-        // Set date range from saved data
         const dates=parsed.rows.map(function(r){return r[G.aliCols.date];}).filter(Boolean).sort();
         if(dates.length){
           try{
@@ -976,12 +1051,14 @@ function bootApp(){
             const fromEl=document.getElementById('stat-from'),toEl=document.getElementById('stat-to');
             if(!isNaN(fd)&&fromEl)fromEl.value=fd.toISOString().slice(0,10);
             if(!isNaN(ld)&&toEl)toEl.value=ld.toISOString().slice(0,10);
-          }catch(e){}
+          }catch(e){ console.warn('stats date parse:',e); }
         }
-        setTimeout(renderStatsDash,100);// defer until DOM is ready
+        setTimeout(renderStatsDash,100);
       }
     }
-  }catch(e){}
+  }catch(e){ console.warn('bootApp stats load:',e); }
+
+  // loadData throws on failure — global catcher will show the banner
   loadData();
 }
 
@@ -989,63 +1066,69 @@ function bootApp(){
 // DATA LOAD v24 — cache-bust + timing + clean reset + row cap
 // ════════════════════════════════════════════════
 async function loadData(){
-  console.time('loadData-v23');
+  console.time('loadData');
   setSS('טוען...',false);
-  const c=getCfg();if(!c.url){setSS('לא מוגדר',false);return;}
+  _setLoadStep('מושך נתוני פוסטים...');
+  const c=getCfg();
+  if(!c.url){setSS('לא מוגדר',false);_setLoadStep('');return;}
+
+  // v43: NO try/catch wrapping the whole function.
+  // Errors propagate to window.onerror / unhandledrejection → visible red banner.
+  // Each step has its own narrow catch only for HTTP/JSON errors.
+
+  let d;
   try{
-    // v23: always force fresh data — no Google Sheets cache
     const url=c.url+'?action=all&_t='+Date.now();
     const r=await fetch(url,{cache:'no-store'});
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    const d=await r.json();if(d.error)throw new Error(d.error);
-
-    // Fix 1: clean wipe before rebuild — guarantee sync correctness
-    G.posts=[];G.dateMap={};G.filtered=[];
-
-    const allRows=(d.rows||[]).slice(1);
-    console.log('[v23] sheets rows total:',allRows.length);
-
-    // Fix 2: filter ghost rows first — O(n) single pass, no logic on empty rows
-    var validRows=[];
-    for(var ri=0;ri<allRows.length;ri++){
-      var row=allRows[ri];
-      if(!Array.isArray(row))continue;
-      var heb=(row[COL.HEB]||'').toString().trim();
-      var eng=(row[COL.ENG]||'').toString().trim();
-      if(heb||eng)validRows.push(row);
-    }
-    console.log('[v23] valid rows:',validRows.length);
-    // v23 PERF FIX: hard cap at 1000 rows to prevent 1-minute load times
-    if(validRows.length>1000){
-      console.warn('[v23] Capping rows from',validRows.length,'to 1000');
-      validRows.length=1000;
-    }
-
-    // Build posts + parse dates + fill dateMap in ONE O(n) pass
-    G.posts=new Array(validRows.length);
-    for(var i=0;i<validRows.length;i++){
-      var p={row:i+2,data:validRows[i]};
-      // Fix 3: parseDateIL is pure integer — reads raw cell string, strips time
-      p._dateE=parseDateIL(validRows[i][COL.COL_E]);
-      p._dateTG=parseDateIL(validRows[i][COL.COL_Q]);
-      p._dateIG=parseDateIL(validRows[i][COL.COL_IG_D]);
-      G.posts[i]=p;
-      if(p._dateE)_dmAdd(p._dateE.num,'fb',p);
-      if(p._dateTG)_dmAdd(p._dateTG.num,'tg',p);
-      if(p._dateIG)_dmAdd(p._dateIG.num,'ig',p);
-    }
-    console.log('[v23] dateMap keys:',Object.keys(G.dateMap).length);
-
-    setSS('מחובר — '+G.posts.length+' פוסטים',true);
-    populateCats();renderDash();filterPosts();renderCal();
-    populateCartCatFilter();renderCartTable();renderCartItems();
-    document.getElementById('nbposts').textContent=G.posts.length;
-    console.timeEnd('loadData-v23');
+    if(!r.ok) throw new Error('HTTP '+r.status+' מה-Apps Script');
+    _setLoadStep('מפענח נתונים...');
+    d=await r.json();
+    if(d.error) throw new Error('Apps Script החזיר שגיאה: '+d.error);
   }catch(e){
-    setSS('שגיאה: '+e.message,false);
-    toast('שגיאה: '+e.message,'err');
-    console.error('[v23] loadData error:',e);
+    setSS('שגיאת fetch: '+e.message,false);
+    throw e;   // ← let global catcher show it
   }
+
+  // Build posts
+  _setLoadStep('בונה רשימת פוסטים...');
+  G.posts=[];G.dateMap={};G.filtered=[];
+  const allRows=(d.rows||[]).slice(1);
+  console.log('[loadData] sheets rows:',allRows.length);
+
+  var validRows=[];
+  for(var ri=0;ri<allRows.length;ri++){
+    var row=allRows[ri];
+    if(!Array.isArray(row))continue;
+    var heb=(row[COL.HEB]||'').toString().trim();
+    var eng=(row[COL.ENG]||'').toString().trim();
+    if(heb||eng)validRows.push(row);
+  }
+  console.log('[loadData] valid rows:',validRows.length);
+  if(validRows.length>1000){
+    console.warn('[loadData] capping rows to 1000');
+    validRows.length=1000;
+  }
+
+  G.posts=new Array(validRows.length);
+  for(var i=0;i<validRows.length;i++){
+    var p={row:i+2,data:validRows[i]};
+    p._dateE =parseDateIL(validRows[i][COL.COL_E]);
+    p._dateTG=parseDateIL(validRows[i][COL.COL_Q]);
+    p._dateIG=parseDateIL(validRows[i][COL.COL_IG_D]);
+    G.posts[i]=p;
+    if(p._dateE) _dmAdd(p._dateE.num,'fb',p);
+    if(p._dateTG)_dmAdd(p._dateTG.num,'tg',p);
+    if(p._dateIG)_dmAdd(p._dateIG.num,'ig',p);
+  }
+  console.log('[loadData] dateMap keys:',Object.keys(G.dateMap).length);
+
+  _setLoadStep('מרנדר דשבורד...');
+  setSS('מחובר — '+G.posts.length+' פוסטים',true);
+  populateCats();renderDash();filterPosts();renderCal();
+  populateCartCatFilter();renderCartTable();renderCartItems();
+  document.getElementById('nbposts').textContent=G.posts.length;
+  _setLoadStep('');
+  console.timeEnd('loadData');
 }
 // dateMap helper — isolated per platform, deduped in all[]
 function _dmAdd(num,bucket,post){
@@ -2509,62 +2592,51 @@ var _DEMO_DATA = {
 async function fetchCommunityData(){
   const url = COMMUNITY_GAS_URL;
 
-  // Show spinner
   var wrap = document.getElementById('comm-leaderboard-wrap');
   if(wrap) wrap.innerHTML = _commSpinner();
   var btn = document.getElementById('comm-refresh-btn');
   var origLabel = btn ? btn.textContent : '🔄 רענן נתונים';
   if(btn){ btn.disabled = true; btn.textContent = '⏳ מסנכרן...'; }
+  _setLoadStep('טוען קהילה...');
 
   try{
     const resp = await fetch(
       url + '?action=leaderboard&_t=' + Date.now(),
       {
         method:   'GET',
-        mode:     'cors',        // correct — no-cors gives opaque response, can't read JSON
-        redirect: 'follow',      // follow 302 to googleusercontent.com
-        headers:  { 'Accept': 'application/json' },  // simple header, no preflight
+        mode:     'cors',
+        redirect: 'follow',
+        headers:  { 'Accept': 'application/json' },
       }
     );
 
-    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    if(!resp.ok) throw new Error('HTTP ' + resp.status + ' מה-Apps Script של הקהילה');
 
     const text = await resp.text();
     let json;
     try{ json = JSON.parse(text); }
-    catch(e){ throw new Error('תגובה לא תקינה מהשרת: ' + text.slice(0,120)); }
+    catch(e){ throw new Error('JSON לא תקין מקהילה: ' + text.slice(0,120)); }
 
-    if(json.ok === false) throw new Error(json.error || 'שגיאת שרת');
+    if(json.ok === false) throw new Error('Apps Script קהילה: ' + (json.error||'שגיאה לא ידועה'));
     return json;
 
   }catch(e){
-    // ── Detect local CORS block ──────────────────────────────────
-    // "Failed to fetch" / "NetworkError" = browser blocked cross-origin request
-    // from file:// (origin=null). Fall back gracefully to demo data.
+    // CORS block from file:// → warm demo fallback (expected limitation, not a bug)
     var isCorsBlock = e.message.includes('Failed to fetch')
                    || e.message.includes('NetworkError')
-                   || e.message.includes('Load failed');   // Safari wording
-
+                   || e.message.includes('Load failed');
     if(isCorsBlock){
-      // Warm warning toast — not an error, just a limitation
-      toast(
-        '⚠️ תצוגה מקומית חוסמת נתוני אמת (CORS). מוצגים נתוני הדגמה. לפעילות מלאה פתחו בנייד.',
-        'warn'
-      );
-      return _DEMO_DATA;   // ← inject demo — same shape as real GAS response
+      toast('⚠️ תצוגה מקומית חוסמת נתוני אמת (CORS). מוצגים נתוני הדגמה. לפעילות מלאה פתחו בנייד.','warn');
+      return _DEMO_DATA;
     }
-
-    // Any other error (bad JSON, HTTP error, etc.) — show error state
-    const msg = 'שגיאת טעינה: ' + e.message;
-    toast(msg, 'err');
-    if(wrap) wrap.innerHTML = '<div class="comm-empty">'
-      + '<div class="icon">⚠️</div>'
-      + '<div style="font-size:12px;text-align:center">' + esc(msg) + '</div>'
-      + '</div>';
-    return null;
+    // Any other error (HTTP, bad JSON) → show in wrap AND re-throw to global catcher
+    if(wrap) wrap.innerHTML = '<div class="comm-empty"><div class="icon">⚠️</div>'
+      + '<div style="font-size:12px;text-align:center">' + esc(e.message) + '</div></div>';
+    throw e;   // ← global error catcher shows red banner
 
   }finally{
     if(btn){ btn.disabled = false; btn.textContent = origLabel; }
+    _setLoadStep('');
   }
 }
 
