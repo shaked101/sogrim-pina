@@ -691,16 +691,19 @@ tr:hover td{background:#fef9f7}
           </div>
         </div>
 
-        <!-- ── Active competition timer (only when active) ── -->
+        <!-- ── Active competition banner (minimal, only when active) ── -->
         <div id="comp-timer-wrap" style="display:none;margin-bottom:14px">
-          <div class="comp-timer">
-            <div class="label" id="comp-name-display">תחרות פעילה</div>
-            <div class="days" id="comp-days-left">—</div>
-            <div class="label">ימים נותרו</div>
-            <div class="comp-actions">
-              <button class="btn" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;font-size:11px" onclick="adjustCompDays(3)">+3 ימים</button>
-              <button class="btn" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;font-size:11px" onclick="adjustCompDays(-3)">-3 ימים</button>
-              <button class="btn" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:11px" onclick="openEndCompModal()">🏁 סיים תחרות</button>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px 16px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:18px">🏁</span>
+              <div>
+                <div style="font-size:12px;font-weight:900;color:#15803d" id="comp-name-display">תחרות פעילה</div>
+                <div style="font-size:11px;color:#166534"><span id="comp-days-left" style="font-weight:900;font-size:16px">—</span> ימים נותרו</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <button class="btn sec sm" onclick="openEditCompModal()" style="font-size:11px">✏️ ערוך תחרות</button>
+              <button class="btn sm" onclick="confirmEndComp()" style="background:var(--red);color:#fff;font-size:11px">🏁 סיים תחרות</button>
             </div>
           </div>
         </div>
@@ -748,38 +751,50 @@ tr:hover td{background:#fef9f7}
           </div>
         </div>
 
-        <!-- ── Bonus points panel ── -->
-        <div class="tw" style="margin-bottom:14px">
-          <div class="ttbar">
-            <span style="font-size:13px;font-weight:800;color:var(--tx)">⭐ הענקת נקודות בונוס</span>
-          </div>
-          <div style="padding:12px">
-            <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:end;flex-wrap:wrap" class="bonus-input-grid">
-              <div class="fg" style="margin-bottom:0"><label>שם המפנה</label><input type="text" id="bonus-name" class="ifield" placeholder="חפש שם..."></div>
-              <div class="fg" style="margin-bottom:0"><label>נקודות</label><input type="number" id="bonus-pts" class="ifield" style="width:70px" value="1" min="1" max="20"></div>
-              <div class="fg" style="margin-bottom:0"><label>סיבה</label><input type="text" id="bonus-reason" class="ifield" placeholder="סטורי / תגובה..."></div>
-              <button class="btn grn" onclick="grantBonus()" style="align-self:end;white-space:nowrap">➕ הענק</button>
+        <!-- ── Bonus + Leaderboard row ── -->
+        <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-bottom:0">
+
+          <!-- Bonus panel: half-width -->
+          <div class="tw" style="flex:0 0 360px;max-width:100%;margin-bottom:14px">
+            <div class="ttbar">
+              <span style="font-size:12px;font-weight:800;color:var(--tx)">⭐ הענק נקודות בונוס</span>
             </div>
-            <div id="bonus-log" style="margin-top:10px;max-height:140px;overflow-y:auto"></div>
+            <div style="padding:10px">
+              <datalist id="bonus-names-list"></datalist>
+              <div class="fg" style="margin-bottom:7px">
+                <label style="font-size:10px">שם המשתתף</label>
+                <input type="text" id="bonus-name" class="ifield" placeholder="התחל להקליד..." list="bonus-names-list">
+              </div>
+              <div style="display:flex;gap:7px;align-items:flex-end">
+                <div class="fg" style="flex:0 0 70px;margin-bottom:0">
+                  <label style="font-size:10px">נקודות</label>
+                  <input type="number" id="bonus-pts" class="ifield" style="text-align:center" value="1" min="1" max="20">
+                </div>
+                <div class="fg" style="flex:1;margin-bottom:0">
+                  <label style="font-size:10px">סיבה (אופציונלי)</label>
+                  <input type="text" id="bonus-reason" class="ifield" placeholder="סטורי / תגובה...">
+                </div>
+                <button class="btn grn sm" onclick="grantBonus()" style="white-space:nowrap;align-self:flex-end">➕ הענק</button>
+              </div>
+            </div>
           </div>
+
         </div>
 
-        <!-- ── Leaderboard — threshold row sits directly above table ── -->
+        <!-- ── Leaderboard — goal row merged into header ── -->
         <div class="tw">
-          <!-- Threshold: only shown when competition is active -->
-          <div id="comp-goal-row" style="display:none;padding:10px 12px;border-bottom:1px solid var(--b1);display:none;align-items:center;gap:10px;flex-wrap:wrap;background:var(--s2)">
-            <span style="font-size:12px;font-weight:800;color:var(--tx)">🎯 רף זכייה:</span>
-            <div style="display:flex;align-items:center;gap:6px">
-              <input type="number" id="comp-goal-input" class="ifield" style="width:70px;text-align:center" min="1" max="100">
-              <span style="font-size:11px;color:var(--t2)">נקודות</span>
-              <button class="btn sm" onclick="saveCompGoal()">שמור</button>
+          <div class="ttbar comm-ttbar" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-size:13px;font-weight:800;color:var(--tx)">📋 לוח המובילים</span>
+              <!-- Threshold inline — only shown when active -->
+              <div id="comp-goal-row" style="display:none;align-items:center;gap:5px">
+                <span style="font-size:11px;color:var(--t2)">🎯 רף:</span>
+                <input type="number" id="comp-goal-input" class="ifield" style="width:56px;text-align:center;padding:3px 6px;font-size:12px" min="1" max="100">
+                <button class="btn sm" onclick="saveCompGoal()" style="padding:3px 8px;font-size:11px">שמור</button>
+              </div>
             </div>
-            <span id="comp-goal-display" style="font-size:11px;color:var(--t3)">נוכחי: 7</span>
-          </div>
-          <div class="ttbar comm-ttbar" style="justify-content:space-between">
-            <span style="font-size:13px;font-weight:800;color:var(--tx)">📋 לוח המובילים</span>
             <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
-              <input class="sinput" id="comm-search" placeholder="🔍 חפש..." style="width:130px">
+              <input class="sinput" id="comm-search" placeholder="🔍 חפש..." style="width:120px">
               <select class="fsel" id="comm-filter" style="font-size:11px">
                 <option value="all">כולם</option>
                 <option value="winners">זכאים</option>
@@ -2792,39 +2807,42 @@ async function fetchCommunityData(){
 function _parseCommData(json){
   var goal=_getGoal();
   var raw=json.referrers||json.data||json.leaderboard||json.rows||[];
-  // Apply bonus adjustments from local log
   var bonusMap={};
   _getBonusLog().forEach(function(b){bonusMap[b.name]=(bonusMap[b.name]||0)+b.pts;});
 
   COMM.data=raw.filter(function(r){return !r.IS_SPAM&&!r.isSpam&&!r.spam&&!r.SPAM;})
     .map(function(r,idx){
       var cnt=Number(r.points||r.POINTS||r.count||r.COUNT||r.referrals_count||r.total||0);
-      var name=String(r.name||r.NAME||r.referrer||r.REFERRER||'—').trim();
-      cnt+=(bonusMap[name]||0); // add local bonuses
-      var refs=Array.isArray(r.referrals)?r.referrals:Array.isArray(r.members)?r.members:[];
-      return{id:idx,name,nameEn:r.nameEn||r.name_en||'',count:cnt,referrals:refs,isWinner:cnt>=goal};
+      var name=String(r.name||r.NAME||r.referrer||r.REFERRER||r.referrerName||'—').trim();
+      cnt+=(bonusMap[name]||0);
+      // Fix 9: exhaustive English name detection — try every possible key
+      var nameEn=r.nameEn||r.name_en||r.NAME_EN||r.nameEN||r.referrerEn||r.REFERRER_EN||r.englishName||r.english_name||'';
+      var refs=Array.isArray(r.referrals)?r.referrals:Array.isArray(r.members)?r.members:Array.isArray(r.joined)?r.joined:[];
+      return{id:idx,name,nameEn:String(nameEn).trim(),count:cnt,referrals:refs,isWinner:cnt>=goal};
     });
   COMM.data.sort(function(a,b){if(b.isWinner!==a.isWinner)return b.isWinner?1:-1;return b.count-a.count;});
+  // Fix 6: populate datalist after every data load
+  _updateBonusDatalist();
 }
 
 /* ── Summary cards ────────────────────────────── */
 function _renderCommCards(){
   var goal=_getGoal();
+  var isActive=!!(_getCmp().endDate);
   var totalMembers=COMM.data.reduce(function(s,r){return s+r.count;},0);
   var activeRefs=COMM.data.filter(function(r){return r.count>0;}).length;
   var winners=COMM.data.filter(function(r){return r.isWinner;}).length;
   document.getElementById('comm-total-members').textContent=totalMembers.toLocaleString();
   document.getElementById('comm-active-referrers').textContent=activeRefs.toLocaleString();
   document.getElementById('comm-winners').textContent=winners.toLocaleString();
+  // Fix 1: dynamic sub-text
   var ws=document.getElementById('comm-winners-sub');
-  if(ws)ws.textContent='עברו את רף '+goal+' הנקודות';
+  if(ws)ws.textContent=isActive?'עברו את רף '+goal+' הנקודות':'אין תחרות פעילה';
   var nb=document.getElementById('nb-community');
   if(nb){nb.textContent=winners;nb.style.display=winners?'inline-flex':'none';}
-  // Goal input sync
+  // Fix 3: sync goal input — always overwrite to match saved value
   var gi=document.getElementById('comp-goal-input');
-  if(gi&&!gi.value)gi.value=goal;
-  var gd=document.getElementById('comp-goal-display');
-  if(gd)gd.textContent='נוכחי: '+goal;
+  if(gi)gi.value=goal;
 }
 
 /* ── Leaderboard render ───────────────────────── */
@@ -2910,17 +2928,12 @@ function _renderCompTimer(){
   var wrap=document.getElementById('comp-timer-wrap');
   var goalRow=document.getElementById('comp-goal-row');
   if(!wrap)return;
-
   var isActive=!!(cmp.endDate);
-
-  // Timer visibility
   if(!isActive){
     wrap.style.display='none';
-    // Hide threshold row when no active competition
     if(goalRow)goalRow.style.display='none';
     return;
   }
-
   var endTs=new Date(cmp.endDate).getTime();
   var now=Date.now();
   var daysLeft=Math.max(0,Math.ceil((endTs-now)/(86400000)));
@@ -2929,15 +2942,11 @@ function _renderCompTimer(){
   if(nd)nd.textContent=cmp.name||'תחרות פעילה';
   var dl=document.getElementById('comp-days-left');
   if(dl)dl.textContent=daysLeft===0?'היום!':daysLeft;
-
-  // Show threshold row only when competition is active
-  if(goalRow){goalRow.style.display='flex';}
+  // Fix 3+8: show goal row inline in leaderboard header
+  if(goalRow)goalRow.style.display='flex';
+  // Fix 3: always sync goal input to current saved value
   var gi=document.getElementById('comp-goal-input');
-  if(gi&&!gi.value)gi.value=_getGoal();
-  var gd=document.getElementById('comp-goal-display');
-  if(gd)gd.textContent='נוכחי: '+_getGoal();
-
-  // Auto-refresh platform snapshots from G.followers
+  if(gi)gi.value=_getGoal();
   _refreshSnapshots();
 }
 
@@ -2950,6 +2959,20 @@ function _getLatestFollower(key){
 
 function _refreshSnapshots(){
   var cmp=_getCmp();
+
+  // Fix 4: Facebook — read from G.followers['fb'] just like IG/TG
+  var fbNow=_getLatestFollower('fb');
+  var fbStart=cmp.fbStart||null;
+  var fbEl=document.getElementById('snap-fb-count');
+  var fbLbl=document.getElementById('snap-fb-label');
+  if(fbEl)fbEl.textContent=fbNow!=null?fbNow.toLocaleString():'—';
+  if(fbLbl){
+    if(fbNow!=null&&fbStart!=null){
+      var fbDiff=fbNow-fbStart;
+      fbLbl.textContent=(fbDiff>=0?'+':'')+fbDiff+' מתחילת התחרות';
+      fbLbl.style.color=fbDiff>=0?'var(--grn)':'var(--red)';
+    }else{fbLbl.textContent='עוקבים';fbLbl.style.color='';}
+  }
 
   // Instagram
   var igNow=_getLatestFollower('ig');
@@ -2986,14 +3009,24 @@ function _refreshSnapshots(){
   }
 }
 
-function adjustCompDays(delta){
+/* ── Fix 2: Edit competition modal (replaces +3/-3 buttons) ── */
+function openEditCompModal(){
+  if(!confirm('האם אתה בטוח שברצונך לערוך את התחרות הפעילה?'))return;
   var cmp=_getCmp();
-  if(!cmp.endDate){toast('אין תחרות פעילה','err');return;}
-  var d=new Date(cmp.endDate);
-  d.setDate(d.getDate()+delta);
-  _saveCmp({endDate:d.toISOString().slice(0,10)});
-  _renderCompTimer();
-  toast((delta>0?'➕ הוארכה ב-'+delta:delta<0?'➖ קוצרה ב-'+Math.abs(delta):'')+' ימים','ok');
+  openModal('✏️ ערוך תחרות',
+    '<div class="fg"><label>שם התחרות</label><input class="ifield" id="nc-name" value="'+esc(cmp.name||'')+'"></div>'
+    +'<div class="row"><div class="fg"><label>תאריך התחלה</label><input type="date" class="ifield" id="nc-start" value="'+(cmp.startDate||'')+'"></div>'
+    +'<div class="fg"><label>תאריך סיום</label><input type="date" class="ifield" id="nc-end" value="'+(cmp.endDate||'')+'"></div></div>'
+    +'<div class="fg"><label>רף זכייה (נקודות)</label><input type="number" class="ifield" id="nc-goal" value="'+_getGoal()+'" min="1"></div>',
+    '<button class="btn sec" onclick="closeModal()">ביטול</button>'
+    +'<button class="btn grn" onclick="_saveNewComp()">💾 שמור</button>'
+  );
+}
+
+/* ── Fix 2: confirm wrapper for end competition ── */
+function confirmEndComp(){
+  if(!confirm('האם אתה בטוח שברצונך לסיים ולאפס את התחרות?'))return;
+  openEndCompModal();
 }
 
 /* ── New competition modal ────────────────────── */
@@ -3014,16 +3047,22 @@ function _saveNewComp(){
   var start=document.getElementById('nc-start')?.value||'';
   var end=document.getElementById('nc-end')?.value||'';
   var goal=parseInt(document.getElementById('nc-goal')?.value)||7;
-
-  // v49: auto-snapshot current follower counts as the competition baseline
+  // Fix 3+4: auto-snapshot ALL platforms at competition start
+  var fbStart=_getLatestFollower('fb')||0;
   var igStart=_getLatestFollower('ig')||0;
   var tgStart=_getLatestFollower('tg')||0;
-
-  _saveCmp({name,startDate:start,endDate:end,goal,igStart,tgStart});
+  _saveCmp({name,startDate:start,endDate:end,goal,fbStart,igStart,tgStart});
   closeModal();
+  // Fix 3: immediately sync goal input and re-evaluate winners
+  var gi=document.getElementById('comp-goal-input');if(gi)gi.value=goal;
+  _saveCmp({goal}); // ensure goal saved separately for saveCompGoal to pick up
+  if(COMM.data.length){
+    COMM.data.forEach(function(r){r.isWinner=r.count>=goal;});
+    COMM.data.sort(function(a,b){if(b.isWinner!==a.isWinner)return b.isWinner?1:-1;return b.count-a.count;});
+    _renderCommCards();_renderLeaderboard();
+  }
   _renderCompTimer();
-  saveCompGoal();
-  toast('✅ תחרות נשמרה! סנאפשוט IG:'+igStart+' TG:'+tgStart,'ok');
+  toast('✅ תחרות נשמרה! FB:'+fbStart+' IG:'+igStart+' TG:'+tgStart,'ok');
 }
 
 /* ── End competition modal ────────────────────── */
@@ -3085,12 +3124,9 @@ function _confirmEndComp(){
 function saveCompGoal(){
   var val=parseInt(document.getElementById('comp-goal-input')?.value)||REFERRAL_GOAL;
   _saveCmp({goal:val});
-  var gd=document.getElementById('comp-goal-display');
-  if(gd)gd.textContent='נוכחי: '+val;
-  // Re-parse with new goal and re-render
+  // Fix 3: re-evaluate all and update UI
   if(COMM.data.length){
-    var goal=val;
-    COMM.data.forEach(function(r){r.isWinner=r.count>=goal;});
+    COMM.data.forEach(function(r){r.isWinner=r.count>=val;});
     COMM.data.sort(function(a,b){if(b.isWinner!==a.isWinner)return b.isWinner?1:-1;return b.count-a.count;});
     _renderCommCards();_renderLeaderboard();
   }
@@ -3114,25 +3150,37 @@ function calcSnapshot(plat){
   var update={};update[plat+'Start']=start;_saveCmp(update);
 }
 
-/* ── Bonus points ─────────────────────────────── */
+/* ── Fix 6: update datalist with current referrer names ── */
+function _updateBonusDatalist(){
+  var dl=document.getElementById('bonus-names-list');
+  if(!dl)return;
+  dl.innerHTML=COMM.data.map(function(r){
+    return '<option value="'+esc(r.name)+'">'+(r.nameEn?esc(r.nameEn):'')+'</option>';
+  }).join('');
+}
+
+/* ── Fix 5+6: grantBonus — silent, no log, updates datalist ── */
 function grantBonus(){
   var name=(document.getElementById('bonus-name')?.value||'').trim();
   var pts=parseInt(document.getElementById('bonus-pts')?.value)||1;
   var reason=(document.getElementById('bonus-reason')?.value||'').trim();
   if(!name){toast('הזן שם מפנה','err');return;}
+  // Save to log (still kept for history, just not displayed)
   var log=_getBonusLog();
   log.unshift({name,pts,reason,ts:Date.now()});
   if(log.length>100)log.length=100;
   _saveBonusLog(log);
-  // Apply bonus to in-memory data
+  // Apply to in-memory data
   var r=COMM.data.find(function(x){return x.name===name;});
   if(r){r.count+=pts;r.isWinner=r.count>=_getGoal();}
   else{COMM.data.push({id:Date.now(),name,nameEn:'',count:pts,referrals:[],isWinner:pts>=_getGoal()});}
   COMM.data.sort(function(a,b){if(b.isWinner!==a.isWinner)return b.isWinner?1:-1;return b.count-a.count;});
-  _renderCommCards();_renderLeaderboard();_renderBonusLog();
+  _renderCommCards();
+  _renderLeaderboard();
+  _updateBonusDatalist(); // keep datalist in sync
   document.getElementById('bonus-name').value='';
   document.getElementById('bonus-reason').value='';
-  toast('⭐ +'+pts+' נקודות לְ'+name,'ok');
+  toast('⭐ +'+pts+' לְ'+name,'ok');
 }
 
 function _renderBonusLog(){
