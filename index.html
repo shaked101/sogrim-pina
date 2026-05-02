@@ -1080,7 +1080,6 @@ function bootApp(){
 // DATA LOAD v24 — cache-bust + timing + clean reset + row cap
 // ════════════════════════════════════════════════
 async function loadData(){
-  console.time('loadData');
   setSS('טוען...',false);
   _setLoadStep('מושך נתוני פוסטים...');
 
@@ -1118,7 +1117,6 @@ async function loadData(){
     setSS('נתוני דמו ('+e.message+')',false);
     _loadDemoPosts();
     _setLoadStep('');
-    console.timeEnd('loadData');
     return;
   }
 
@@ -1160,7 +1158,6 @@ async function loadData(){
     populateCartCatFilter();renderCartTable();renderCartItems();
     var nb=document.getElementById('nbposts');if(nb)nb.textContent=G.posts.length;
     _setLoadStep('');
-    console.timeEnd('loadData');
   });
 }
 // v44 PERF: dateMap helper — O(1) dedup with Set instead of indexOf O(n)
