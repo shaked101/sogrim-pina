@@ -393,6 +393,18 @@ tr:hover td{background:#fef9f7}
           <div><div class="pt">שלום שקד 👊</div><div class="ps" id="dash-date"></div></div>
         </div>
         <div class="fcards" id="fcards-wrap"></div>
+        <!-- v52: Competition summary widget — shown only when competition is active -->
+        <div id="dash-comp-widget" style="display:none;margin-bottom:13px">
+          <div class="scard" style="--cc:var(--grn);cursor:pointer;position:relative" onclick="openDashCompModal()" title="לחץ לפרטי התחרות">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <div class="slbl" style="color:var(--grn)">🏆 תחרות פעילה</div>
+              <span style="font-size:9px;background:var(--grn);color:#fff;border-radius:8px;padding:1px 7px;font-weight:800">פרטים ↗</span>
+            </div>
+            <div class="sval" id="dash-comp-days" style="font-size:22px">—</div>
+            <div class="ssub">ימים נותרו</div>
+            <div style="margin-top:5px;font-size:11px;font-weight:700;color:var(--tx);text-decoration:underline;text-underline-offset:2px" id="dash-comp-name">—</div>
+          </div>
+        </div>
         <div class="sgrid4" style="grid-template-columns:repeat(3,1fr)">
           <div class="scard" style="--cc:var(--acc)"><div class="slbl">סה״כ פוסטים</div><div class="sval" id="st-total">—</div><div class="ssub">בשיטס</div></div>
           <div class="scard" style="--cc:#d97706;cursor:pointer" onclick="openDraftsModal()" title="לחץ לצפייה בטיוטות"><div class="slbl">טיוטות ✍️</div><div class="sval" id="st-draft">—</div><div class="ssub">לחץ לפירוט</div></div>
@@ -729,12 +741,13 @@ tr:hover td{background:#fef9f7}
         </div>
 
         <!-- ── Platform snapshots + Bonus panel in one flex row ── -->
-        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:flex-start">
-          <!-- FB -->
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:stretch">
+          <!-- FB — same structure as IG/TG -->
           <div class="snap-mini-card">
-            <div class="snap-mini-plat"><span>📘</span>פייסבוק</div>
+            <div class="snap-mini-plat"><span style="color:#1558c0">📘</span>פייסבוק</div>
             <div class="snap-mini-val" id="snap-fb-count">—</div>
-            <div class="snap-mini-sub" id="snap-fb-label">עוקבים (תוסף כרום)</div>
+            <div class="snap-mini-growth" id="snap-fb-growth"></div>
+            <div class="snap-mini-sub">חברים/עוקבים · <span id="snap-fb-base-disp">—</span> בתחילה</div>
           </div>
           <!-- IG -->
           <div class="snap-mini-card">
@@ -1152,6 +1165,7 @@ function bootApp(){
   document.getElementById('dash-date').textContent=new Date().toLocaleDateString('he-IL',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   initCart();updateCartBadge();
   fillSettings();renderFCards();renderCatCards();
+  _renderDashCompWidget(); // v52: show competition widget on dashboard
 
   // Auto-load saved stats from localStorage if available
   try{
@@ -2930,6 +2944,7 @@ function _renderCompTimer(){
   if(!isActive){
     wrap.style.display='none';
     if(goalRow)goalRow.style.display='none';
+    _renderDashCompWidget(); // hide dashboard widget too
     return;
   }
   var endTs=new Date(cmp.endDate).getTime();
@@ -2946,6 +2961,8 @@ function _renderCompTimer(){
   var gi=document.getElementById('comp-goal-input');
   if(gi)gi.value=_getGoal();
   _refreshSnapshots();
+  // v52: keep dashboard widget in sync
+  _renderDashCompWidget();
 }
 
 /* ── Read live follower counts and compute growth ── */
@@ -2958,53 +2975,29 @@ function _getLatestFollower(key){
 function _refreshSnapshots(){
   var cmp=_getCmp();
 
-  // Fix 4: Facebook — read from G.followers['fb'] just like IG/TG
-  var fbNow=_getLatestFollower('fb');
-  var fbStart=cmp.fbStart||null;
-  var fbEl=document.getElementById('snap-fb-count');
-  var fbLbl=document.getElementById('snap-fb-label');
-  if(fbEl)fbEl.textContent=fbNow!=null?fbNow.toLocaleString():'—';
-  if(fbLbl){
-    if(fbNow!=null&&fbStart!=null){
-      var fbDiff=fbNow-fbStart;
-      fbLbl.textContent=(fbDiff>=0?'+':'')+fbDiff+' מתחילת התחרות';
-      fbLbl.style.color=fbDiff>=0?'var(--grn)':'var(--red)';
-    }else{fbLbl.textContent='עוקבים';fbLbl.style.color='';}
+  // Helper: update one platform card with identical logic for all three
+  function _updateCard(key,nowId,growthId,baseId){
+    var nowVal=_getLatestFollower(key);
+    var startVal=cmp[key+'Start']||null;
+    var nowEl=document.getElementById(nowId);
+    var growthEl=document.getElementById(growthId);
+    var baseEl=document.getElementById(baseId);
+    if(nowEl)nowEl.textContent=nowVal!=null?nowVal.toLocaleString():'—';
+    if(baseEl)baseEl.textContent=startVal!=null?startVal.toLocaleString():'—';
+    if(growthEl){
+      if(nowVal!=null&&startVal!=null){
+        var diff=nowVal-startVal;
+        var pct=startVal?((diff/startVal)*100).toFixed(1):'—';
+        growthEl.textContent=(diff>=0?'+':'')+diff.toLocaleString()+' ('+pct+'%)';
+        growthEl.style.color=diff>=0?'var(--grn)':'var(--red)';
+      }else{growthEl.textContent='';}
+    }
   }
 
-  // Instagram
-  var igNow=_getLatestFollower('ig');
-  var igStart=cmp.igStart||null;
-  var igNowEl=document.getElementById('snap-ig-now-disp');
-  var igBaseEl=document.getElementById('snap-ig-base-disp');
-  var igGrowthEl=document.getElementById('snap-ig-growth');
-  if(igNowEl)igNowEl.textContent=igNow!=null?igNow.toLocaleString():'—';
-  if(igBaseEl)igBaseEl.textContent=igStart!=null?igStart.toLocaleString():'—';
-  if(igGrowthEl){
-    if(igNow!=null&&igStart!=null){
-      var igDiff=igNow-igStart;
-      var igPct=igStart?((igDiff/igStart)*100).toFixed(1):'—';
-      igGrowthEl.textContent=(igDiff>=0?'+':'')+igDiff.toLocaleString()+' ('+igPct+'%)';
-      igGrowthEl.style.color=igDiff>=0?'var(--grn)':'var(--red)';
-    }else{igGrowthEl.textContent='';}
-  }
-
-  // Telegram
-  var tgNow=_getLatestFollower('tg');
-  var tgStart=cmp.tgStart||null;
-  var tgNowEl=document.getElementById('snap-tg-now-disp');
-  var tgBaseEl=document.getElementById('snap-tg-base-disp');
-  var tgGrowthEl=document.getElementById('snap-tg-growth');
-  if(tgNowEl)tgNowEl.textContent=tgNow!=null?tgNow.toLocaleString():'—';
-  if(tgBaseEl)tgBaseEl.textContent=tgStart!=null?tgStart.toLocaleString():'—';
-  if(tgGrowthEl){
-    if(tgNow!=null&&tgStart!=null){
-      var tgDiff=tgNow-tgStart;
-      var tgPct=tgStart?((tgDiff/tgStart)*100).toFixed(1):'—';
-      tgGrowthEl.textContent=(tgDiff>=0?'+':'')+tgDiff.toLocaleString()+' ('+tgPct+'%)';
-      tgGrowthEl.style.color=tgDiff>=0?'var(--grn)':'var(--red)';
-    }else{tgGrowthEl.textContent='';}
-  }
+  // All three platforms use identical logic
+  _updateCard('fb','snap-fb-count','snap-fb-growth','snap-fb-base-disp');
+  _updateCard('ig','snap-ig-now-disp','snap-ig-growth','snap-ig-base-disp');
+  _updateCard('tg','snap-tg-now-disp','snap-tg-growth','snap-tg-base-disp');
 }
 
 /* ── Fix 2: Edit competition modal (replaces +3/-3 buttons) ── */
@@ -3016,7 +3009,9 @@ function openEditCompModal(){
     +'<div class="row"><div class="fg"><label>תאריך התחלה</label><input type="date" class="ifield" id="nc-start" value="'+(cmp.startDate||'')+'"></div>'
     +'<div class="fg"><label>תאריך סיום</label><input type="date" class="ifield" id="nc-end" value="'+(cmp.endDate||'')+'"></div></div>'
     +'<div class="fg"><label>רף זכייה (נקודות)</label><input type="number" class="ifield" id="nc-goal" value="'+_getGoal()+'" min="1"></div>',
-    '<button class="btn sec" onclick="closeModal()">ביטול</button>'
+    '<button class="btn" style="background:var(--red);color:#fff" onclick="closeModal();deleteActiveComp()">🗑 מחק תחרות</button>'
+    +'<span style="flex:1"></span>'
+    +'<button class="btn sec" onclick="closeModal()">ביטול</button>'
     +'<button class="btn grn" onclick="_saveNewComp()">💾 שמור</button>'
   );
 }
@@ -3146,7 +3141,67 @@ function _confirmEndComp(){
   },200);
 }
 
-/* ── Fix 5: competition history modal ── */
+/* ── v52: Dashboard competition widget ── */
+function _renderDashCompWidget(){
+  var widget=document.getElementById('dash-comp-widget');
+  if(!widget)return;
+  var cmp=_getCmp();
+  if(!cmp.endDate){
+    widget.style.display='none';
+    return;
+  }
+  var daysLeft=Math.max(0,Math.ceil((new Date(cmp.endDate).getTime()-Date.now())/86400000));
+  widget.style.display='block';
+  var daysEl=document.getElementById('dash-comp-days');
+  var nameEl=document.getElementById('dash-comp-name');
+  if(daysEl)daysEl.textContent=daysLeft===0?'היום!':daysLeft;
+  if(nameEl)nameEl.textContent=cmp.name||'תחרות פעילה';
+}
+
+function openDashCompModal(){
+  var cmp=_getCmp();
+  if(!cmp.endDate){toast('אין תחרות פעילה','inf');return;}
+  var goal=_getGoal();
+  var totalPoints=COMM.data.reduce(function(s,r){return s+r.count;},0);
+  var realParticipants=COMM.data.filter(function(r){return r.referrals&&r.referrals.length>0;}).length;
+  var winners=COMM.data.filter(function(r){return r.isWinner;}).length;
+  var daysLeft=Math.max(0,Math.ceil((new Date(cmp.endDate).getTime()-Date.now())/86400000));
+  var body=''
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
+      +'<div style="background:var(--s2);border-radius:8px;padding:12px;text-align:center">'
+        +'<div style="font-size:10px;color:var(--t2);font-weight:800;margin-bottom:4px">ימים נותרו</div>'
+        +'<div style="font-size:28px;font-weight:900;color:var(--grn)">'+(daysLeft===0?'היום!':daysLeft)+'</div>'
+      +'</div>'
+      +'<div style="background:var(--s2);border-radius:8px;padding:12px;text-align:center">'
+        +'<div style="font-size:10px;color:var(--t2);font-weight:800;margin-bottom:4px">רף זכייה</div>'
+        +'<div style="font-size:28px;font-weight:900;color:var(--acc)">'+goal+'</div>'
+        +'<div style="font-size:10px;color:var(--t3)">נקודות</div>'
+      +'</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">'
+      +'<div style="background:var(--s2);border-radius:7px;padding:10px;text-align:center">'
+        +'<div style="font-size:9px;color:var(--t2);font-weight:800">סה"כ נקודות</div>'
+        +'<div style="font-size:18px;font-weight:900;color:var(--tx)">'+totalPoints+'</div>'
+      +'</div>'
+      +'<div style="background:var(--s2);border-radius:7px;padding:10px;text-align:center">'
+        +'<div style="font-size:9px;color:var(--t2);font-weight:800">משתתפים</div>'
+        +'<div style="font-size:18px;font-weight:900;color:var(--blue)">'+realParticipants+'</div>'
+      +'</div>'
+      +'<div style="background:var(--s2);border-radius:7px;padding:10px;text-align:center">'
+        +'<div style="font-size:9px;color:var(--t2);font-weight:800">זכאים 🏆</div>'
+        +'<div style="font-size:18px;font-weight:900;color:var(--grn)">'+winners+'</div>'
+      +'</div>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--t2);display:flex;gap:14px;flex-wrap:wrap">'
+      +'<span>📅 התחלה: <strong>'+(cmp.startDate||'—')+'</strong></span>'
+      +'<span>📅 סיום: <strong>'+(cmp.endDate||'—')+'</strong></span>'
+    +'</div>';
+  openModal('🏆 '+esc(cmp.name||'תחרות פעילה'),body,
+    '<button class="btn sec" onclick="closeModal()">סגור</button>'
+    +'<button class="btn" onclick="closeModal();showPage(\'community\')">עבור לתחרויות ↗</button>');
+}
+
+
 function openCompHistoryModal(){
   var hist=_getCmpHistory();
   if(!hist.length){
@@ -3210,11 +3265,13 @@ function deleteAllCompHistory(){
 
 /* ── Fix 5: delete active competition completely ── */
 function deleteActiveComp(){
-  if(!confirm('מחק את התחרות הפעילה לחלוטין? לא ניתן לשחזר.'))return;
+  if(!confirm('האם אתה בטוח שברצונך למחוק תחרות זו לחלוטין?'))return;
   _saveCmp({endDate:'',name:'',startDate:'',igStart:0,tgStart:0,fbStart:0,goal:REFERRAL_GOAL});
   _saveBonusLog([]);
   _renderCompTimer();
   _renderCommCards();
+  // Update dashboard widget too
+  _renderDashCompWidget();
   toast('🗑️ התחרות נמחקה','inf');
 }
 
