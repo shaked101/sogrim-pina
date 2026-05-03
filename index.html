@@ -1752,12 +1752,18 @@ function renderDash(){
 function mkChRow(label,sCol,name,pub,q,color,total){
   var pct=total?Math.min(100,Math.round(pub/total*100)):0;
   var queueKey=sCol===COL.TG_S?'tg':sCol===COL.FB_S?'fb':'ig';
-  return'<div style="padding:7px 0;border-bottom:1px solid var(--b1)">'
-    +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;align-items:center">'
-    +'<button class="btn sec sm" onclick="openRecycleModal('+sCol+',''+name+'',''+label.split(' ')[0]+'')">'+label+'</button>'
-    +'<span style="font-size:10px;color:var(--t2)">'+pub+' פורסמו | '
-    +'<button onclick="openQueueModal(''+queueKey+'')" style="background:#fef3ee;border:1px solid #fed7aa;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:800;color:var(--acc);cursor:pointer;font-family:inherit">'+q+' בתור ↗</button></span></div>'
-    +'<div style="height:4px;background:var(--s2);border-radius:2px"><div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:2px"></div></div></div>';
+  var icon=label.split(' ')[0];
+  return `<div style="padding:7px 0;border-bottom:1px solid var(--b1)">
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px;align-items:center">
+      <button class="btn sec sm" onclick="openRecycleModal(${sCol},'${name}','${icon}')">${label}</button>
+      <span style="font-size:10px;color:var(--t2)">${pub} פורסמו |
+        <button onclick="openQueueModal('${queueKey}')" style="background:#fef3ee;border:1px solid #fed7aa;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:800;color:var(--acc);cursor:pointer;font-family:inherit">${q} בתור ↗</button>
+      </span>
+    </div>
+    <div style="height:4px;background:var(--s2);border-radius:2px">
+      <div style="height:100%;width:${pct}%;background:${color};border-radius:2px"></div>
+    </div>
+  </div>`;
 }
 
 function openQueueModal(channel){
@@ -1768,7 +1774,7 @@ function openQueueModal(channel){
     +posts.slice(0,50).map(function(p){
       var img=gc(p,COL.IMG),row=p.row;
       return'<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--b1);cursor:pointer" onclick="closeModal();openViewModal('+row+')">'
-        +(img?'<img src="'+esc(img)+'" style="width:36px;height:36px;border-radius:5px;object-fit:cover" onerror="this.style.display='none'">':
+        +(img?'<img src="'+esc(img)+'" style="width:36px;height:36px;border-radius:5px;object-fit:cover" onerror="this.style.display=\'none\'">':
           '<div style="width:36px;height:36px;border-radius:5px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:13px">📦</div>')
         +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(gc(p,COL.HEB))+'</div>'
         +'<div style="font-size:10px;color:var(--t2)">'+(gc(p,COL.CAT)?'📂 '+esc(gc(p,COL.CAT)):'')+(gc(p,COL.PRICE)?' · '+gc(p,COL.PRICE)+'$':'')+'</div></div>'
