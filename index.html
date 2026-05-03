@@ -1636,118 +1636,103 @@ function renderDash(){
   // v34: todayNum computed ONCE, guaranteed pure integer via getTodayNum()
   var todayNum=getTodayNum();
 
-  // Queue logic: per-channel.
-  // תנאי כניסה לתור:
-  // 1. הסטטוס הגלובלי (עמודה G) אינו 'טיוטה' ואינו 'draft' בצורה מפורשת
-  //    (ריק = לא טיוטה — מוצר רגיל ללא סטטוס)
-  // 2. הערוץ הספציפי לא פורסם
-  // 3. עמודת התאריך של הערוץ ריקה לחלוטין → בתור
-  //    או שיש תאריך ועברו 25+ יום → בתור
-  // חישוב ימים: split לפי '/' עבור DD/MM/YYYY, new Date(y,m-1,d) מדויק.
-
-  // פרסר תאריך חסין: מקבל string גולמי, מחזיר Date או null
-  function _parseRawDate(raw){
-    if(!raw)return null;
-    var s=(raw+'').trim();
-    if(!s)return null;
-    // ISO עם T → new Date ישיר (UTC→local דרך הדפדפן)
-    if(s.indexOf('T')!==-1){var d=new Date(s);return isNaN(d)?null:d;}
-    // DD/MM/YYYY או DD.MM.YYYY או DD-MM-YYYY
-    var clean=s.split(' ')[0].replace(/[.\-]/g,'/');
-    var parts=clean.split('/');
-    if(parts.length<2)return null;
-    var dd,mm,yy;
-    if(parts.length===2){dd=+parts[0];mm=+parts[1];yy=new Date().getFullYear();}
-    else if(parts[0].length===4){yy=+parts[0];mm=+parts[1];dd=+parts[2];}
-    else{dd=+parts[0];mm=+parts[1];yy=+parts[2];if(yy<100)yy+=2000;}
-    if(!dd||!mm||!yy||mm>12||dd>31)return null;
-    return new Date(yy,mm-1,dd,12,0,0,0);
-  }
-
-  // מחזיר כמה ימים עברו מ-raw date string ועד היום (null = אין תאריך)
-  var _todayNoon=new Date();_todayNoon.setHours(12,0,0,0);
-  var _msPerDay=864e5;
-  function _daysSinceRaw(raw){
-    var d=_parseRawDate(raw);
-    if(!d)return null;
-    return Math.round((_todayNoon-d)/_msPerDay);
-  }
-
-  // מוצר נחשב "טיוטה" רק אם STATUS מפורש הוא טיוטה/draft
-  // ריק = לא טיוטה (מוצר ללא סטטוס = רגיל)
-  function _isGlobalDraft(globalS){
-    var s=(globalS||'').trim().toLowerCase();
-    return s==='טיוטה'||s==='draft';
-  }
-
   function _isDraftStatus(s){return s==='טיוטה'||s==='draft'||s==='';}
 
-  // ── checkQueueEligibility: פונקציית עזר חזקה לבדיקת תאריך תור ──
-  // מטפלת בפורמטים: '8/2/26', '25/02/2026', '23/03/2026 10:18'
-  // מחזירה true אם המוצר בתור (ריק או 25+ יום עברו)
-  function checkQueueEligibility(dateString){
+  // ══════════════════════════════════════════════
+  // isStale(dateVal) — פונקציית זיהוי תאריך קריטית
+  // מקבלת ערך גולמי מתא Google Sheets.
+  // מחזירה true אם המוצר בתור (ריק, או 25+ ימים עברו).
+  // ══════════════════════════════════════════════
+  function isStale(dateVal){
     // א. ריק → בתור
-    if(!dateString||dateString===null||dateString===undefined)return true;
-    var s=(dateString+'').trim();
-    if(!s)return true;
-    // ב. חתוך שעה אם קיימת
-    s=s.split(' ')[0];
+    if(dateVal===null||dateVal===undefined)return true;
+    var raw=(dateVal+'').trim();
+    if(!raw)return true;
+
+    // ב. נקה שעות — "23/03/2026 10:18" → "23/03/2026"
+    var datePart=raw.split(' ')[0];
+
     // ג. פרק לפי לוכסן
-    var parts=s.split('/');
+    var parts=datePart.split('/');
     if(parts.length<3)return true; // פורמט לא מוכר → נכנס לתור
+
     var dd=parseInt(parts[0],10);
     var mm=parseInt(parts[1],10);
     var yy=parseInt(parts[2],10);
-    // ד. תיקון שנה קצרה
+
+    // ד. תיקון שנה קצרה: "26" → 2026
     if(yy<100)yy+=2000;
-    if(!dd||!mm||!yy||mm>12||dd>31)return true;
+
+    // ולידציה בסיסית
+    if(!dd||!mm||!yy||dd<1||dd>31||mm<1||mm>12||yy<2000)return true;
+
     // ה. חישוב הפרש ימים
     var postDate=new Date(yy,mm-1,dd,12,0,0,0);
     var todayNoon=new Date();todayNoon.setHours(12,0,0,0);
     var diffDays=Math.round((todayNoon-postDate)/864e5);
+
+    // 25 ימים ומעלה → בתור
     return diffDays>=25;
   }
 
   var cDraft=0,cFB=0,cTG=0,cIG=0,cFBq=0,cTGq=0,cIGq=0;
   var fbQueuePosts=[],tgQueuePosts=[],igQueuePosts=[];
+  var _debugLogged=false; // נדפיס דוגמה אחת לקונסול
+
   for(var i=0;i<n;i++){
     var p=ps[i];
-    var fbS=gc(p,COL.FB_S)||'',tgS=gc(p,COL.TG_S)||'',igS=gc(p,COL.IG_S)||'';
-    var globalS=gc(p,COL.STATUS)||'';
-    // Draft counter: all channels are draft/empty and global status is draft
+
+    // קריאת סטטוסים גולמיים לפי COL map
+    var globalS=(p.data[COL.STATUS]||'').toString().trim();   // עמודה G (index 6)
+    var fbS    =(p.data[COL.FB_S]  ||'').toString().trim();   // עמודה F/R (index 17)
+    var tgS    =(p.data[COL.TG_S]  ||'').toString().trim();   // עמודה R   (index 15)
+    var igS    =(p.data[COL.IG_S]  ||'').toString().trim();   // עמודה V   (index 19)
+
+    // ספירת טיוטות
     var allBlank=_isDraftStatus(fbS)&&_isDraftStatus(tgS)&&_isDraftStatus(igS);
     if(allBlank&&(_isDraftStatus(globalS)||!globalS))cDraft++;
 
-    // מוצרים עם סטטוס גלובלי מפורש של טיוטה — לא נכנסים לתור
-    if(_isGlobalDraft(globalS))continue;
+    // תנאי חובה: סטטוס גלובלי מפורש 'טיוטה'/'draft' → דלג לחלוטין
+    var gs=globalS.toLowerCase();
+    if(gs==='טיוטה'||gs==='draft')continue;
 
-    // ── פייסבוק (עמודה E) ───────────────────────────────
-    // חוק: סטטוס G לא טיוטה/draft + checkQueueEligibility על עמודה E
+    // ── פייסבוק: סטטוס (COL.FB_S) + תאריך (COL.COL_E / עמודה E) ──
+    var rawFbDate=(p.data[COL.COL_E]||'').toString().trim();
     if(fbS==='פורסם'){
       cFB++;
-    } else {
-      var rawFbDate=(p.data[COL.COL_E]||'').toString().trim();
-      if(checkQueueEligibility(rawFbDate)){cFBq++;fbQueuePosts.push(p);}
+    } else if(isStale(rawFbDate)){
+      cFBq++;
+      fbQueuePosts.push(p);
+      if(!_debugLogged){
+        console.log('[QUEUE DEBUG] FB מוצר בתור:',
+          (p.data[COL.HEB]||'ללא שם'),
+          '| עמודה E גולמי:', rawFbDate,
+          '| סטטוס FB:', fbS,
+          '| סטטוס גלובלי:', globalS);
+        _debugLogged=true;
+      }
     }
 
-    // ── טלגרם (עמודה Q) ─────────────────────────────────
-    // חוק: סטטוס G לא טיוטה/draft + checkQueueEligibility על עמודה Q
+    // ── טלגרם: סטטוס (COL.TG_S) + תאריך (COL.COL_Q / עמודה Q) ──
+    var rawTgDate=(p.data[COL.COL_Q]||'').toString().trim();
     if(tgS==='פורסם'){
       cTG++;
-    } else {
-      var rawTgDate=(p.data[COL.COL_Q]||'').toString().trim();
-      if(checkQueueEligibility(rawTgDate)){cTGq++;tgQueuePosts.push(p);}
+    } else if(isStale(rawTgDate)){
+      cTGq++;
+      tgQueuePosts.push(p);
     }
 
-    // ── אינסטגרם (עמודה U) ──────────────────────────────
-    // חוק: סטטוס G לא טיוטה/draft + checkQueueEligibility על עמודה U
+    // ── אינסטגרם: סטטוס (COL.IG_S) + תאריך (COL.COL_IG_D / עמודה U) ──
+    var rawIgDate=(p.data[COL.COL_IG_D]||'').toString().trim();
     if(igS==='פורסם'){
       cIG++;
-    } else {
-      var rawIgDate=(p.data[COL.COL_IG_D]||'').toString().trim();
-      if(checkQueueEligibility(rawIgDate)){cIGq++;igQueuePosts.push(p);}
+    } else if(isStale(rawIgDate)){
+      cIGq++;
+      igQueuePosts.push(p);
     }
   }
+
+  console.log('[QUEUE TOTALS] FB:',cFBq,'| TG:',cTGq,'| IG:',cIGq,'| סה"כ מוצרים:',n);
   // Store queue posts for popup
   G._fbQueue=fbQueuePosts;G._tgQueue=tgQueuePosts;G._igQueue=igQueuePosts;
   document.getElementById('st-total').textContent=n;
