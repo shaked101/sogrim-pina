@@ -356,6 +356,55 @@ body.dark-mode .ni.on{background:#3a3a3c;color:var(--acc)}
 body.dark-mode .ttbar{border-color:#3a3a3c}
 body.dark-mode .radar-wrap{background:#2c2c2e;border-color:#3a3a3c}
 
+/* ── Dark mode v60: improved button, input, dropdown contrast ── */
+body.dark-mode .btn{background:#e87a42;color:#fff}
+body.dark-mode .btn.sec{background:#3a3a3c;color:#e5e5ea;border-color:#48484a}
+body.dark-mode .btn.sec:hover{background:#48484a;color:#fff}
+body.dark-mode .btn.grn{background:#15803d;color:#fff}
+body.dark-mode .btn.tgb{background:#075985;color:#fff}
+body.dark-mode .btn.fbb{background:#1d4ed8;color:#fff}
+body.dark-mode .btn.igb{background:#7e1d5e;color:#fff}
+body.dark-mode .tbtn{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
+body.dark-mode .tbtn:hover{background:#48484a;color:#fff}
+body.dark-mode .ifield{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
+body.dark-mode .ifield::placeholder{color:#636366}
+body.dark-mode .tedit{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
+body.dark-mode .tedit::placeholder{color:#636366}
+body.dark-mode input[type="date"],body.dark-mode input[type="number"],body.dark-mode input[type="text"],body.dark-mode input[type="password"]{background:#3a3a3c;border-color:#48484a;color:#e5e5ea;color-scheme:dark}
+body.dark-mode select,body.dark-mode .fsel{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
+body.dark-mode select option,body.dark-mode .fsel option{background:#2c2c2e;color:#e5e5ea}
+body.dark-mode .chart-wrap{background:#2c2c2e;border-color:#3a3a3c}
+body.dark-mode .csv-drop{background:#2c2c2e;border-color:#48484a;color:#e5e5ea}
+body.dark-mode .fcard{background:#2c2c2e;border-color:#3a3a3c}
+body.dark-mode .scard{background:#2c2c2e;border-color:#3a3a3c}
+body.dark-mode .idea-card{background:#2c2c2e;border-color:#3a3a3c}
+body.dark-mode .idea-card.on{background:#3a3a3c;border-color:var(--acc)}
+body.dark-mode .ptab{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
+body.dark-mode .ptab.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+body.dark-mode .calwrap{background:#2c2c2e;border-color:#3a3a3c}
+body.dark-mode .cday{border-color:#3a3a3c}
+body.dark-mode .cday:hover{background:#2c2c2e}
+body.dark-mode .cday.today{background:#3a3a3c}
+body.dark-mode .cday.other{opacity:.15}
+body.dark-mode .snapshot-card{background:#3a3a3c;border-color:#48484a}
+body.dark-mode .snap-mini-card{background:#2c2c2e;border-color:#3a3a3c}
+body.dark-mode .toast{background:#2c2c2e;border-color:#48484a;color:#e5e5ea}
+body.dark-mode .ibox{background:#1e3a5f;border-color:#1d4ed8;color:#93c5fd}
+body.dark-mode thead tr{background:#3a3a3c}
+body.dark-mode th{color:#8e8e93}
+body.dark-mode tr:hover td{background:#3a3a3c}
+body.dark-mode .chip{color:#e5e5ea}
+body.dark-mode .ctg{background:rgba(3,105,161,.3)}
+body.dark-mode .cfb{background:rgba(21,88,192,.3)}
+body.dark-mode .cig{background:rgba(157,23,77,.3)}
+body.dark-mode .badge.bd{background:#3a3a3c;color:#8e8e93;border-color:#48484a}
+body.dark-mode .badge.bap{background:#052e16;color:#86efac}
+body.dark-mode .badge.bpub{background:#172554;color:#93c5fd}
+body.dark-mode .chip2{background:#3a3a3c;border-color:#48484a;color:#8e8e93}
+body.dark-mode .ni:hover{background:#3a3a3c;color:#e5e5ea}
+body.dark-mode .login-field{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
+body.dark-mode .lb-progress-wrap{background:#3a3a3c}
+
 @media(hover:none){
   /* Remove hover states that don't work on touch */
   .btn:hover{transform:none}
@@ -530,11 +579,6 @@ body.dark-mode .radar-wrap{background:#2c2c2e;border-color:#3a3a3c}
                   <div class="cart-total-row">
                     <span>סה"כ מחירים</span>
                     <span class="cart-total-val" id="cart-total">$0</span>
-                  </div>
-                  <!-- Hook bank -->
-                  <div style="margin-bottom:8px">
-                    <div class="slbl2" style="margin-bottom:5px">🎣 הוק לפוסט — לחץ להוספה</div>
-                    <div id="hook-chips" style="display:flex;flex-wrap:wrap;gap:4px"></div>
                   </div>
                   <div class="fg" style="margin-bottom:6px">
                     <label style="display:flex;align-items:center;justify-content:space-between">כותרת פוסט <button class="btn sec sm" style="font-size:10px;padding:2px 7px" onclick="shuffleCartTitle()">🎲 רענן</button></label>
@@ -887,6 +931,33 @@ body.dark-mode .radar-wrap{background:#2c2c2e;border-color:#3a3a3c}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
+// ── Pie legend strikethrough plugin ──────────────
+Chart.register({
+  id:'legendStrikethrough',
+  afterDraw(chart){
+    if(chart.config.type!=='doughnut'&&chart.config.type!=='pie')return;
+    var legendItems=chart.legend.legendItems;
+    if(!legendItems)return;
+    var ctx=chart.ctx;
+    chart.legend.legendItems.forEach(function(item,i){
+      if(!item.hidden)return;
+      // Find the legend item box to draw strikethrough
+      var legendHitBoxes=chart.legend.legendHitBoxes;
+      if(!legendHitBoxes||!legendHitBoxes[i])return;
+      var box=legendHitBoxes[i];
+      ctx.save();
+      ctx.strokeStyle='#aaa';
+      ctx.lineWidth=1;
+      var y=box.top+box.height/2;
+      ctx.beginPath();
+      ctx.moveTo(box.left,y);
+      ctx.lineTo(box.left+box.width,y);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+});
+
 // ════════════════════════════════════════════════
 // GLOBAL ERROR CATCHER — v43
 // Catches ALL uncaught errors AND unhandled promise rejections.
@@ -1579,7 +1650,11 @@ function renderDash(){
   var todayNum=getTodayNum();
 
   // v35: Single-pass counters — queue logic is DATE-ONLY, independent of status
+  // v60: queue = products NOT published in last 25 days (per column E for FB)
+  var d25=new Date();d25.setDate(d25.getDate()-25);
+  var threshold25=d25.getFullYear()*10000+(d25.getMonth()+1)*100+d25.getDate();
   var cDraft=0,cFB=0,cTG=0,cIG=0,cFBq=0,cTGq=0,cIGq=0;
+  var fbQueuePosts=[],tgQueuePosts=[],igQueuePosts=[];
   for(var i=0;i<n;i++){
     var p=ps[i];
     var fbS=gc(p,COL.FB_S),tgS=gc(p,COL.TG_S),igS=gc(p,COL.IG_S);
@@ -1590,13 +1665,14 @@ function renderDash(){
     // ── פייסבוק (עמודה E) ─────────────────────────────────────────
     if(p._dateE){
       var eDateNum=Number(p._dateE.num);
-      // NaN guard: skip if num is invalid
       if(!isNaN(eDateNum)){
-        // פורסם — נספר בנפרד (ייתכן שגם יש לו תאריך עתידי)
         if(fbS==='פורסם') cFB++;
-        // v35: תור = תאריך עתידי בלבד, ללא תלות בסטטוס
-        if(eDateNum>=todayNum) cFBq++;
+        // v60: בתור = לא פורסם ב-25 ימים האחרונים (תאריך E לפני 25 יום)
+        if(fbS!=='פורסם'&&eDateNum<=threshold25){cFBq++;fbQueuePosts.push(p);}
       }
+    } else if(fbS!=='פורסם'){
+      // גם מוצרים ללא תאריך E שטרם פורסמו
+      cFBq++;fbQueuePosts.push(p);
     }
 
     // ── טלגרם (עמודה Q) ──────────────────────────────────────────
@@ -1604,8 +1680,10 @@ function renderDash(){
       var tgDateNum=Number(p._dateTG.num);
       if(!isNaN(tgDateNum)){
         if(tgS==='פורסם') cTG++;
-        if(tgDateNum>=todayNum) cTGq++;
+        if(tgS!=='פורסם'&&tgDateNum<=threshold25){cTGq++;tgQueuePosts.push(p);}
       }
+    } else if(tgS!=='פורסם'){
+      cTGq++;tgQueuePosts.push(p);
     }
 
     // ── אינסטגרם (עמודה U) ───────────────────────────────────────
@@ -1613,10 +1691,14 @@ function renderDash(){
       var igDateNum=Number(p._dateIG.num);
       if(!isNaN(igDateNum)){
         if(igS==='פורסם') cIG++;
-        if(igDateNum>=todayNum) cIGq++;
+        if(igS!=='פורסם'&&igDateNum<=threshold25){cIGq++;igQueuePosts.push(p);}
       }
+    } else if(igS!=='פורסם'){
+      cIGq++;igQueuePosts.push(p);
     }
   }
+  // Store queue posts for popup
+  G._fbQueue=fbQueuePosts;G._tgQueue=tgQueuePosts;G._igQueue=igQueuePosts;
   document.getElementById('st-total').textContent=n;
   document.getElementById('st-draft').textContent=cDraft;
   // Fix 5: "מתוכנן להיום" = posts with _dateE.num === todayNum (FB only)
@@ -1669,11 +1751,32 @@ function renderDash(){
 }
 function mkChRow(label,sCol,name,pub,q,color,total){
   var pct=total?Math.min(100,Math.round(pub/total*100)):0;
+  var queueKey=sCol===COL.TG_S?'tg':sCol===COL.FB_S?'fb':'ig';
   return'<div style="padding:7px 0;border-bottom:1px solid var(--b1)">'
     +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;align-items:center">'
-    +'<button class="btn sec sm" onclick="openRecycleModal('+sCol+',\''+name+'\',\''+label.split(' ')[0]+'\')">'+label+'</button>'
-    +'<span style="font-size:10px;color:var(--t2)">'+pub+' פורסמו | '+q+' בתור</span></div>'
+    +'<button class="btn sec sm" onclick="openRecycleModal('+sCol+',''+name+'',''+label.split(' ')[0]+'')">'+label+'</button>'
+    +'<span style="font-size:10px;color:var(--t2)">'+pub+' פורסמו | '
+    +'<button onclick="openQueueModal(''+queueKey+'')" style="background:#fef3ee;border:1px solid #fed7aa;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:800;color:var(--acc);cursor:pointer;font-family:inherit">'+q+' בתור ↗</button></span></div>'
     +'<div style="height:4px;background:var(--s2);border-radius:2px"><div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:2px"></div></div></div>';
+}
+
+function openQueueModal(channel){
+  var posts=channel==='fb'?(G._fbQueue||[]):channel==='tg'?(G._tgQueue||[]):(G._igQueue||[]);
+  var chLabel=channel==='fb'?'📘 פייסבוק':channel==='tg'?'✈️ טלגרם':'📸 אינסטגרם';
+  if(!posts.length){openModal(chLabel+' — תור פרסומים','<div class="empty">✅ אין מוצרים בתור</div>','<button class="btn sec" onclick="closeModal()">סגור</button>');return;}
+  var body='<div style="font-size:11px;color:var(--t2);margin-bottom:10px;padding:6px 8px;background:var(--s2);border-radius:6px">מוצרים שלא פורסמו ב-25 הימים האחרונים</div>'
+    +posts.slice(0,50).map(function(p){
+      var img=gc(p,COL.IMG),row=p.row;
+      return'<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--b1);cursor:pointer" onclick="closeModal();openViewModal('+row+')">'
+        +(img?'<img src="'+esc(img)+'" style="width:36px;height:36px;border-radius:5px;object-fit:cover" onerror="this.style.display='none'">':
+          '<div style="width:36px;height:36px;border-radius:5px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:13px">📦</div>')
+        +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(gc(p,COL.HEB))+'</div>'
+        +'<div style="font-size:10px;color:var(--t2)">'+(gc(p,COL.CAT)?'📂 '+esc(gc(p,COL.CAT)):'')+(gc(p,COL.PRICE)?' · '+gc(p,COL.PRICE)+'$':'')+'</div></div>'
+        +'<button class="btn sec sm" onclick="event.stopPropagation();closeModal();openEditModal('+row+')">✏️</button>'
+      +'</div>';
+    }).join('')
+    +(posts.length>50?'<div style="text-align:center;padding:9px;font-size:11px;color:var(--t2)">...ועוד '+(posts.length-50)+' מוצרים</div>':'');
+  openModal(chLabel+' — '+posts.length+' בתור',body,'<button class="btn sec" onclick="closeModal()">סגור</button>');
 }
 
 // ════════════════════════════════════════════════
@@ -2209,14 +2312,21 @@ function renderCal(){
     const d=cell.d;
 
     let salePill='';
-    if(G.showSaleDays&&cell.cur){
-      const label=getSaleLabel(m1,cell.d);
-      if(label)salePill=`<div style="background:#fef3ee;color:var(--acc);border-radius:3px;padding:1px 3px;font-size:7px;font-weight:800;margin-bottom:2px;border:1px solid #fed7aa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</div>`;
+    if(cell.cur){
+      const isChoiceDay=cell.d>=1&&cell.d<=5;
+      if(isChoiceDay){
+        // Choice Day: always shown in red/orange with tooltip
+        salePill=`<div title="🛍️ Choice Day — ימי מבצע חודשיים 1-5" style="background:#fef2f2;color:#b91c1c;border-radius:3px;padding:1px 3px;font-size:7px;font-weight:800;margin-bottom:2px;border:1px solid #fca5a5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help">🛍️ Choice Day</div>`;
+      } else if(G.showSaleDays){
+        const label=getSaleLabel(m1,cell.d);
+        if(label)salePill=`<div style="background:#fef3ee;color:var(--acc);border-radius:3px;padding:1px 3px;font-size:7px;font-weight:800;margin-bottom:2px;border:1px solid #fed7aa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</div>`;
+      }
     }
 
     const show=dp.slice(0,2);
     const hasMore=total>0;
-    return`<div class="cday${isToday?' today':''}${!cell.cur?' other':''}" style="${salePill?'border-top:2px solid var(--acc);':''}">
+    var isChoiceDay2=cell.cur&&cell.d>=1&&cell.d<=5;
+    return`<div class="cday${isToday?' today':''}${!cell.cur?' other':''}" style="${isChoiceDay2?'border-top:2px solid #e11d48;background:linear-gradient(180deg,#fff1f2 0%,transparent 40%);':salePill?'border-top:2px solid var(--acc);':''}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
         <span class="cdn" style="cursor:${total>0?'pointer':'default'}" onclick="${total>0?'openDayModal('+d+','+y+','+m+')':''}">${cell.d}</span>
         ${hasMore&&cell.cur?`<button onclick="event.stopPropagation();openDayModal(${d},${y},${m})" style="background:var(--acc);color:#fff;border:none;border-radius:3px;font-size:8px;font-weight:800;padding:1px 4px;cursor:pointer;font-family:inherit">+${total}</button>`:''}
@@ -2711,7 +2821,21 @@ const CAT_DICT=[
   {cat:'בית',kw:/\b(home|organizer|hook|shelf|decor|mirror|storage)\b/i},
 ];
 function categorizeStat(name){for(const r of CAT_DICT)if(r.kw.test(name||''))return r.cat;return'אחר';}
-function getStatWeek(d){const t=new Date(d);t.setDate(t.getDate()+3-(t.getDay()+6)%7);const w1=new Date(t.getFullYear(),0,4);return 1+Math.round(((t-w1)/86400000-3+(w1.getDay()+6)%7)/7);}
+function getStatWeek(d){
+  // Israeli Sunday-based week number
+  var t=new Date(d);
+  var dow=t.getDay(); // 0=Sun
+  // Roll back to Sunday of this week
+  t.setDate(t.getDate()-dow);
+  t.setHours(12,0,0,0);
+  // Find Sunday on or before Jan 4 of this year (week 1 anchor)
+  var jan4=new Date(t.getFullYear(),0,4,12,0,0);
+  var week1Sun=new Date(jan4.getTime()-jan4.getDay()*86400000);
+  // Week number = floor((thisWeekSunday - week1Sunday) / 7 days) + 1
+  var diff=Math.round((t.getTime()-week1Sun.getTime())/86400000);
+  if(diff<0)return 1; // before week 1 — treat as week 1 of prev year
+  return Math.floor(diff/7)+1;
+}
 
 // v39: Convert YYYY-Www week key to date range label DD/MM - DD/MM
 function weekKeyToRange(key){
@@ -3819,7 +3943,6 @@ function renderCartItems(){
     return;
   }
   if(footer)footer.style.display='block';
-  renderHookChips();
   renderHashtagChips();
   el.innerHTML=G.cart.map(item=>`
     <div class="cart-item">
@@ -3849,14 +3972,6 @@ const CART_TITLES=[
   '👀 גיליתם כבר את הדילים האלה?',
 ];
 
-// Fix 7: Hooks bank
-const CART_HOOKS=[
-  'תראו איזה דיל מצאתי לכם...',
-  'מי אמר שצריך לשבור קופה?',
-  'דיל שסוגר לכם פינה',
-  'אל תגידו לא ידעתי',
-];
-
 function shuffleCartTitle(){
   const cur=gv('cart-title-input');
   const others=CART_TITLES.filter(t=>t!==cur);
@@ -3865,27 +3980,7 @@ function shuffleCartTitle(){
   buildCartPost();
 }
 
-function renderHookChips(){
-  const el=document.getElementById('hook-chips');if(!el)return;
-  el.innerHTML=CART_HOOKS.map(hook=>`<button onclick="prependHook(this.dataset.h)" data-h="${esc(hook)}" style="background:#fff7ed;border:1px solid #fed7aa;border-radius:13px;padding:2px 9px;font-size:10px;font-weight:700;color:var(--acc);cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='#fef3ee'" onmouseout="this.style.background='#fff7ed'">${hook}</button>`).join('');
-}
 
-function prependHook(hook){
-  const ta=document.getElementById('cart-post-preview');if(!ta)return;
-  // v40: Hook always goes at top. If first line is already a hook (from CART_HOOKS), replace it.
-  const lines=ta.value.split('\n');
-  const firstLine=lines[0]||'';
-  const isExistingHook=CART_HOOKS.some(h=>firstLine.trim()===h.trim());
-  if(isExistingHook){
-    // Replace first line with new hook
-    lines[0]=hook;
-    ta.value=lines.join('\n');
-  } else {
-    // Prepend hook with blank line before existing content
-    ta.value=hook+(ta.value?'\n'+ta.value:'');
-  }
-  toast('✅ הוק הוגדר','ok');
-}
 
 // v39: האשטגים חכמים לפי קטגוריה — שולף מהמוצרים ששייכים לאותה קטגוריה
 function renderHashtagChips(){
