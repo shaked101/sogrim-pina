@@ -1895,10 +1895,16 @@ function openFollowerModal(key,name){
   const pct=(a,b)=>{if(!a||!b||!b.val)return'';return' ('+(((a.val-b.val)/b.val)*100).toFixed(1)+'%)';};
 
   const cid='follower-spark-'+key;
-  const histHtml=hist.slice(-8).reverse().map(h=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--b1);font-size:12px">
-    <span style="color:var(--t2)">${new Date(h.ts).toLocaleDateString('he-IL')}</span>
-    <span style="font-weight:700">${Number(h.val).toLocaleString()}</span>
-  </div>`).join('');
+  const histHtml=hist.slice(-8).reverse().map((h,idx)=>{
+    // idx within the reversed slice → real index in hist array
+    const realIdx=hist.length-1-(hist.slice(-8).length-1-idx);
+    return`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--b1);font-size:12px;gap:8px">
+      <span style="color:var(--t2);flex-shrink:0">${new Date(h.ts).toLocaleDateString('he-IL')}</span>
+      <span style="font-weight:700;flex:1;text-align:center">${Number(h.val).toLocaleString()}</span>
+      <button onclick="deleteFollowerPoint('${key}',${realIdx})" title="מחק רשומה זו"
+        style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;flex-shrink:0;transition:color .15s"
+        onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--t3)'">🗑️</button>
+    </div>`;}).join('');
 
   const growthHtml=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
     <div style="background:var(--s2);border-radius:7px;padding:10px;border:1px solid var(--b1);text-align:center">
@@ -1963,6 +1969,23 @@ function addFollowerPoint(key){
   if(!G.followers[key])G.followers[key]=[];
   G.followers[key].push({val,ts:Date.now()});
   saveFollowers();closeModal();renderFCards();toast('✅ עוקבים עודכנו!','ok');
+}
+
+// v40: Delete a specific history entry by index
+function deleteFollowerPoint(key,idx){
+  const hist=G.followers[key];
+  if(!hist||idx<0||idx>=hist.length){toast('רשומה לא נמצאה','err');return;}
+  const entry=hist[idx];
+  const dateStr=new Date(entry.ts).toLocaleDateString('he-IL');
+  if(!confirm('למחוק את הרשומה מ-'+dateStr+' ('+Number(entry.val).toLocaleString()+')?'))return;
+  hist.splice(idx,1);
+  saveFollowers();
+  renderFCards();
+  // Re-open the modal to reflect change
+  const platform=['fb','tg','ig'].find(k=>k===key)||key;
+  const pfm={fb:'פייסבוק',tg:'טלגרם',ig:'אינסטגרם'};
+  openFollowerModal(key,pfm[key]||key);
+  toast('🗑️ רשומה נמחקה','ok');
 }
 
 // v31: Calculate follower change between two arbitrary dates
@@ -2696,10 +2719,16 @@ function weekKeyToRange(key){
     const m=key.match(/^(\d{4})-W(\d{1,2})$/);
     if(!m)return key;
     const year=parseInt(m[1],10),week=parseInt(m[2],10);
-    // ISO week: week 1 starts on Monday containing Jan 4
+    // Israeli week starts Sunday. Find Jan 1 and roll back to previous Sunday.
+    const jan1=new Date(year,0,1,12,0,0);
+    // getDay(): 0=Sun, 1=Mon... roll back to last Sunday
+    const dowJan1=jan1.getDay(); // 0=Sun already
+    const firstSunday=new Date(jan1.getTime()-dowJan1*86400000);
+    // Week 1 = the Sunday on or before Jan 4 (ensures it contains Jan 1 if partial)
     const jan4=new Date(year,0,4,12,0,0);
-    const dow=(jan4.getDay()+6)%7; // Monday=0
-    const weekStart=new Date(jan4.getTime()-(dow*86400000)+((week-1)*7*86400000));
+    const dowJan4=jan4.getDay();
+    const week1Sunday=new Date(jan4.getTime()-dowJan4*86400000);
+    const weekStart=new Date(week1Sunday.getTime()+((week-1)*7*86400000));
     const weekEnd=new Date(weekStart.getTime()+6*86400000);
     const fmt=d=>String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
     return fmt(weekStart)+' - '+fmt(weekEnd);
@@ -2795,10 +2824,21 @@ function renderStatsDash(){
         legend:{position:'bottom',labels:{font:{size:9},color:'#64748b',boxWidth:8,padding:6,
           generateLabels:(chart)=>{
             const ds=chart.data.datasets[0];
+            const meta=chart.getDatasetMeta(0);
             return chart.data.labels.map((label,i)=>{
               const val=ds.data[i];
               const pct=catTotal?Math.round(val/catTotal*100):0;
-              return{text:label+' '+pct+'%',fillStyle:ds.backgroundColor[i],strokeStyle:'#fff',lineWidth:1,index:i,hidden:false};
+              const isHidden=meta.data[i]&&meta.data[i].hidden;
+              return{
+                text:label+' '+pct+'%',
+                fillStyle:isHidden?'#ccc':ds.backgroundColor[i],
+                strokeStyle:'#fff',
+                lineWidth:1,
+                index:i,
+                hidden:isHidden,
+                fontColor:isHidden?'#aaa':'#64748b',
+                textDecoration:isHidden?'line-through':'none',
+              };
             });
           }
         }},
@@ -2873,6 +2913,7 @@ function openCatDrillDown(catName){
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">כמות</th>
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">מכירות</th>
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">עמלה</th>
+      <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">קטגוריה</th>
     </tr></thead>
     <tbody>
     ${sorted.map((r,i)=>{
@@ -2885,6 +2926,14 @@ function openCatDrillDown(catName){
       }
       const imgEl=imgSrc?`<img src="${esc(imgSrc)}" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.style.display='none'">`:
         `<span style="color:var(--t3);font-size:10px">—</span>`;
+      // Find matching post rows for this product name to get row numbers
+      const matchedPosts=G.posts.filter(p=>{
+        const n=(gc(p,COL.HEB)||gc(p,COL.ENG)||'').trim();
+        return n===r.name||n.slice(0,12)===r.name.slice(0,12);
+      });
+      const allCatsOpts=[...new Set(G.posts.map(p=>gc(p,COL.CAT).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'he'))
+        .map(cat=>`<option value="${esc(cat)}">${esc(cat)}</option>`).join('');
+      const rowIds=matchedPosts.map(p=>p.row).join(',');
       return`<tr style="border-bottom:1px solid rgba(226,232,240,.5)">
         <td style="padding:7px 8px;color:var(--acc);font-weight:800">${i+1}</td>
         <td style="padding:7px 8px;font-weight:700;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
@@ -2893,11 +2942,42 @@ function openCatDrillDown(catName){
         <td style="padding:7px 8px;text-align:center"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 6px;font-weight:800">×${r.count}</span></td>
         <td style="padding:7px 8px;font-family:monospace;font-weight:700;color:var(--acc)">$${r.totalSales.toFixed(2)}</td>
         <td style="padding:7px 8px;font-family:monospace;color:var(--grn)">$${r.totalComm.toFixed(2)}</td>
+        <td style="padding:7px 8px">
+          ${rowIds?`<select onchange="updateDrillDownCat(this,'${rowIds}')"
+            style="font-size:10px;background:var(--s2);border:1px solid var(--b1);border-radius:5px;padding:2px 5px;color:var(--tx);font-family:inherit;cursor:pointer;max-width:110px">
+            <option value="">— שנה קטגוריה —</option>${allCatsOpts}
+          </select>`:'<span style="color:var(--t3);font-size:10px">—</span>'}
+        </td>
       </tr>`;}).join('')}
     </tbody>
   </table>
   </div>`;
   openModal(`📊 ${catName} — פירוט מוצרים`,body,'<button class="btn sec" onclick="closeModal()">סגור</button>');
+}
+
+
+// v40: Update category for matched posts from drill-down table
+async function updateDrillDownCat(selectEl, rowIdsStr){
+  const newCat=selectEl.value;
+  if(!newCat){return;}
+  const rowIds=rowIdsStr.split(',').map(Number).filter(Boolean);
+  if(!rowIds.length){toast('לא נמצאו שורות מתאימות','err');return;}
+  selectEl.disabled=true;
+  let ok=true;
+  for(const rowNum of rowIds){
+    const res=await writeSheet(rowNum,{[COL.CAT+1]:newCat});
+    if(!res)ok=false;
+    else{
+      const p=G.posts.find(x=>x.row===rowNum);
+      if(p)p.data[COL.CAT]=newCat;
+    }
+  }
+  if(ok){
+    selectEl.style.background='#f0fdf4';selectEl.style.borderColor='#86efac';
+    toast('✅ קטגוריה עודכנה ל-'+newCat+' ('+rowIds.length+' מוצרים)','ok');
+  } else {
+    toast('שגיאה בעדכון חלק מהשורות','err');
+  }
 }
 
 function resetCSV(){
@@ -3792,10 +3872,19 @@ function renderHookChips(){
 
 function prependHook(hook){
   const ta=document.getElementById('cart-post-preview');if(!ta)return;
-  // v39: Append hook at end with blank line separator instead of overwriting
-  const cur=ta.value.trimEnd();
-  ta.value=(cur?cur+'\n\n':'')+hook;
-  toast('✅ הוק התווסף','ok');
+  // v40: Hook always goes at top. If first line is already a hook (from CART_HOOKS), replace it.
+  const lines=ta.value.split('\n');
+  const firstLine=lines[0]||'';
+  const isExistingHook=CART_HOOKS.some(h=>firstLine.trim()===h.trim());
+  if(isExistingHook){
+    // Replace first line with new hook
+    lines[0]=hook;
+    ta.value=lines.join('\n');
+  } else {
+    // Prepend hook with blank line before existing content
+    ta.value=hook+(ta.value?'\n'+ta.value:'');
+  }
+  toast('✅ הוק הוגדר','ok');
 }
 
 // v39: האשטגים חכמים לפי קטגוריה — שולף מהמוצרים ששייכים לאותה קטגוריה
