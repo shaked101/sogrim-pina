@@ -9,7 +9,7 @@
 <body>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Heebo',sans-serif}
-:root{--bg:#f1f5f9;--s1:#fff;--s2:#f8fafc;--s3:#f1f5f9;--b1:#e2e8f0;--b2:#cbd5e1;--acc:#d4541a;--a2:#e8732a;--grn:#15803d;--red:#b91c1c;--blue:#1d4ed8;--gold:#92400e;--tg:#0369a1;--fb:#1558c0;--ig:#9d174d;--tx:#1e293b;--t2:#64748b;--t3:#94a3b8}
+:root{--bg:#FAF9F6;--s1:#fff;--s2:#f8fafc;--s3:#f1f5f9;--b1:#e2e8f0;--b2:#cbd5e1;--acc:#d4541a;--a2:#e8732a;--grn:#15803d;--red:#b91c1c;--blue:#1d4ed8;--gold:#92400e;--tg:#0369a1;--fb:#1558c0;--ig:#9d174d;--tx:#1e293b;--t2:#64748b;--t3:#94a3b8}
 body{background:var(--bg);color:var(--tx);direction:rtl}
 .topbar{height:52px;background:var(--s1);border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;padding:0 18px;position:sticky;top:0;z-index:40}
 .logo{font-size:16px;font-weight:900;letter-spacing:-.5px}.logo span{color:var(--acc)}
@@ -70,6 +70,10 @@ tr:hover td{background:#fef9f7}
 .ctg{background:rgba(3,105,161,.12);color:var(--tg)}.cfb{background:rgba(21,88,192,.12);color:var(--fb)}.cig{background:rgba(157,23,77,.12);color:var(--ig)}.c0{background:var(--s2);color:var(--t3)}
 .badge{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700}
 .bd{background:var(--s2);color:var(--t2);border:1px solid var(--b1)}.bap{background:#f0fdf4;color:#15803d}.bpub{background:#eff6ff;color:#1d4ed8}
+.up-item{transition:background .12s}
+.up-today{background:#fff7ed;border-radius:6px;padding-right:6px!important}
+body.dark-mode .up-today{background:#3d2e1e!important}
+body.dark-mode .up-item:hover{background:#3a3a3c}
 .calwrap{background:var(--s1);border:1px solid var(--b1);border-radius:11px;overflow:hidden}
 .calnav{display:flex;align-items:center;gap:12px;padding:11px 15px;border-bottom:1px solid var(--b1)}
 .calnav h3{font-size:14px;font-weight:800;flex:1;color:var(--tx)}
@@ -385,6 +389,9 @@ body.dark-mode .calwrap{background:#2c2c2e;border-color:#3a3a3c}
 body.dark-mode .cday{border-color:#3a3a3c}
 body.dark-mode .cday:hover{background:#2c2c2e}
 body.dark-mode .cday.today{background:#3a3a3c}
+body.dark-mode #upcoming-list>div{background:transparent!important}
+body.dark-mode #upcoming-list [style*="background:#fff7ed"]{background:#3a3a3c!important}
+body.dark-mode #upcoming-list [style*="background:#fff"]{background:#2c2c2c!important}
 body.dark-mode .cday.other{opacity:.15}
 body.dark-mode .snapshot-card{background:#3a3a3c;border-color:#48484a}
 body.dark-mode .snap-mini-card{background:#2c2c2e;border-color:#3a3a3c}
@@ -1623,55 +1630,50 @@ function renderDash(){
   // v34: todayNum computed ONCE, guaranteed pure integer via getTodayNum()
   var todayNum=getTodayNum();
 
-  // v35: Single-pass counters — queue logic is DATE-ONLY, independent of status
-  // v60: queue = products NOT published in last 25 days (per column E for FB)
-  var d25=new Date();d25.setDate(d25.getDate()-25);
-  var threshold25=d25.getFullYear()*10000+(d25.getMonth()+1)*100+d25.getDate();
+  // Queue logic: per-channel. "In queue" = NOT published AND NOT draft (per channel) AND
+  // (no publish-date for that channel, OR date is >25 days ago).
+  // Date diff uses the parsed .dt (local noon Date) for accurate day count.
+  var _msPerDay=864e5;
+  var _todayNoon=new Date();_todayNoon.setHours(12,0,0,0);
+  function _daysSince(parsedDate){
+    if(!parsedDate||!parsedDate.dt)return null;
+    return Math.round((_todayNoon-parsedDate.dt)/_msPerDay);
+  }
+  function _isDraftStatus(s){return s==='טיוטה'||s==='draft'||s==='';}
   var cDraft=0,cFB=0,cTG=0,cIG=0,cFBq=0,cTGq=0,cIGq=0;
   var fbQueuePosts=[],tgQueuePosts=[],igQueuePosts=[];
   for(var i=0;i<n;i++){
     var p=ps[i];
-    var fbS=gc(p,COL.FB_S),tgS=gc(p,COL.TG_S),igS=gc(p,COL.IG_S);
-    var isDraft=gc(p,COL.STATUS)==='טיוטה';
-    var anyPub=fbS==='פורסם'||tgS==='פורסם'||igS==='פורסם';
-    var anyAp=fbS==='מאושר'||tgS==='מאושר'||igS==='מאושר';
-    if(!anyPub&&!anyAp&&isDraft)cDraft++;
+    var fbS=gc(p,COL.FB_S)||'',tgS=gc(p,COL.TG_S)||'',igS=gc(p,COL.IG_S)||'';
+    var globalS=gc(p,COL.STATUS)||'';
+    // Draft counter: all channels are draft/empty and global status is draft
+    var allBlank=_isDraftStatus(fbS)&&_isDraftStatus(tgS)&&_isDraftStatus(igS);
+    if(allBlank&&(_isDraftStatus(globalS)||!globalS))cDraft++;
 
-    // ── פייסבוק ─────────────────────────────────────────
+    // ── פייסבוק (עמודה E) ───────────────────────────────
     if(fbS==='פורסם'){
       cFB++;
-    } else if(!isDraft){
-      // בתור: לא טיוטה + (אין תאריך E  OR  תאריך E לפני יותר מ-25 ימים)
-      if(p._dateE){
-        var eDateNum=Number(p._dateE.num);
-        if(!isNaN(eDateNum)&&eDateNum<=threshold25){cFBq++;fbQueuePosts.push(p);}
-      } else {
-        cFBq++;fbQueuePosts.push(p);
-      }
+    } else if(!_isDraftStatus(fbS)){
+      // Not published, not draft → check if in queue
+      var fbDays=_daysSince(p._dateE);
+      // In queue if: no date, OR date is more than 25 days ago
+      if(fbDays===null||fbDays>25){cFBq++;fbQueuePosts.push(p);}
     }
 
-    // ── טלגרם ──────────────────────────────────────────
+    // ── טלגרם (עמודה Q) ─────────────────────────────────
     if(tgS==='פורסם'){
       cTG++;
-    } else if(!isDraft){
-      if(p._dateTG){
-        var tgDateNum=Number(p._dateTG.num);
-        if(!isNaN(tgDateNum)&&tgDateNum<=threshold25){cTGq++;tgQueuePosts.push(p);}
-      } else {
-        cTGq++;tgQueuePosts.push(p);
-      }
+    } else if(!_isDraftStatus(tgS)){
+      var tgDays=_daysSince(p._dateTG);
+      if(tgDays===null||tgDays>25){cTGq++;tgQueuePosts.push(p);}
     }
 
-    // ── אינסטגרם ───────────────────────────────────────
+    // ── אינסטגרם (עמודה U / COL_IG_D) ──────────────────
     if(igS==='פורסם'){
       cIG++;
-    } else if(!isDraft){
-      if(p._dateIG){
-        var igDateNum=Number(p._dateIG.num);
-        if(!isNaN(igDateNum)&&igDateNum<=threshold25){cIGq++;igQueuePosts.push(p);}
-      } else {
-        cIGq++;igQueuePosts.push(p);
-      }
+    } else if(!_isDraftStatus(igS)){
+      var igDays=_daysSince(p._dateIG);
+      if(igDays===null||igDays>25){cIGq++;igQueuePosts.push(p);}
     }
   }
   // Store queue posts for popup
@@ -1706,9 +1708,7 @@ function renderDash(){
       var isToday=up._dateE&&up._dateE.num===todayNum;
       // Fix 6: display date as DD/MM/YYYY — no time
       var dateStr=fmtDate(up._dateE);
-      upH.push('<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--b1);cursor:pointer'
-        +(isToday?';background:#fff7ed;border-radius:6px;padding-right:6px':'')
-        +'" onclick="openViewModal('+row+')">'
+      upH.push('<div class="up-item'+(isToday?' up-today':'')+'" style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--b1);cursor:pointer" onclick="openViewModal('+row+')">'
         +(img?'<img src="'+esc(img)+'" style="width:30px;height:30px;border-radius:4px;object-fit:cover" onerror="this.style.display=\'none\'">':'<div style="width:30px;height:30px;border-radius:4px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:12px">📦</div>')
         +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx)">'+esc(gc(up,COL.HEB))+'</div>'
         +'<div style="font-size:10px;color:var(--t2)">📘 '+dateStr+(isToday?' 📌 היום':'')+'</div></div>'
@@ -3013,6 +3013,13 @@ function openCatDrillDown(catName){
       const curCatForRow=matchedPosts.length?gc(matchedPosts[0],COL.CAT).trim():'';
       const allCatsOpts=allCatsList.map(cat=>`<option value="${esc(cat)}" ${cat===curCatForRow?'selected':''}>${esc(cat)}</option>`).join('');
       const rowIds=matchedPosts.map(p=>p.row).join(',');
+      // Always render the select — even if no exact match found, show all cats
+      const catSelectHtml=allCatsList.length
+        ?`<select onchange="updateDrillDownCat(this,'${rowIds}')"
+            style="font-size:10px;background:var(--s2);border:1px solid var(--b1);border-radius:5px;padding:2px 5px;color:var(--tx);font-family:inherit;cursor:pointer;max-width:120px">
+            <option value="">— קטגוריה —</option>${allCatsOpts}
+          </select>`
+        :'<span style="color:var(--t3);font-size:10px">—</span>';
       return`<tr style="border-bottom:1px solid rgba(226,232,240,.5)">
         <td style="padding:7px 8px;color:var(--acc);font-weight:800">${i+1}</td>
         <td style="padding:7px 8px;font-weight:700;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
@@ -3021,14 +3028,7 @@ function openCatDrillDown(catName){
         <td style="padding:7px 8px;text-align:center"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 6px;font-weight:800">×${r.count}</span></td>
         <td style="padding:7px 8px;font-family:monospace;font-weight:700;color:var(--acc)">$${r.totalSales.toFixed(2)}</td>
         <td style="padding:7px 8px;font-family:monospace;color:var(--grn)">$${r.totalComm.toFixed(2)}</td>
-        <td style="padding:7px 8px">
-          ${rowIds
-            ?`<select onchange="updateDrillDownCat(this,'${rowIds}')"
-                style="font-size:10px;background:var(--s2);border:1px solid var(--b1);border-radius:5px;padding:2px 5px;color:var(--tx);font-family:inherit;cursor:pointer;max-width:110px">
-                <option value="">— שנה קטגוריה —</option>${allCatsOpts}
-              </select>`
-            :'<span style="color:var(--t3);font-size:10px">—</span>'}
-        </td>
+        <td style="padding:7px 8px">${catSelectHtml}</td>
       </tr>`;}).join('')}
     </tbody>
   </table>
