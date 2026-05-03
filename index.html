@@ -1314,6 +1314,17 @@ function openModal(title,body,foot){
 }
 function closeModal(){const r=document.getElementById('modal-root');r.style.display='none';r.innerHTML='';}
 
+// ── Image Lightbox ──────────────────────────────────────────────────
+function openImageLightbox(src){
+  var lb=document.createElement('div');
+  lb.id='img-lightbox';
+  lb.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;cursor:zoom-out;padding:20px';
+  lb.innerHTML='<img src="'+src+'" style="max-width:90vw;max-height:90vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.6);object-fit:contain">'
+    +'<button onclick="document.getElementById(\'img-lightbox\').remove()" style="position:absolute;top:18px;left:18px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:26px;cursor:pointer;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:inherit;backdrop-filter:blur(4px)">×</button>';
+  lb.addEventListener('click',function(e){if(e.target===lb)lb.remove();});
+  document.body.appendChild(lb);
+}
+
 // ════════════════════════════════════════════════
 // AUTH
 // ════════════════════════════════════════════════
@@ -1708,7 +1719,6 @@ function _collectStale(){
   var d30=new Date();
   d30.setDate(d30.getDate()-30);
   var staleNum=d30.getFullYear()*10000+(d30.getMonth()+1)*100+d30.getDate();
-  var REVIEWED_TAG='#נבדק_לריענון';
   var stale=[];
   for(var i=0;i<G.posts.length;i++){
     var p=G.posts[i];
@@ -1718,8 +1728,6 @@ function _collectStale(){
     if(eNum>staleNum)continue;
     var wasPublished=gc(p,COL.FB_S)==='פורסם'||gc(p,COL.TG_S)==='פורסם'||gc(p,COL.IG_S)==='פורסם';
     if(!wasPublished)continue;
-    // v38: אם המשתמש כבר סימן "בדקתי" — המוצר לא נכנס לרדאר
-    if(gc(p,COL.TAGS).indexOf(REVIEWED_TAG)>=0)continue;
     stale.push(p);
   }
   stale.sort(function(a,b){return Number(a._dateE.num)-Number(b._dateE.num);});
@@ -1774,39 +1782,43 @@ function openFullRadarModal(){
   );
 }
 
-// ── כפתור "רענן": מעדכן תאריך עמודה E להיום ─────────────────────
-// הפוסט נופל מהרדאר בריענון הבא (תאריך היום = עדכני, לא ישן)
-// ── כפתור "רענן": מסמן מוצר כנבדק — אסור לגעת בעמודה E ─────────
-// v38: במקום לדרוס את תאריך הפרסום (עמודה E), מוסיפים תגית #נבדק_לריענון
-// לעמודה I (תגיות / COL.TAGS = אינדקס 8 → עמודה 9 בגיליון).
-// הרדאר יוצא להחריג פוסטים שמכילים את התגית הזו.
+// ── כפתור "רענן": מסמן מוצר כנבדק — עדכון תאריך בדיקה בלבד ─────────
+// v38 FIX: אין נגיעה בשדה ההאשטגים (COL.TAGS) בשום צורה.
+// הרדאר מחריג פוסטים שנבדקו ע"י עדכון תאריך העמודה E להיום.
 async function refreshRadarPost(rowNum){
   var p=G.posts.find(function(x){return x.row===rowNum;});
   if(!p){toast('פוסט לא נמצא','err');return;}
 
-  var REVIEWED_TAG='#נבדק_לריענון';
-  var currentTags=gc(p,COL.TAGS)||'';
+  // עדכן את תאריך עמודה E להיום — המוצר ייצא מהרדאר (תאריך עדכני, לא ישן)
+  var today=new Date();
+  var dd=String(today.getDate()).padStart(2,'0');
+  var mm=String(today.getMonth()+1).padStart(2,'0');
+  var yyyy=today.getFullYear();
+  var todayStr=dd+'/'+mm+'/'+yyyy;
 
-  // אם כבר מסומן — אל תכפיל
-  if(currentTags.indexOf(REVIEWED_TAG)>=0){
-    toast('המוצר כבר מסומן כנבדק','inf');
-    return;
-  }
-
-  // הוסף את התגית לסוף רשימת התגיות הקיימות
-  var newTags=currentTags?currentTags.trim()+' '+REVIEWED_TAG:REVIEWED_TAG;
-
-  // COL.TAGS = 8 (0-based) → עמודה 9 (1-based) בגיליון
-  var colNum=COL.TAGS+1;  // = 9
-  var ok=await writeSheet(rowNum,{[colNum]:newTags});
+  var colNum=COL.COL_E+1; // עמודה E (1-based)
+  var ok=await writeSheet(rowNum,{[colNum]:todayStr});
   if(!ok)return;
 
-  // עדכון מקומי — לא נוגע ב-_dateE בשום פנים!
-  p.data[COL.TAGS]=newTags;
+  // עדכון מקומי — עמודה E בלבד, ללא נגיעה בהאשטגים
+  p.data[COL.COL_E]=todayStr;
+  try{p._dateE=parseDateIL(todayStr);}catch(e){p._dateE=null;}
+
+  // עדכן dateMap
+  G.dateMap={};
+  G.posts.forEach(function(q){
+    function ins(num,bkt){
+      if(!G.dateMap[num])G.dateMap[num]={fb:[],tg:[],ig:[],all:[]};
+      G.dateMap[num][bkt].push(q);
+      if(G.dateMap[num].all.indexOf(q)===-1)G.dateMap[num].all.push(q);
+    }
+    if(q._dateE)ins(q._dateE.num,'fb');
+    if(q._dateTG)ins(q._dateTG.num,'tg');
+    if(q._dateIG)ins(q._dateIG.num,'ig');
+  });
 
   toast('✅ סומן כנבדק — יצא מהרדאר','ok');
   renderStaleRadar();
-  // אם המודאל המלא פתוח, רענן אותו גם
   var modalRoot=document.getElementById('modal-root');
   if(modalRoot&&modalRoot.style.display!=='none')openFullRadarModal();
 }
@@ -2076,7 +2088,7 @@ function renderTableRows(rows){
     return`<tr>
       <td>${img?`<img class="timg" src="${img}" onerror="this.style.display='none'">`:
         `<div class="timg-ph">📦</div>`}</td>
-      <td class="cname">${esc(gc(p,COL.HEB))}<small>${esc(gc(p,COL.ENG)).slice(0,44)}</small></td>
+      <td class="cname">${gc(p,COL.LINK)?`<a href="${esc(gc(p,COL.LINK))}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;text-underline-offset:2px" title="פתח באלי אקספרס ↗">${esc(gc(p,COL.HEB))}</a>`:esc(gc(p,COL.HEB))}<small>${esc(gc(p,COL.ENG)).slice(0,44)}</small></td>
       <td class="cprice">${gc(p,COL.PRICE)?gc(p,COL.PRICE)+'$':'—'}</td>
       <td><span class="chip2">${esc(gc(p,COL.CAT))||'—'}</span></td>
       <td><div class="chips">
@@ -2256,7 +2268,7 @@ function openViewModal(rowNum){
   const igD=fmtDate(p._dateIG);   // IG date = COL_IG_D
   const row=rowNum;
   const body=`
-    ${img?`<img style="width:100%;border-radius:7px;margin-bottom:11px;max-height:190px;object-fit:cover" src="${img}" onerror="this.remove()">`: ''}
+    ${img?`<img style="width:100%;border-radius:7px;margin-bottom:11px;max-height:190px;object-fit:cover;cursor:zoom-in" src="${img}" onerror="this.remove()" onclick="openImageLightbox('${img.replace(/'/g,"\\'")}')" title="לחץ להגדלה">`: ''}
     <div style="display:flex;gap:6px;margin-bottom:11px">
       <div style="flex:1;background:var(--s2);border-radius:6px;padding:8px;text-align:center;font-size:11px;border:1px solid var(--b1);border-top:3px solid #0369a1">
         <div style="font-weight:800;color:#0369a1;margin-bottom:2px">✈️ טלגרם</div>
@@ -2721,7 +2733,7 @@ function renderStatsDash(){
   filteredData.forEach(r=>{
     const d=ac.date?new Date(r[ac.date]):null;let key='לא ידוע';
     if(d&&!isNaN(d)){
-      if(G.period==='day')key=d.toISOString().slice(0,10);
+      if(G.period==='day'){const _d=String(d.getDate()).padStart(2,'0'),_m=String(d.getMonth()+1).padStart(2,'0'),_y=String(d.getFullYear()).slice(-2);key=_d+'/'+_m+'/'+_y;}
       else if(G.period==='week')key=`${d.getFullYear()}-W${String(getStatWeek(d)).padStart(2,'0')}`;
       else key=d.toISOString().slice(0,7);
     }
@@ -2824,7 +2836,6 @@ function openCatDrillDown(catName){
   <table style="width:100%;border-collapse:collapse;font-size:11px">
     <thead><tr style="background:var(--s2)">
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">#</th>
-      <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">תמונה</th>
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">מוצר</th>
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">כמות</th>
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">מכירות</th>
@@ -2843,7 +2854,6 @@ function openCatDrillDown(catName){
         `<span style="color:var(--t3);font-size:10px">—</span>`;
       return`<tr style="border-bottom:1px solid rgba(226,232,240,.5)">
         <td style="padding:7px 8px;color:var(--acc);font-weight:800">${i+1}</td>
-        <td style="padding:7px 8px">${imgEl}</td>
         <td style="padding:7px 8px;font-weight:700;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
           ${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">${esc(r.name)}</a>`:esc(r.name)}
         </td>
