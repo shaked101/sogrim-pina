@@ -950,7 +950,7 @@ body.dark-mode .radar-wrap{background:#2c2c2e;border-color:#3a3a3c}
 // ════════════════════════════════════════════════
 // COLUMN MAP
 // ════════════════════════════════════════════════
-const COL={HEB:0,ENG:1,PRICE:2,LINK:3,COL_E:4,CAT:5,STATUS:6,BOUGHT:7,TAGS:8,CONTENT:9,MSGID:10,COL_L:11,IMG:12,COL_N:13,RATING:14,TG_S:15,COL_Q:16,FB_S:17,COL_S:18,IG_S:19,COL_IG_D:20};
+const COL={HEB:0,ENG:1,PRICE:2,LINK:3,COL_E:4,CAT:5,STATUS:6,BOUGHT:7,TAGS:8,CONTENT:9,MSGID:10,COL_L:11,IMG:12,COL_N:13,RATING:14,TG_S:15,COL_Q:16,FB_S:17,COL_S:18,IG_S:19,COL_IG_D:20,REVIEWED_DATE:27}; // AB=index 27 (0-based), col 28 (1-based)
 
 // ════════════════════════════════════════════════
 // COMMUNITY — תחרות הפניות
@@ -1728,6 +1728,12 @@ function _collectStale(){
     if(eNum>staleNum)continue;
     var wasPublished=gc(p,COL.FB_S)==='פורסם'||gc(p,COL.TG_S)==='פורסם'||gc(p,COL.IG_S)==='פורסם';
     if(!wasPublished)continue;
+    // v39 FIX: אם עמודה AB (REVIEWED_DATE) מכילה תאריך שהוא בתוך 30 הימים האחרונים → יצא מהרדאר
+    var reviewedRaw=gc(p,COL.REVIEWED_DATE);
+    if(reviewedRaw){
+      var reviewedDate=parseDateIL(reviewedRaw);
+      if(reviewedDate&&Number(reviewedDate.num)>staleNum)continue;
+    }
     stale.push(p);
   }
   stale.sort(function(a,b){return Number(a._dateE.num)-Number(b._dateE.num);});
@@ -1782,40 +1788,26 @@ function openFullRadarModal(){
   );
 }
 
-// ── כפתור "רענן": מסמן מוצר כנבדק — עדכון תאריך בדיקה בלבד ─────────
-// v38 FIX: אין נגיעה בשדה ההאשטגים (COL.TAGS) בשום צורה.
-// הרדאר מחריג פוסטים שנבדקו ע"י עדכון תאריך העמודה E להיום.
+// ── כפתור "רענן": מסמן מוצר כנבדק ─────────────────────────────────
+// v39 FIX: כותב את תאריך הבדיקה לעמודה AB (COL.REVIEWED_DATE, אינדקס 27).
+// עמודה E (תאריך פרסום) לא נגעת בה בשום צורה.
 async function refreshRadarPost(rowNum){
   var p=G.posts.find(function(x){return x.row===rowNum;});
   if(!p){toast('פוסט לא נמצא','err');return;}
 
-  // עדכן את תאריך עמודה E להיום — המוצר ייצא מהרדאר (תאריך עדכני, לא ישן)
   var today=new Date();
   var dd=String(today.getDate()).padStart(2,'0');
   var mm=String(today.getMonth()+1).padStart(2,'0');
   var yyyy=today.getFullYear();
   var todayStr=dd+'/'+mm+'/'+yyyy;
 
-  var colNum=COL.COL_E+1; // עמודה E (1-based)
+  // עמודה AB = אינדקס 27 (0-based) → עמודה 28 (1-based) בגיליון
+  var colNum=COL.REVIEWED_DATE+1; // = 28
   var ok=await writeSheet(rowNum,{[colNum]:todayStr});
   if(!ok)return;
 
-  // עדכון מקומי — עמודה E בלבד, ללא נגיעה בהאשטגים
-  p.data[COL.COL_E]=todayStr;
-  try{p._dateE=parseDateIL(todayStr);}catch(e){p._dateE=null;}
-
-  // עדכן dateMap
-  G.dateMap={};
-  G.posts.forEach(function(q){
-    function ins(num,bkt){
-      if(!G.dateMap[num])G.dateMap[num]={fb:[],tg:[],ig:[],all:[]};
-      G.dateMap[num][bkt].push(q);
-      if(G.dateMap[num].all.indexOf(q)===-1)G.dateMap[num].all.push(q);
-    }
-    if(q._dateE)ins(q._dateE.num,'fb');
-    if(q._dateTG)ins(q._dateTG.num,'tg');
-    if(q._dateIG)ins(q._dateIG.num,'ig');
-  });
+  // עדכון מקומי — רק עמודה AB, עמודה E נשארת ללא שינוי לחלוטין
+  p.data[COL.REVIEWED_DATE]=todayStr;
 
   toast('✅ סומן כנבדק — יצא מהרדאר','ok');
   renderStaleRadar();
@@ -2086,7 +2078,7 @@ function renderTableRows(rows){
     const badge=anyPub?'<span class="badge bpub">✓ פורסם</span>':anyAp?'<span class="badge bap">✅ מאושר</span>':`<span class="badge bd">${esc(gs)||'—'}</span>`;
     const row=p.row;
     return`<tr>
-      <td>${img?`<img class="timg" src="${img}" onerror="this.style.display='none'">`:
+      <td>${img?`<img class="timg" src="${img}" onerror="this.style.display='none'" style="cursor:zoom-in" onclick="openImageLightbox(this.src)" title="לחץ להגדלה">`:
         `<div class="timg-ph">📦</div>`}</td>
       <td class="cname">${gc(p,COL.LINK)?`<a href="${esc(gc(p,COL.LINK))}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;text-underline-offset:2px" title="פתח באלי אקספרס ↗">${esc(gc(p,COL.HEB))}</a>`:esc(gc(p,COL.HEB))}<small>${esc(gc(p,COL.ENG)).slice(0,44)}</small></td>
       <td class="cprice">${gc(p,COL.PRICE)?gc(p,COL.PRICE)+'$':'—'}</td>
@@ -2317,7 +2309,18 @@ function openEditModal(rowNum){
       <div class="fg"><span class="slbl2">מחיר ($)</span><input class="ifield" id="e-price" type="number" value="${gc(p,COL.PRICE)}"></div>
       <div class="fg"><span class="slbl2">דירוג ⭐</span><input class="ifield" id="e-rating" type="number" step="0.1" value="${gc(p,COL.RATING)}"></div>
       <div class="fg"><span class="slbl2">רכישות 🔥</span><input class="ifield" id="e-bought" type="number" value="${gc(p,COL.BOUGHT)}"></div>
-      <div class="fg"><span class="slbl2">קטגוריה</span><input class="ifield" id="e-cat" value="${esc(gc(p,COL.CAT))}"></div>
+      <div class="fg"><span class="slbl2">📂 קטגוריה</span>
+        <select class="fsel" id="e-cat" style="width:100%">
+          ${(()=>{
+            const allCats=[...new Set(G.posts.map(x=>gc(x,COL.CAT).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'he'));
+            const curCat=gc(p,COL.CAT).trim();
+            const opts=allCats.map(cat=>`<option value="${esc(cat)}" ${cat===curCat?'selected':''}>${esc(cat)}</option>`).join('');
+            // אם הקטגוריה הנוכחית לא ברשימה, הוסף אותה
+            const extra=curCat&&!allCats.includes(curCat)?`<option value="${esc(curCat)}" selected>${esc(curCat)}</option>`:'';
+            return`<option value="">— ללא קטגוריה —</option>${extra}${opts}`;
+          })()}
+        </select>
+      </div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">🔗 קישור אלי אקספרס</span><input class="ifield" id="e-link" value="${esc(gc(p,COL.LINK))}"></div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">קישור תמונה</span><input class="ifield" id="e-img" value="${esc(gc(p,COL.IMG))}"></div>
       <div class="fg"><span class="slbl2">תאריך E (DD/MM/YYYY)</span><input class="ifield" id="e-date-e" value="${esc(gc(p,COL.COL_E))}" placeholder="08/02/2025"></div>
@@ -2687,6 +2690,21 @@ const CAT_DICT=[
 function categorizeStat(name){for(const r of CAT_DICT)if(r.kw.test(name||''))return r.cat;return'אחר';}
 function getStatWeek(d){const t=new Date(d);t.setDate(t.getDate()+3-(t.getDay()+6)%7);const w1=new Date(t.getFullYear(),0,4);return 1+Math.round(((t-w1)/86400000-3+(w1.getDay()+6)%7)/7);}
 
+// v39: Convert YYYY-Www week key to date range label DD/MM - DD/MM
+function weekKeyToRange(key){
+  try{
+    const m=key.match(/^(\d{4})-W(\d{1,2})$/);
+    if(!m)return key;
+    const year=parseInt(m[1],10),week=parseInt(m[2],10);
+    // ISO week: week 1 starts on Monday containing Jan 4
+    const jan4=new Date(year,0,4,12,0,0);
+    const dow=(jan4.getDay()+6)%7; // Monday=0
+    const weekStart=new Date(jan4.getTime()-(dow*86400000)+((week-1)*7*86400000));
+    const weekEnd=new Date(weekStart.getTime()+6*86400000);
+    const fmt=d=>String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0');
+    return fmt(weekStart)+' - '+fmt(weekEnd);
+  }catch(e){return key;}
+}
 function renderStatsDash(){
   const raw=G.csvRaw;if(!raw.length)return;
   const ac=G.aliCols;
@@ -2742,11 +2760,13 @@ function renderStatsDash(){
     pMap[key].commission+=safeNum(r[ac.commission]);
   });
   const sortedKeys=Object.keys(pMap).filter(k=>k!=='לא ידוע').sort();
+  // v39: For weekly view, convert keys to date-range labels
+  const displayLabels=G.period==='week'?sortedKeys.map(weekKeyToRange):sortedKeys;
   document.getElementById('sales-chart-lbl').textContent=`מכירות ועמלות — ${G.period==='day'?'יומי':G.period==='week'?'שבועי':'חודשי'} (${filteredData.length} עסקאות)`;
   if(G.salesChart){G.salesChart.destroy();G.salesChart=null;}
   G.salesChart=new Chart(document.getElementById('sales-chart'),{
     type:'bar',
-    data:{labels:sortedKeys,datasets:[
+    data:{labels:displayLabels,datasets:[
       {label:'מכירות',data:sortedKeys.map(k=>Math.round(pMap[k].sales)),backgroundColor:'#d4541a',borderRadius:3},
       {label:'עמלות',data:sortedKeys.map(k=>Math.round(pMap[k].commission)),backgroundColor:'#15803d',borderRadius:3}
     ]},
@@ -2766,13 +2786,26 @@ function renderStatsDash(){
   if(G.catChart){G.catChart.destroy();G.catChart=null;}
   // Fix 11: store filteredData for drill-down, enable onClick
   G._statFiltered=filteredData;G._statCatLabels=catLabels;
+  const catTotal=catVals.reduce((s,v)=>s+v,0);
   G.catChart=new Chart(document.getElementById('cat-chart'),{
     type:'doughnut',
     data:{labels:catLabels,datasets:[{data:catVals,backgroundColor:clrs,borderWidth:1,borderColor:'#fff'}]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{
-        legend:{position:'bottom',labels:{font:{size:9},color:'#64748b',boxWidth:8,padding:6}},
-        tooltip:{callbacks:{label:ctx=>`${ctx.label}: $${ctx.parsed.toLocaleString()}`}}
+        legend:{position:'bottom',labels:{font:{size:9},color:'#64748b',boxWidth:8,padding:6,
+          generateLabels:(chart)=>{
+            const ds=chart.data.datasets[0];
+            return chart.data.labels.map((label,i)=>{
+              const val=ds.data[i];
+              const pct=catTotal?Math.round(val/catTotal*100):0;
+              return{text:label+' '+pct+'%',fillStyle:ds.backgroundColor[i],strokeStyle:'#fff',lineWidth:1,index:i,hidden:false};
+            });
+          }
+        }},
+        tooltip:{callbacks:{label:ctx=>{
+          const pct=catTotal?Math.round(ctx.parsed/catTotal*100):0;
+          return`${ctx.label}: $${ctx.parsed.toLocaleString()} (${pct}%)`;
+        }}}
       },
       onClick:(evt,els)=>{
         if(!els.length)return;
@@ -3738,13 +3771,10 @@ const CART_TITLES=[
 
 // Fix 7: Hooks bank
 const CART_HOOKS=[
-  '⚠️ חשוב: מספרי המוצרים מוגבלים!',
-  '🚀 מחירים כאלה לא תמצאו בארץ',
-  '💎 מוצרים שכולם שואלים עליהם — הנה התשובה',
-  '🔔 שמרו את הפוסט לפני שיגמר!',
-  '👇 כל הקישורים למטה — לחצו ישירות',
-  '📣 שתפו חברים שצריכים את זה!',
-  '⏰ מחיר מבצע — ייתכן שישתנה בכל רגע',
+  'תראו איזה דיל מצאתי לכם...',
+  'מי אמר שצריך לשבור קופה?',
+  'דיל שסוגר לכם פינה',
+  'אל תגידו לא ידעתי',
 ];
 
 function shuffleCartTitle(){
@@ -3762,24 +3792,47 @@ function renderHookChips(){
 
 function prependHook(hook){
   const ta=document.getElementById('cart-post-preview');if(!ta)return;
-  ta.value=hook+'\n'+ta.value;
-  toast('✅ הוק הוסף','ok');
+  // v39: Append hook at end with blank line separator instead of overwriting
+  const cur=ta.value.trimEnd();
+  ta.value=(cur?cur+'\n\n':'')+hook;
+  toast('✅ הוק התווסף','ok');
 }
 
-// Fix 7: Dynamic hashtags from COL.TAGS of cart products + base tags
+// v39: האשטגים חכמים לפי קטגוריה — שולף מהמוצרים ששייכים לאותה קטגוריה
 function renderHashtagChips(){
   const el=document.getElementById('hashtag-chips');if(!el)return;
   const dynamicTags=new Set();
-  G.cart.forEach(item=>{
-    const tags=item.tags||'';
+
+  // מצא את הקטגוריות של המוצרים בסל
+  const cartCats=new Set(G.cart.map(item=>item.cat).filter(Boolean));
+
+  // שלוף האשטגים מכל המוצרים שחולקים קטגוריה עם הסל
+  G.posts.forEach(p=>{
+    const pCat=gc(p,COL.CAT);
+    if(!pCat||!cartCats.has(pCat))return;
+    const tags=gc(p,COL.TAGS)||'';
     tags.split(/[\s,\n]+/).forEach(t=>{
       const clean=t.trim();
       if(!clean||clean.length<2)return;
       dynamicTags.add(clean.startsWith('#')?clean:'#'+clean);
     });
   });
+
+  // אם הסל ריק או אין קטגוריות — גם מוצרי הסל עצמם
+  if(!dynamicTags.size){
+    G.cart.forEach(item=>{
+      const tags=item.tags||'';
+      tags.split(/[\s,\n]+/).forEach(t=>{
+        const clean=t.trim();
+        if(!clean||clean.length<2)return;
+        dynamicTags.add(clean.startsWith('#')?clean:'#'+clean);
+      });
+    });
+  }
+
+  // תגיות בסיס תמיד קיימות
   ['#סוגריםפינה','#אליאקספרס','#עליאקספרס','#חיסכוןבכסף','#דיל'].forEach(t=>dynamicTags.add(t));
-  el.innerHTML=[...dynamicTags].slice(0,20).map(tag=>`<button onclick="appendHashtag('${tag.replace(/'/g,"\\'")}')" style="background:var(--s2);border:1px solid var(--b1);border-radius:13px;padding:2px 9px;font-size:10px;font-weight:700;color:var(--tg);cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='var(--s2)'">${tag}</button>`).join('');
+  el.innerHTML=[...dynamicTags].slice(0,24).map(tag=>`<button onclick="appendHashtag('${tag.replace(/'/g,"\\'")}')" style="background:var(--s2);border:1px solid var(--b1);border-radius:13px;padding:2px 9px;font-size:10px;font-weight:700;color:var(--tg);cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='var(--s2)'">${tag}</button>`).join('');
 }
 
 function appendHashtag(tag){
@@ -3834,7 +3887,7 @@ function renderCartTable(){
     const row=p.row,img=gc(p,COL.IMG),fb=gc(p,COL.FB_S),tg=gc(p,COL.TG_S),ig=gc(p,COL.IG_S);
     const inCart=cartIncludes(row);
     return`<tr>
-      <td>${img?`<img class="timg" src="${img}" onerror="this.style.display='none'">`:
+      <td>${img?`<img class="timg" src="${img}" onerror="this.style.display='none'" style="cursor:zoom-in" onclick="openImageLightbox(this.src)" title="לחץ להגדלה">`:
         `<div class="timg-ph">📦</div>`}</td>
       <td class="cname">${esc(gc(p,COL.HEB))}<small>${esc(gc(p,COL.ENG)).slice(0,44)}</small></td>
       <td class="cprice">${gc(p,COL.PRICE)?gc(p,COL.PRICE)+'$':'—'}</td>
