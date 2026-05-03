@@ -331,24 +331,26 @@ tr:hover td{background:#fef9f7}
   .lb-table tbody tr td{min-height:44px}
 }
 
-/* ── Dark mode (v53) ─────────────────────────── */
+/* ── Dark mode (v54 — soft dark) ──────────────── */
 body.dark-mode{
-  --bg:#0f1117;--s1:#1a1d27;--s2:#22263a;--s3:#1a1d27;
-  --b1:#2e3248;--b2:#3d4260;
-  --tx:#e8eaf6;--t2:#9196b8;--t3:#5c6080;
+  --bg:#121212;--s1:#1e1e1e;--s2:#252525;--s3:#1e1e1e;
+  --b1:#333;--b2:#444;
+  --tx:#e0e0e0;--t2:#9e9e9e;--t3:#616161;
 }
-body.dark-mode .login-wrap{background:linear-gradient(135deg,#12151e 0%,#1a1f2e 100%)}
-body.dark-mode .login-box{background:#1a1d27;border-color:#2e3248;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-body.dark-mode .topbar{background:#13161f;border-bottom:1px solid #2e3248}
-body.dark-mode .sidebar{background:#13161f;border-left-color:#2e3248}
-body.dark-mode .tw{background:#1a1d27;border-color:#2e3248}
-body.dark-mode .scard{background:#1a1d27;border-color:#2e3248}
-body.dark-mode .snap-mini-card{background:#1a1d27;border-color:#2e3248}
-body.dark-mode #modal-root>div{background:#1a1d27;border-color:#2e3248}
-body.dark-mode .ifield{background:#22263a;border-color:#3d4260;color:var(--tx)}
-body.dark-mode .fsel,.dark-mode .sinput{background:#22263a;border-color:#3d4260;color:var(--tx)}
+body.dark-mode .login-wrap{background:linear-gradient(135deg,#181818 0%,#1f1f1f 100%)}
+body.dark-mode .login-box{background:#1e1e1e;border-color:#333;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+body.dark-mode .topbar{background:#181818;border-bottom:1px solid #2c2c2c}
+body.dark-mode .sidebar{background:#181818;border-left-color:#2c2c2c}
+body.dark-mode .tw{background:#1e1e1e;border-color:#333}
+body.dark-mode .scard{background:#1e1e1e;border-color:#333}
+body.dark-mode .snap-mini-card{background:#1e1e1e;border-color:#333}
+body.dark-mode #modal-root>div{background:#1e1e1e;border-color:#333}
+body.dark-mode .ifield{background:#252525;border-color:#444;color:var(--tx)}
+body.dark-mode .fsel,body.dark-mode .sinput{background:#252525;border-color:#444;color:var(--tx)}
 body.dark-mode table{color:var(--tx)}
-body.dark-mode .lb-table tbody tr:hover{background:#22263a}
+body.dark-mode .lb-table tbody tr:hover{background:#252525}
+body.dark-mode .cfcard{background:#1e1e1e;border-color:#333}
+body.dark-mode .ni.on{background:#2a2a2a}
 
 @media(hover:none){
   /* Remove hover states that don't work on touch */
@@ -999,48 +1001,142 @@ let G={
   })(),
 };
 
-// ── v53: Cloud follower sync — saves/loads from GAS instead of localStorage ──
-// Falls back to localStorage if GAS call fails (offline safety net).
-async function saveFollowers(){
-  var data=JSON.stringify(G.followers);
-  // 1. Always save locally as safety net
-  try{localStorage.setItem('sp_followers',data);}catch(e){}
-  // 2. Send to cloud
-  var url=getPostsUrl();
-  if(!url)return;
+// ════════════════════════════════════════════════
+// CLOUD SYNC v54 — Single source of truth: COMMUNITY_GAS_URL
+// כל הנתונים (עוקבים, תחרות, סטטיסטיקה) נשמרים בענן
+// ו-localStorage משמש רק כ-fallback לאופליין.
+// ════════════════════════════════════════════════
+
+// ── Helper: POST to community GAS ───────────────
+async function _cloudPost(payload){
   try{
-    await fetch(url,{
-      method:'POST',mode:'no-cors',redirect:'follow',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'saveFollowers',followers:G.followers})
+    var resp=await fetch(COMMUNITY_GAS_URL,{
+      method:'POST',mode:'cors',redirect:'follow',
+      headers:{'Accept':'application/json','Content-Type':'application/x-www-form-urlencoded'},
+      body:'payload='+encodeURIComponent(JSON.stringify(payload))
     });
-  }catch(e){console.warn('[v53] saveFollowers cloud failed, localStorage only:',e.message);}
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    var json=await resp.text();
+    try{return JSON.parse(json);}catch(e){return{ok:true};}
+  }catch(e){
+    console.warn('[v54 cloudPost]',payload.action,e.message);
+    return{ok:false,error:e.message};
+  }
+}
+
+// ── Helper: GET from community GAS ──────────────
+async function _cloudGet(action,extra){
+  var qs='?action='+action+'&_t='+Date.now();
+  if(extra)for(var k in extra)qs+='&'+k+'='+encodeURIComponent(extra[k]);
+  try{
+    var resp=await fetch(COMMUNITY_GAS_URL+qs,{
+      method:'GET',mode:'cors',redirect:'follow',
+      headers:{'Accept':'application/json'}
+    });
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    var json=await resp.json();
+    return json;
+  }catch(e){
+    console.warn('[v54 cloudGet]',action,e.message);
+    return{ok:false,error:e.message};
+  }
+}
+
+// ══ ① FOLLOWERS ════════════════════════════════
+
+async function saveFollowers(){
+  // 1. Always save locally as offline safety net
+  try{localStorage.setItem('sp_followers',JSON.stringify(G.followers));}catch(e){}
+  // 2. Push to cloud
+  await _cloudPost({action:'saveFollowers',followers:G.followers});
 }
 
 async function loadFollowers(){
-  var url=getPostsUrl();
   // Try cloud first
-  if(url){
-    try{
-      var resp=await fetch(url+'?action=getFollowers&_t='+Date.now(),{
-        method:'GET',mode:'cors',redirect:'follow',
-        headers:{'Accept':'application/json'}
-      });
-      if(resp.ok){
-        var json=await resp.json();
-        if(json.ok&&json.followers&&Object.keys(json.followers).length){
-          G.followers=json.followers;
-          try{localStorage.setItem('sp_followers',JSON.stringify(G.followers));}catch(e){}
-          return;
-        }
-      }
-    }catch(e){console.warn('[v53] loadFollowers cloud failed, using localStorage:',e.message);}
+  var r=await _cloudGet('getFollowers');
+  if(r&&r.ok&&r.followers&&Object.keys(r.followers).length){
+    G.followers=r.followers;
+    try{localStorage.setItem('sp_followers',JSON.stringify(G.followers));}catch(e){}
+    return;
+  }
+  // Fallback: localStorage
+  try{var s=localStorage.getItem('sp_followers');if(s)G.followers=JSON.parse(s);}catch(e){}
+}
+
+// ══ ② COMPETITION STATE ════════════════════════
+
+// _getCmp / _saveCmp: sync to cloud on every write
+function _getCmp(){
+  try{return JSON.parse(localStorage.getItem('sp_comp')||'{}');}catch(e){return{};}
+}
+function _saveCmp(obj){
+  try{
+    const c=_getCmp();
+    const merged={...c,...obj};
+    localStorage.setItem('sp_comp',JSON.stringify(merged));
+    // Fire-and-forget cloud save
+    _cloudPost({action:'saveCompState',comp:merged}).catch(function(){});
+  }catch(e){}
+}
+
+// Load competition state from cloud on boot
+async function loadCompState(){
+  var r=await _cloudGet('getCompState');
+  if(r&&r.ok&&r.comp&&r.comp.endDate){
+    try{localStorage.setItem('sp_comp',JSON.stringify(r.comp));}catch(e){}
+  }
+}
+
+// ══ ③ STATS (CSV data) ═════════════════════════
+
+// Save stats to cloud when CSV is uploaded
+async function saveStatsCloud(){
+  if(!G.csvRaw||!G.csvRaw.length)return;
+  // Persist locally first
+  try{localStorage.setItem('sp_statsData',JSON.stringify({cols:G.aliCols,rows:G.csvRaw}));}catch(e){}
+  // Push to cloud (rows can be large — compress to avoid GAS limits)
+  await _cloudPost({action:'saveStats',cols:G.aliCols,rows:G.csvRaw.slice(0,2000)});
+}
+
+// Load stats from cloud on boot
+async function loadStatsCloud(){
+  var r=await _cloudGet('getStats');
+  if(r&&r.ok&&r.rows&&r.rows.length){
+    G.aliCols=r.cols||{};
+    G.csvRaw=r.rows;
+    try{localStorage.setItem('sp_statsData',JSON.stringify({cols:G.aliCols,rows:G.csvRaw}));}catch(e){}
+    _showStatsDash();
+    return true;
   }
   // Fallback: localStorage
   try{
-    var s=localStorage.getItem('sp_followers');
-    if(s)G.followers=JSON.parse(s);
+    var saved=localStorage.getItem('sp_statsData');
+    if(saved){
+      var parsed=JSON.parse(saved);
+      if(parsed&&parsed.rows&&parsed.rows.length){
+        G.aliCols=parsed.cols||{};G.csvRaw=parsed.rows;
+        _showStatsDash();return true;
+      }
+    }
   }catch(e){}
+  return false;
+}
+
+function _showStatsDash(){
+  var dropEl=document.getElementById('csv-drop');
+  var dashEl=document.getElementById('stats-dash');
+  if(dropEl)dropEl.style.display='none';
+  if(dashEl)dashEl.style.display='block';
+  var dates=G.csvRaw.map(function(r){return r[G.aliCols.date];}).filter(Boolean).sort();
+  if(dates.length){
+    try{
+      var fd=new Date(dates[0]),ld=new Date(dates[dates.length-1]);
+      var fromEl=document.getElementById('stat-from'),toEl=document.getElementById('stat-to');
+      if(!isNaN(fd)&&fromEl)fromEl.value=fd.toISOString().slice(0,10);
+      if(!isNaN(ld)&&toEl)toEl.value=ld.toISOString().slice(0,10);
+    }catch(e){}
+  }
+  setTimeout(renderStatsDash,100);
 }
 function saveCats(){localStorage.setItem('sp_cats',JSON.stringify(G.cats));}
 
@@ -1241,35 +1337,21 @@ function bootApp(){
   document.getElementById('dash-date').textContent=new Date().toLocaleDateString('he-IL',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   initCart();updateCartBadge();
   fillSettings();renderFCards();renderCatCards();
-  _renderDashCompWidget(); // v52: show competition widget on dashboard
-  // v53: load followers from cloud (async, updates UI when ready)
-  loadFollowers().then(function(){renderFCards();_renderCompTimer();});
+  _renderDashCompWidget();
 
-  // Auto-load saved stats from localStorage if available
-  try{
-    const saved=localStorage.getItem('sp_statsData');
-    if(saved){
-      const parsed=JSON.parse(saved);
-      if(parsed&&parsed.rows&&parsed.rows.length){
-        G.aliCols=parsed.cols||{};
-        G.csvRaw=parsed.rows;
-        const dropEl=document.getElementById('csv-drop');
-        const dashEl=document.getElementById('stats-dash');
-        if(dropEl)dropEl.style.display='none';
-        if(dashEl)dashEl.style.display='block';
-        const dates=parsed.rows.map(function(r){return r[G.aliCols.date];}).filter(Boolean).sort();
-        if(dates.length){
-          try{
-            const fd=new Date(dates[0]),ld=new Date(dates[dates.length-1]);
-            const fromEl=document.getElementById('stat-from'),toEl=document.getElementById('stat-to');
-            if(!isNaN(fd)&&fromEl)fromEl.value=fd.toISOString().slice(0,10);
-            if(!isNaN(ld)&&toEl)toEl.value=ld.toISOString().slice(0,10);
-          }catch(e){ console.warn('stats date parse:',e); }
-        }
-        setTimeout(renderStatsDash,100);
-      }
-    }
-  }catch(e){ console.warn('bootApp stats load:',e); }
+  // v54: load ALL cloud data in parallel on boot
+  Promise.all([
+    loadFollowers(),
+    loadCompState(),
+    loadStatsCloud(),
+  ]).then(function(){
+    renderFCards();
+    _renderCompTimer();
+    _renderDashCompWidget();
+    console.log('[v54] Cloud sync complete');
+  }).catch(function(e){
+    console.warn('[v54] Cloud sync partial failure:',e.message);
+  });
 
   // loadData throws on failure — global catcher will show the banner
   loadData();
@@ -2549,8 +2631,8 @@ function processAliCSV(file){
       commRate:findCol('CommissionRate|commission.*rate'),
     };
     G.csvRaw=rows;
-    // Fix 5: persist to localStorage so data survives page refresh
-    try{localStorage.setItem('sp_statsData',JSON.stringify({cols:G.aliCols,rows:rows}));}catch(e){}
+    // v54: save to cloud so mobile can see stats too
+    saveStatsCloud(); // async, fire and forget
     document.getElementById('csv-drop').style.display='none';
     document.getElementById('stats-dash').style.display='block';
     const dates=rows.map(r=>r[G.aliCols.date]).filter(Boolean).sort();
