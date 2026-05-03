@@ -113,8 +113,8 @@ tr:hover td{background:#fef9f7}
 .toast{background:var(--s1);border:1px solid var(--b1);border-radius:8px;padding:8px 13px;font-size:12px;font-weight:700;min-width:190px;display:flex;align-items:center;gap:7px;animation:fup .2s ease;box-shadow:0 4px 12px rgba(0,0,0,.08)}
 .toast.ok{border-color:#86efac;color:var(--grn)}.toast.err{border-color:#fca5a5;color:var(--red)}.toast.inf{border-color:#93c5fd;color:var(--blue)}.toast.warn{border-color:#fed7aa;color:#92400e;background:#fffbeb}
 @keyframes fup{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg)}
-.login-box{width:310px;padding:36px 32px;text-align:center;background:var(--s1);border:1px solid var(--b1);border-radius:15px}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f0e9e0 0%,#e8ddd4 40%,#ede0d6 100%)}
+.login-box{width:310px;padding:36px 32px;text-align:center;background:#fff;border:1px solid var(--b1);border-radius:15px;box-shadow:0 8px 32px rgba(180,120,80,.13)}
 .login-logo{font-size:36px;margin-bottom:4px}
 .login-title{font-size:21px;font-weight:900;letter-spacing:-1px;margin-bottom:3px;color:var(--tx)}.login-title span{color:var(--acc)}
 .login-sub{font-size:11px;color:var(--t2);margin-bottom:22px}
@@ -331,7 +331,25 @@ tr:hover td{background:#fef9f7}
   .lb-table tbody tr td{min-height:44px}
 }
 
-/* ── Touch interaction improvements ─────────── */
+/* ── Dark mode (v53) ─────────────────────────── */
+body.dark-mode{
+  --bg:#0f1117;--s1:#1a1d27;--s2:#22263a;--s3:#1a1d27;
+  --b1:#2e3248;--b2:#3d4260;
+  --tx:#e8eaf6;--t2:#9196b8;--t3:#5c6080;
+}
+body.dark-mode .login-wrap{background:linear-gradient(135deg,#12151e 0%,#1a1f2e 100%)}
+body.dark-mode .login-box{background:#1a1d27;border-color:#2e3248;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+body.dark-mode .topbar{background:#13161f;border-bottom:1px solid #2e3248}
+body.dark-mode .sidebar{background:#13161f;border-left-color:#2e3248}
+body.dark-mode .tw{background:#1a1d27;border-color:#2e3248}
+body.dark-mode .scard{background:#1a1d27;border-color:#2e3248}
+body.dark-mode .snap-mini-card{background:#1a1d27;border-color:#2e3248}
+body.dark-mode #modal-root>div{background:#1a1d27;border-color:#2e3248}
+body.dark-mode .ifield{background:#22263a;border-color:#3d4260;color:var(--tx)}
+body.dark-mode .fsel,.dark-mode .sinput{background:#22263a;border-color:#3d4260;color:var(--tx)}
+body.dark-mode table{color:var(--tx)}
+body.dark-mode .lb-table tbody tr:hover{background:#22263a}
+
 @media(hover:none){
   /* Remove hover states that don't work on touch */
   .btn:hover{transform:none}
@@ -369,6 +387,7 @@ tr:hover td{background:#fef9f7}
     </div>
     <div style="display:flex;align-items:center;gap:6px">
       <button class="tbtn" id="refresh-btn">🔄</button>
+      <button class="tbtn" id="darkmode-btn" onclick="toggleDarkMode()" title="מצב לילה">🌙</button>
       <button class="tbtn" id="top-settings-btn">⚙️</button>
       <button class="tbtn" id="logout-btn">יציאה</button>
     </div>
@@ -941,7 +960,7 @@ const REFERRAL_GOAL = 7; // מספר הפניות לזכאות לפרס
 const POSTS_GAS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbxak322tQEglS1uJHmRlKi3JL3asOSFxP3CqFcmZCewb_QGn-f4A2-BAa4tKBR5DPkOtw/exec';
 
 // ════════════════════════════════════════════════
-// STATE — read followers from localStorage FIRST, never overwrite
+// STATE — v53: followers loaded async from cloud in bootApp
 // ════════════════════════════════════════════════
 let G={
   posts:[],filtered:[],
@@ -954,7 +973,7 @@ let G={
   cart:[],
   showSaleDays:false,
   _activeEmojiIdx:null,
-  // BUG 5 FIX: read from localStorage on startup, never use defaults if data exists
+  // v53: start with localStorage copy; loadFollowers() will refresh from cloud
   followers: (()=>{
     try{
       const s=localStorage.getItem('sp_followers');
@@ -980,7 +999,49 @@ let G={
   })(),
 };
 
-function saveFollowers(){localStorage.setItem('sp_followers',JSON.stringify(G.followers));}
+// ── v53: Cloud follower sync — saves/loads from GAS instead of localStorage ──
+// Falls back to localStorage if GAS call fails (offline safety net).
+async function saveFollowers(){
+  var data=JSON.stringify(G.followers);
+  // 1. Always save locally as safety net
+  try{localStorage.setItem('sp_followers',data);}catch(e){}
+  // 2. Send to cloud
+  var url=getPostsUrl();
+  if(!url)return;
+  try{
+    await fetch(url,{
+      method:'POST',mode:'no-cors',redirect:'follow',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'saveFollowers',followers:G.followers})
+    });
+  }catch(e){console.warn('[v53] saveFollowers cloud failed, localStorage only:',e.message);}
+}
+
+async function loadFollowers(){
+  var url=getPostsUrl();
+  // Try cloud first
+  if(url){
+    try{
+      var resp=await fetch(url+'?action=getFollowers&_t='+Date.now(),{
+        method:'GET',mode:'cors',redirect:'follow',
+        headers:{'Accept':'application/json'}
+      });
+      if(resp.ok){
+        var json=await resp.json();
+        if(json.ok&&json.followers&&Object.keys(json.followers).length){
+          G.followers=json.followers;
+          try{localStorage.setItem('sp_followers',JSON.stringify(G.followers));}catch(e){}
+          return;
+        }
+      }
+    }catch(e){console.warn('[v53] loadFollowers cloud failed, using localStorage:',e.message);}
+  }
+  // Fallback: localStorage
+  try{
+    var s=localStorage.getItem('sp_followers');
+    if(s)G.followers=JSON.parse(s);
+  }catch(e){}
+}
 function saveCats(){localStorage.setItem('sp_cats',JSON.stringify(G.cats));}
 
 // ════════════════════════════════════════════════
@@ -1090,6 +1151,21 @@ function fmtDate(d){
   return d.day+'/'+(d.month<10?'0'+d.month:d.month)+'/'+d.year;
 }
 
+// ── v53: Dark mode ───────────────────────────────
+function toggleDarkMode(){
+  var isDark=document.body.classList.toggle('dark-mode');
+  var btn=document.getElementById('darkmode-btn');
+  if(btn)btn.textContent=isDark?'☀️':'🌙';
+  try{localStorage.setItem('sp_dark',isDark?'1':'0');}catch(e){}
+}
+(function initDarkMode(){
+  try{if(localStorage.getItem('sp_dark')==='1'){
+    document.body.classList.add('dark-mode');
+    var btn=document.getElementById('darkmode-btn');
+    if(btn)btn.textContent='☀️';
+  }}catch(e){}
+})();
+
 function getTodayNum(){
   // v34: explicit integer arithmetic, no |0 (avoids signed-32-bit edge cases for year > 2038)
   var n=new Date();
@@ -1166,6 +1242,8 @@ function bootApp(){
   initCart();updateCartBadge();
   fillSettings();renderFCards();renderCatCards();
   _renderDashCompWidget(); // v52: show competition widget on dashboard
+  // v53: load followers from cloud (async, updates UI when ready)
+  loadFollowers().then(function(){renderFCards();_renderCompTimer();});
 
   // Auto-load saved stats from localStorage if available
   try{
