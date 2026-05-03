@@ -11,7 +11,7 @@
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Heebo',sans-serif}
 :root{--bg:#FAF9F6;--s1:#fff;--s2:#f8fafc;--s3:#f1f5f9;--b1:#e2e8f0;--b2:#cbd5e1;--acc:#d4541a;--a2:#e8732a;--grn:#15803d;--red:#b91c1c;--blue:#1d4ed8;--gold:#92400e;--tg:#0369a1;--fb:#1558c0;--ig:#9d174d;--tx:#1e293b;--t2:#64748b;--t3:#94a3b8}
 body{background:#FAF9F6!important;color:var(--tx);direction:rtl}
-.topbar{height:52px;background:var(--s1);border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;padding:0 18px;position:sticky;top:0;z-index:40}
+.topbar{height:52px;background:#FAF9F6!important;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;padding:0 18px;position:sticky;top:0;z-index:40}
 .logo{font-size:16px;font-weight:900;letter-spacing:-.5px}.logo span{color:var(--acc)}
 .syncpill{display:flex;align-items:center;gap:5px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2)}
 .sdot{width:6px;height:6px;border-radius:50%;background:var(--grn);animation:bl 2s infinite}
@@ -19,7 +19,7 @@ body{background:#FAF9F6!important;color:var(--tx);direction:rtl}
 .tbtn{background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:5px 11px;font-size:11px;font-weight:700;color:var(--t2);cursor:pointer;font-family:inherit;transition:all .15s}
 .tbtn:hover{background:var(--s3);color:var(--tx)}
 .layout{display:grid;grid-template-columns:185px 1fr;min-height:calc(100vh - 52px)}
-.sidebar{background:var(--s1);border-left:1px solid var(--b1);padding:12px 0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
+.sidebar{background:#FAF9F6!important;border-left:1px solid var(--b1);padding:12px 0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
 .nl{font-size:9px;font-weight:800;color:var(--t3);letter-spacing:1.4px;padding:10px 14px 5px;text-transform:uppercase}
 .ni{display:flex;align-items:center;gap:8px;padding:8px 11px;font-size:12px;font-weight:600;color:var(--t2);cursor:pointer;border-radius:7px;margin:1px 7px;transition:all .15s;user-select:none}
 .ni:hover{background:var(--s2);color:var(--tx)}.ni.on{background:#fef3ee;color:var(--acc);font-weight:800}
@@ -346,8 +346,8 @@ body.dark-mode{
 }
 body.dark-mode .login-wrap{background:linear-gradient(135deg,#1c1c1e 0%,#242426 100%)}
 body.dark-mode .login-box{background:#2c2c2e;border-color:#3a3a3c;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-body.dark-mode .topbar{background:#1c1c1e;border-bottom:1px solid #3a3a3c}
-body.dark-mode .sidebar{background:#1c1c1e;border-left-color:#3a3a3c}
+body.dark-mode .topbar{background:#1c1c1e!important;border-bottom:1px solid #3a3a3c}
+body.dark-mode .sidebar{background:#1c1c1e!important;border-left-color:#3a3a3c}
 body.dark-mode .tw{background:#2c2c2e;border-color:#3a3a3c}
 body.dark-mode .scard{background:#2c2c2e;border-color:#3a3a3c}
 body.dark-mode .snap-mini-card{background:#2c2c2e;border-color:#3a3a3c}
@@ -1681,6 +1681,33 @@ function renderDash(){
   }
 
   function _isDraftStatus(s){return s==='טיוטה'||s==='draft'||s==='';}
+
+  // ── checkQueueEligibility: פונקציית עזר חזקה לבדיקת תאריך תור ──
+  // מטפלת בפורמטים: '8/2/26', '25/02/2026', '23/03/2026 10:18'
+  // מחזירה true אם המוצר בתור (ריק או 25+ יום עברו)
+  function checkQueueEligibility(dateString){
+    // א. ריק → בתור
+    if(!dateString||dateString===null||dateString===undefined)return true;
+    var s=(dateString+'').trim();
+    if(!s)return true;
+    // ב. חתוך שעה אם קיימת
+    s=s.split(' ')[0];
+    // ג. פרק לפי לוכסן
+    var parts=s.split('/');
+    if(parts.length<3)return true; // פורמט לא מוכר → נכנס לתור
+    var dd=parseInt(parts[0],10);
+    var mm=parseInt(parts[1],10);
+    var yy=parseInt(parts[2],10);
+    // ד. תיקון שנה קצרה
+    if(yy<100)yy+=2000;
+    if(!dd||!mm||!yy||mm>12||dd>31)return true;
+    // ה. חישוב הפרש ימים
+    var postDate=new Date(yy,mm-1,dd,12,0,0,0);
+    var todayNoon=new Date();todayNoon.setHours(12,0,0,0);
+    var diffDays=Math.round((todayNoon-postDate)/864e5);
+    return diffDays>=25;
+  }
+
   var cDraft=0,cFB=0,cTG=0,cIG=0,cFBq=0,cTGq=0,cIGq=0;
   var fbQueuePosts=[],tgQueuePosts=[],igQueuePosts=[];
   for(var i=0;i<n;i++){
@@ -1695,32 +1722,30 @@ function renderDash(){
     if(_isGlobalDraft(globalS))continue;
 
     // ── פייסבוק (עמודה E) ───────────────────────────────
-    // הגדרה: עמודה E ריקה → בתור. יש תאריך ועברו 25+ יום → בתור.
+    // חוק: סטטוס G לא טיוטה/draft + checkQueueEligibility על עמודה E
     if(fbS==='פורסם'){
       cFB++;
     } else {
       var rawFbDate=(p.data[COL.COL_E]||'').toString().trim();
-      var fbDays=_daysSinceRaw(rawFbDate);
-      // ריק (null) = אין תאריך = בתור. או שעברו 25+ יום = בתור.
-      if(fbDays===null||fbDays>25){cFBq++;fbQueuePosts.push(p);}
+      if(checkQueueEligibility(rawFbDate)){cFBq++;fbQueuePosts.push(p);}
     }
 
     // ── טלגרם (עמודה Q) ─────────────────────────────────
+    // חוק: סטטוס G לא טיוטה/draft + checkQueueEligibility על עמודה Q
     if(tgS==='פורסם'){
       cTG++;
     } else {
       var rawTgDate=(p.data[COL.COL_Q]||'').toString().trim();
-      var tgDays=_daysSinceRaw(rawTgDate);
-      if(tgDays===null||tgDays>25){cTGq++;tgQueuePosts.push(p);}
+      if(checkQueueEligibility(rawTgDate)){cTGq++;tgQueuePosts.push(p);}
     }
 
     // ── אינסטגרם (עמודה U) ──────────────────────────────
+    // חוק: סטטוס G לא טיוטה/draft + checkQueueEligibility על עמודה U
     if(igS==='פורסם'){
       cIG++;
     } else {
       var rawIgDate=(p.data[COL.COL_IG_D]||'').toString().trim();
-      var igDays=_daysSinceRaw(rawIgDate);
-      if(igDays===null||igDays>25){cIGq++;igQueuePosts.push(p);}
+      if(checkQueueEligibility(rawIgDate)){cIGq++;igQueuePosts.push(p);}
     }
   }
   // Store queue posts for popup
