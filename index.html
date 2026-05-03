@@ -25,7 +25,8 @@ body{background:#FAF9F6!important;color:var(--tx);direction:rtl}
 .ni:hover{background:var(--s2);color:var(--tx)}.ni.on{background:#fef3ee;color:var(--acc);font-weight:800}
 .ic{width:20px;text-align:center;font-size:14px}
 .nbadge{margin-right:auto;background:var(--acc);color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:9px}
-.main{padding:18px;overflow-y:auto}
+.main{padding:18px;overflow-y:auto;background:#FAF9F6!important}
+body.dark-mode .main{background:#1c1c1e!important}
 .pg{display:none}.pg.on{display:block}
 .ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
 .pt{font-size:18px;font-weight:900;letter-spacing:-.5px;color:var(--tx)}
@@ -1637,23 +1638,46 @@ function renderDash(){
 
   // Queue logic: per-channel.
   // תנאי כניסה לתור:
-  // 1. הסטטוס הגלובלי (עמודה G) אינו 'טיוטה' / 'draft' (ואינו ריק — ריק = טיוטה סמויה)
+  // 1. הסטטוס הגלובלי (עמודה G) אינו 'טיוטה' ואינו 'draft' בצורה מפורשת
+  //    (ריק = לא טיוטה — מוצר רגיל ללא סטטוס)
   // 2. הערוץ הספציפי לא פורסם
-  // 3. עמודת התאריך של הערוץ ריקה, או שעברו 25+ יום מהתאריך שרשום בה
-  // חישוב ימים: מבוסס על parseDateIL שמטפל ב-DD/MM/YYYY בצורה חסינה.
-  var _msPerDay=864e5;
-  var _todayNoon=new Date();_todayNoon.setHours(12,0,0,0);
+  // 3. עמודת התאריך של הערוץ ריקה לחלוטין → בתור
+  //    או שיש תאריך ועברו 25+ יום → בתור
+  // חישוב ימים: split לפי '/' עבור DD/MM/YYYY, new Date(y,m-1,d) מדויק.
 
-  // מחזיר מספר ימים שעברו מ-parsedDate ועד היום, או null אם אין תאריך
-  function _daysSince(parsedDate){
-    if(!parsedDate||!parsedDate.dt)return null;
-    return Math.round((_todayNoon-parsedDate.dt)/_msPerDay);
+  // פרסר תאריך חסין: מקבל string גולמי, מחזיר Date או null
+  function _parseRawDate(raw){
+    if(!raw)return null;
+    var s=(raw+'').trim();
+    if(!s)return null;
+    // ISO עם T → new Date ישיר (UTC→local דרך הדפדפן)
+    if(s.indexOf('T')!==-1){var d=new Date(s);return isNaN(d)?null:d;}
+    // DD/MM/YYYY או DD.MM.YYYY או DD-MM-YYYY
+    var clean=s.split(' ')[0].replace(/[.\-]/g,'/');
+    var parts=clean.split('/');
+    if(parts.length<2)return null;
+    var dd,mm,yy;
+    if(parts.length===2){dd=+parts[0];mm=+parts[1];yy=new Date().getFullYear();}
+    else if(parts[0].length===4){yy=+parts[0];mm=+parts[1];dd=+parts[2];}
+    else{dd=+parts[0];mm=+parts[1];yy=+parts[2];if(yy<100)yy+=2000;}
+    if(!dd||!mm||!yy||mm>12||dd>31)return null;
+    return new Date(yy,mm-1,dd,12,0,0,0);
   }
 
-  // מוצר נחשב "טיוטה" אם STATUS (עמודה G) הוא טיוטה/draft/ריק
+  // מחזיר כמה ימים עברו מ-raw date string ועד היום (null = אין תאריך)
+  var _todayNoon=new Date();_todayNoon.setHours(12,0,0,0);
+  var _msPerDay=864e5;
+  function _daysSinceRaw(raw){
+    var d=_parseRawDate(raw);
+    if(!d)return null;
+    return Math.round((_todayNoon-d)/_msPerDay);
+  }
+
+  // מוצר נחשב "טיוטה" רק אם STATUS מפורש הוא טיוטה/draft
+  // ריק = לא טיוטה (מוצר ללא סטטוס = רגיל)
   function _isGlobalDraft(globalS){
     var s=(globalS||'').trim().toLowerCase();
-    return s===''||s==='טיוטה'||s==='draft';
+    return s==='טיוטה'||s==='draft';
   }
 
   function _isDraftStatus(s){return s==='טיוטה'||s==='draft'||s==='';}
@@ -1667,15 +1691,17 @@ function renderDash(){
     var allBlank=_isDraftStatus(fbS)&&_isDraftStatus(tgS)&&_isDraftStatus(igS);
     if(allBlank&&(_isDraftStatus(globalS)||!globalS))cDraft++;
 
-    // מוצרים שסטטוסם הגלובלי הוא טיוטה — לא נכנסים לתור שום ערוץ
+    // מוצרים עם סטטוס גלובלי מפורש של טיוטה — לא נכנסים לתור
     if(_isGlobalDraft(globalS))continue;
 
     // ── פייסבוק (עמודה E) ───────────────────────────────
+    // הגדרה: עמודה E ריקה → בתור. יש תאריך ועברו 25+ יום → בתור.
     if(fbS==='פורסם'){
       cFB++;
     } else {
-      // לא פורסם → בדוק אם בתור: ריק או 25+ יום
-      var fbDays=_daysSince(p._dateE);
+      var rawFbDate=(p.data[COL.COL_E]||'').toString().trim();
+      var fbDays=_daysSinceRaw(rawFbDate);
+      // ריק (null) = אין תאריך = בתור. או שעברו 25+ יום = בתור.
       if(fbDays===null||fbDays>25){cFBq++;fbQueuePosts.push(p);}
     }
 
@@ -1683,15 +1709,17 @@ function renderDash(){
     if(tgS==='פורסם'){
       cTG++;
     } else {
-      var tgDays=_daysSince(p._dateTG);
+      var rawTgDate=(p.data[COL.COL_Q]||'').toString().trim();
+      var tgDays=_daysSinceRaw(rawTgDate);
       if(tgDays===null||tgDays>25){cTGq++;tgQueuePosts.push(p);}
     }
 
-    // ── אינסטגרם (עמודה U / COL_IG_D) ──────────────────
+    // ── אינסטגרם (עמודה U) ──────────────────────────────
     if(igS==='פורסם'){
       cIG++;
     } else {
-      var igDays=_daysSince(p._dateIG);
+      var rawIgDate=(p.data[COL.COL_IG_D]||'').toString().trim();
+      var igDays=_daysSinceRaw(rawIgDate);
       if(igDays===null||igDays>25){cIGq++;igQueuePosts.push(p);}
     }
   }
