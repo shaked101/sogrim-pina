@@ -10,7 +10,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Heebo',sans-serif}
 :root{--bg:#FAF9F6;--s1:#fff;--s2:#f8fafc;--s3:#f1f5f9;--b1:#e2e8f0;--b2:#cbd5e1;--acc:#d4541a;--a2:#e8732a;--grn:#15803d;--red:#b91c1c;--blue:#1d4ed8;--gold:#92400e;--tg:#0369a1;--fb:#1558c0;--ig:#9d174d;--tx:#1e293b;--t2:#64748b;--t3:#94a3b8}
-body{background:var(--bg);color:var(--tx);direction:rtl}
+body{background:#FAF9F6!important;color:var(--tx);direction:rtl}
 .topbar{height:52px;background:var(--s1);border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;padding:0 18px;position:sticky;top:0;z-index:40}
 .logo{font-size:16px;font-weight:900;letter-spacing:-.5px}.logo span{color:var(--acc)}
 .syncpill{display:flex;align-items:center;gap:5px;background:var(--s2);border:1px solid var(--b1);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--t2)}
@@ -341,6 +341,7 @@ body.dark-mode{
   --b1:#3a3a3c;--b2:#48484a;
   --tx:#e5e5ea;--t2:#8e8e93;--t3:#636366;
   --acc:#e87a42;
+  background:#1c1c1e!important;
 }
 body.dark-mode .login-wrap{background:linear-gradient(135deg,#1c1c1e 0%,#242426 100%)}
 body.dark-mode .login-box{background:#2c2c2e;border-color:#3a3a3c;box-shadow:0 8px 32px rgba(0,0,0,.4)}
@@ -359,6 +360,10 @@ body.dark-mode .cfcard{background:#2c2c2e;border-color:#3a3a3c}
 body.dark-mode .ni.on{background:#3a3a3c;color:var(--acc)}
 body.dark-mode .ttbar{border-color:#3a3a3c}
 body.dark-mode .radar-wrap{background:#2c2c2e;border-color:#3a3a3c}
+/* v61: וידוא שהמיכל "פרסומים קרובים" (.tw) לא נשאר לבן בדארק מוד */
+body.dark-mode .tw{background:#2c2c2e!important;border-color:#3a3a3c!important}
+body.dark-mode .tw [style*="background:#fff"]{background:#2c2c2e!important}
+body.dark-mode .tw [style*="background: #fff"]{background:#2c2c2e!important}
 
 /* ── Dark mode v60: improved button, input, dropdown contrast ── */
 body.dark-mode .btn{background:#e87a42;color:#fff}
@@ -1630,15 +1635,27 @@ function renderDash(){
   // v34: todayNum computed ONCE, guaranteed pure integer via getTodayNum()
   var todayNum=getTodayNum();
 
-  // Queue logic: per-channel. "In queue" = NOT published AND NOT draft (per channel) AND
-  // (no publish-date for that channel, OR date is >25 days ago).
-  // Date diff uses the parsed .dt (local noon Date) for accurate day count.
+  // Queue logic: per-channel.
+  // תנאי כניסה לתור:
+  // 1. הסטטוס הגלובלי (עמודה G) אינו 'טיוטה' / 'draft' (ואינו ריק — ריק = טיוטה סמויה)
+  // 2. הערוץ הספציפי לא פורסם
+  // 3. עמודת התאריך של הערוץ ריקה, או שעברו 25+ יום מהתאריך שרשום בה
+  // חישוב ימים: מבוסס על parseDateIL שמטפל ב-DD/MM/YYYY בצורה חסינה.
   var _msPerDay=864e5;
   var _todayNoon=new Date();_todayNoon.setHours(12,0,0,0);
+
+  // מחזיר מספר ימים שעברו מ-parsedDate ועד היום, או null אם אין תאריך
   function _daysSince(parsedDate){
     if(!parsedDate||!parsedDate.dt)return null;
     return Math.round((_todayNoon-parsedDate.dt)/_msPerDay);
   }
+
+  // מוצר נחשב "טיוטה" אם STATUS (עמודה G) הוא טיוטה/draft/ריק
+  function _isGlobalDraft(globalS){
+    var s=(globalS||'').trim().toLowerCase();
+    return s===''||s==='טיוטה'||s==='draft';
+  }
+
   function _isDraftStatus(s){return s==='טיוטה'||s==='draft'||s==='';}
   var cDraft=0,cFB=0,cTG=0,cIG=0,cFBq=0,cTGq=0,cIGq=0;
   var fbQueuePosts=[],tgQueuePosts=[],igQueuePosts=[];
@@ -1650,20 +1667,22 @@ function renderDash(){
     var allBlank=_isDraftStatus(fbS)&&_isDraftStatus(tgS)&&_isDraftStatus(igS);
     if(allBlank&&(_isDraftStatus(globalS)||!globalS))cDraft++;
 
+    // מוצרים שסטטוסם הגלובלי הוא טיוטה — לא נכנסים לתור שום ערוץ
+    if(_isGlobalDraft(globalS))continue;
+
     // ── פייסבוק (עמודה E) ───────────────────────────────
     if(fbS==='פורסם'){
       cFB++;
-    } else if(!_isDraftStatus(fbS)){
-      // Not published, not draft → check if in queue
+    } else {
+      // לא פורסם → בדוק אם בתור: ריק או 25+ יום
       var fbDays=_daysSince(p._dateE);
-      // In queue if: no date, OR date is more than 25 days ago
       if(fbDays===null||fbDays>25){cFBq++;fbQueuePosts.push(p);}
     }
 
     // ── טלגרם (עמודה Q) ─────────────────────────────────
     if(tgS==='פורסם'){
       cTG++;
-    } else if(!_isDraftStatus(tgS)){
+    } else {
       var tgDays=_daysSince(p._dateTG);
       if(tgDays===null||tgDays>25){cTGq++;tgQueuePosts.push(p);}
     }
@@ -1671,7 +1690,7 @@ function renderDash(){
     // ── אינסטגרם (עמודה U / COL_IG_D) ──────────────────
     if(igS==='פורסם'){
       cIG++;
-    } else if(!_isDraftStatus(igS)){
+    } else {
       var igDays=_daysSince(p._dateIG);
       if(igDays===null||igDays>25){cIGq++;igQueuePosts.push(p);}
     }
@@ -2991,7 +3010,6 @@ function openCatDrillDown(catName){
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">כמות</th>
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">מכירות</th>
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">עמלה</th>
-      <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">קטגוריה</th>
     </tr></thead>
     <tbody>
     ${sorted.map((r,i)=>{
@@ -3009,17 +3027,6 @@ function openCatDrillDown(catName){
         const n=(gc(p,COL.HEB)||gc(p,COL.ENG)||'').trim();
         return n===r.name||n.slice(0,12)===r.name.slice(0,12);
       });
-      const allCatsList=[...new Set(G.posts.map(p=>gc(p,COL.CAT).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'he'));
-      const curCatForRow=matchedPosts.length?gc(matchedPosts[0],COL.CAT).trim():'';
-      const allCatsOpts=allCatsList.map(cat=>`<option value="${esc(cat)}" ${cat===curCatForRow?'selected':''}>${esc(cat)}</option>`).join('');
-      const rowIds=matchedPosts.map(p=>p.row).join(',');
-      // Always render the select — even if no exact match found, show all cats
-      const catSelectHtml=allCatsList.length
-        ?`<select onchange="updateDrillDownCat(this,'${rowIds}')"
-            style="font-size:10px;background:var(--s2);border:1px solid var(--b1);border-radius:5px;padding:2px 5px;color:var(--tx);font-family:inherit;cursor:pointer;max-width:120px">
-            <option value="">— קטגוריה —</option>${allCatsOpts}
-          </select>`
-        :'<span style="color:var(--t3);font-size:10px">—</span>';
       return`<tr style="border-bottom:1px solid rgba(226,232,240,.5)">
         <td style="padding:7px 8px;color:var(--acc);font-weight:800">${i+1}</td>
         <td style="padding:7px 8px;font-weight:700;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
@@ -3028,7 +3035,6 @@ function openCatDrillDown(catName){
         <td style="padding:7px 8px;text-align:center"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 6px;font-weight:800">×${r.count}</span></td>
         <td style="padding:7px 8px;font-family:monospace;font-weight:700;color:var(--acc)">$${r.totalSales.toFixed(2)}</td>
         <td style="padding:7px 8px;font-family:monospace;color:var(--grn)">$${r.totalComm.toFixed(2)}</td>
-        <td style="padding:7px 8px">${catSelectHtml}</td>
       </tr>`;}).join('')}
     </tbody>
   </table>
@@ -3036,30 +3042,6 @@ function openCatDrillDown(catName){
   openModal(`📊 ${catName} — פירוט מוצרים`,body,'<button class="btn sec" onclick="closeModal()">סגור</button>');
 }
 
-
-// v40: Update category for matched posts from drill-down table
-async function updateDrillDownCat(selectEl, rowIdsStr){
-  const newCat=selectEl.value;
-  if(!newCat){return;}
-  const rowIds=rowIdsStr.split(',').map(Number).filter(Boolean);
-  if(!rowIds.length){toast('לא נמצאו שורות מתאימות','err');return;}
-  selectEl.disabled=true;
-  let ok=true;
-  for(const rowNum of rowIds){
-    const res=await writeSheet(rowNum,{[COL.CAT+1]:newCat});
-    if(!res)ok=false;
-    else{
-      const p=G.posts.find(x=>x.row===rowNum);
-      if(p)p.data[COL.CAT]=newCat;
-    }
-  }
-  if(ok){
-    selectEl.style.background='#f0fdf4';selectEl.style.borderColor='#86efac';
-    toast('✅ קטגוריה עודכנה ל-'+newCat+' ('+rowIds.length+' מוצרים)','ok');
-  } else {
-    toast('שגיאה בעדכון חלק מהשורות','err');
-  }
-}
 
 function resetCSV(){
   G.csvRaw=[];G.aliCols={};
