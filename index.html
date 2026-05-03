@@ -346,10 +346,10 @@ body.dark-mode .tw{background:#2c2c2e;border-color:#3a3a3c}
 body.dark-mode .scard{background:#2c2c2e;border-color:#3a3a3c}
 body.dark-mode .snap-mini-card{background:#2c2c2e;border-color:#3a3a3c}
 body.dark-mode #modal-root>div{background:#2c2c2e;border-color:#3a3a3c}
-body.dark-mode .ifield{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
-body.dark-mode .fsel,body.dark-mode .sinput{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
-body.dark-mode select option{background:#2c2c2e;color:#e5e5ea}
-body.dark-mode table{color:#e5e5ea}
+body.dark-mode .ifield{background:#2c2c2c;border-color:#444;color:#eeeeee}
+body.dark-mode .fsel,body.dark-mode .sinput{background:#2c2c2c;border-color:#444;color:#eeeeee}
+body.dark-mode select option{background:#1e1e1e;color:#eeeeee}
+body.dark-mode table{color:#eeeeee}
 body.dark-mode .lb-table tbody tr:hover{background:#3a3a3c}
 body.dark-mode .cfcard{background:#2c2c2e;border-color:#3a3a3c}
 body.dark-mode .ni.on{background:#3a3a3c;color:var(--acc)}
@@ -358,21 +358,21 @@ body.dark-mode .radar-wrap{background:#2c2c2e;border-color:#3a3a3c}
 
 /* ── Dark mode v60: improved button, input, dropdown contrast ── */
 body.dark-mode .btn{background:#e87a42;color:#fff}
-body.dark-mode .btn.sec{background:#3a3a3c;color:#e5e5ea;border-color:#48484a}
-body.dark-mode .btn.sec:hover{background:#48484a;color:#fff}
+body.dark-mode .btn.sec{background:#333333;color:#eeeeee;border-color:#555}
+body.dark-mode .btn.sec:hover{background:#3d3d3d;color:#fff}
 body.dark-mode .btn.grn{background:#15803d;color:#fff}
 body.dark-mode .btn.tgb{background:#075985;color:#fff}
 body.dark-mode .btn.fbb{background:#1d4ed8;color:#fff}
 body.dark-mode .btn.igb{background:#7e1d5e;color:#fff}
-body.dark-mode .tbtn{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
-body.dark-mode .tbtn:hover{background:#48484a;color:#fff}
-body.dark-mode .ifield{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
-body.dark-mode .ifield::placeholder{color:#636366}
-body.dark-mode .tedit{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
-body.dark-mode .tedit::placeholder{color:#636366}
-body.dark-mode input[type="date"],body.dark-mode input[type="number"],body.dark-mode input[type="text"],body.dark-mode input[type="password"]{background:#3a3a3c;border-color:#48484a;color:#e5e5ea;color-scheme:dark}
-body.dark-mode select,body.dark-mode .fsel{background:#3a3a3c;border-color:#48484a;color:#e5e5ea}
-body.dark-mode select option,body.dark-mode .fsel option{background:#2c2c2e;color:#e5e5ea}
+body.dark-mode .tbtn{background:#333333;border-color:#555;color:#eeeeee}
+body.dark-mode .tbtn:hover{background:#3d3d3d;color:#fff}
+body.dark-mode .ifield{background:#2c2c2c;border-color:#444;color:#eeeeee}
+body.dark-mode .ifield::placeholder{color:#888}
+body.dark-mode .tedit{background:#2c2c2c;border-color:#444;color:#eeeeee}
+body.dark-mode .tedit::placeholder{color:#888}
+body.dark-mode input[type="date"],body.dark-mode input[type="number"],body.dark-mode input[type="text"],body.dark-mode input[type="password"]{background:#2c2c2c;border-color:#444;color:#eeeeee;color-scheme:dark}
+body.dark-mode select,body.dark-mode .fsel{background:#2c2c2c;border-color:#444;color:#eeeeee}
+body.dark-mode select option,body.dark-mode .fsel option{background:#1e1e1e;color:#eeeeee}
 body.dark-mode .chart-wrap{background:#2c2c2e;border-color:#3a3a3c}
 body.dark-mode .csv-drop{background:#2c2c2e;border-color:#48484a;color:#e5e5ea}
 body.dark-mode .fcard{background:#2c2c2e;border-color:#3a3a3c}
@@ -678,7 +678,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           <div><div class="pt">לוח שנה</div><div class="ps">עמודה E בלבד — פרסום ידני פייסבוק</div></div>
           <div style="display:flex;gap:8px;font-size:11px;align-items:center">
             <span style="color:var(--fb)">■ FB (עמודה E)</span>
-            <button class="btn sec sm" id="cal-sale-toggle" onclick="G.showSaleDays=!G.showSaleDays;this.classList.toggle('on',G.showSaleDays);this.textContent=G.showSaleDays?'🛍️ מבצעים: פעיל':'🛍️ מבצעי Ali';renderCal()">🛍️ מבצעי Ali</button>
+
           </div>
         </div>
         <div class="calwrap">
@@ -931,32 +931,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
-// ── Pie legend strikethrough plugin ──────────────
-Chart.register({
-  id:'legendStrikethrough',
-  afterDraw(chart){
-    if(chart.config.type!=='doughnut'&&chart.config.type!=='pie')return;
-    var legendItems=chart.legend.legendItems;
-    if(!legendItems)return;
-    var ctx=chart.ctx;
-    chart.legend.legendItems.forEach(function(item,i){
-      if(!item.hidden)return;
-      // Find the legend item box to draw strikethrough
-      var legendHitBoxes=chart.legend.legendHitBoxes;
-      if(!legendHitBoxes||!legendHitBoxes[i])return;
-      var box=legendHitBoxes[i];
-      ctx.save();
-      ctx.strokeStyle='#aaa';
-      ctx.lineWidth=1;
-      var y=box.top+box.height/2;
-      ctx.beginPath();
-      ctx.moveTo(box.left,y);
-      ctx.lineTo(box.left+box.width,y);
-      ctx.stroke();
-      ctx.restore();
-    });
-  }
-});
+// ── Pie legend strikethrough: handled via generateLabels textDecoration + fontColor ──
 
 // ════════════════════════════════════════════════
 // GLOBAL ERROR CATCHER — v43
@@ -1048,7 +1023,6 @@ let G={
   sortDateAsc:false,
   ideaAll:[],ideaShown:[],ideaPageSize:20,ideaOffset:0,activeCat:null,
   cart:[],
-  showSaleDays:false,
   _activeEmojiIdx:null,
   // v53: start with localStorage copy; loadFollowers() will refresh from cloud
   followers: (()=>{
@@ -1658,43 +1632,46 @@ function renderDash(){
   for(var i=0;i<n;i++){
     var p=ps[i];
     var fbS=gc(p,COL.FB_S),tgS=gc(p,COL.TG_S),igS=gc(p,COL.IG_S);
+    var isDraft=gc(p,COL.STATUS)==='טיוטה';
     var anyPub=fbS==='פורסם'||tgS==='פורסם'||igS==='פורסם';
     var anyAp=fbS==='מאושר'||tgS==='מאושר'||igS==='מאושר';
-    if(!anyPub&&!anyAp&&gc(p,COL.STATUS)==='טיוטה')cDraft++;
+    if(!anyPub&&!anyAp&&isDraft)cDraft++;
 
-    // ── פייסבוק (עמודה E) ─────────────────────────────────────────
-    if(p._dateE){
-      var eDateNum=Number(p._dateE.num);
-      if(!isNaN(eDateNum)){
-        if(fbS==='פורסם') cFB++;
-        // v60: בתור = לא פורסם ב-25 ימים האחרונים (תאריך E לפני 25 יום)
-        if(fbS!=='פורסם'&&eDateNum<=threshold25){cFBq++;fbQueuePosts.push(p);}
+    // ── פייסבוק ─────────────────────────────────────────
+    if(fbS==='פורסם'){
+      cFB++;
+    } else if(!isDraft){
+      // בתור: לא טיוטה + (אין תאריך E  OR  תאריך E לפני יותר מ-25 ימים)
+      if(p._dateE){
+        var eDateNum=Number(p._dateE.num);
+        if(!isNaN(eDateNum)&&eDateNum<=threshold25){cFBq++;fbQueuePosts.push(p);}
+      } else {
+        cFBq++;fbQueuePosts.push(p);
       }
-    } else if(fbS!=='פורסם'){
-      // גם מוצרים ללא תאריך E שטרם פורסמו
-      cFBq++;fbQueuePosts.push(p);
     }
 
-    // ── טלגרם (עמודה Q) ──────────────────────────────────────────
-    if(p._dateTG){
-      var tgDateNum=Number(p._dateTG.num);
-      if(!isNaN(tgDateNum)){
-        if(tgS==='פורסם') cTG++;
-        if(tgS!=='פורסם'&&tgDateNum<=threshold25){cTGq++;tgQueuePosts.push(p);}
+    // ── טלגרם ──────────────────────────────────────────
+    if(tgS==='פורסם'){
+      cTG++;
+    } else if(!isDraft){
+      if(p._dateTG){
+        var tgDateNum=Number(p._dateTG.num);
+        if(!isNaN(tgDateNum)&&tgDateNum<=threshold25){cTGq++;tgQueuePosts.push(p);}
+      } else {
+        cTGq++;tgQueuePosts.push(p);
       }
-    } else if(tgS!=='פורסם'){
-      cTGq++;tgQueuePosts.push(p);
     }
 
-    // ── אינסטגרם (עמודה U) ───────────────────────────────────────
-    if(p._dateIG){
-      var igDateNum=Number(p._dateIG.num);
-      if(!isNaN(igDateNum)){
-        if(igS==='פורסם') cIG++;
-        if(igS!=='פורסם'&&igDateNum<=threshold25){cIGq++;igQueuePosts.push(p);}
+    // ── אינסטגרם ───────────────────────────────────────
+    if(igS==='פורסם'){
+      cIG++;
+    } else if(!isDraft){
+      if(p._dateIG){
+        var igDateNum=Number(p._dateIG.num);
+        if(!isNaN(igDateNum)&&igDateNum<=threshold25){cIGq++;igQueuePosts.push(p);}
+      } else {
+        cIGq++;igQueuePosts.push(p);
       }
-    } else if(igS!=='פורסם'){
-      cIGq++;igQueuePosts.push(p);
     }
   }
   // Store queue posts for popup
@@ -2260,33 +2237,6 @@ function loadMoreTableRows(){
 // ════════════════════════════════════════════════
 // CALENDAR — v18: multi-platform dateMap, O(1) per cell, popup per day
 // ════════════════════════════════════════════════
-const ALI_SALE_DAYS={
-  '01-01':'🎊 New Year Sale',
-  '01-15':'❄️ Winter Clearance',
-  '02-14':'💕 Valentine Sale',
-  '03-08':'👩 Women\'s Day',
-  '03-28':'🎂 Anniversary Sale',
-  '04-01':'🌸 Spring Sale',
-  '06-01':'☀️ Summer Sale',
-  '06-18':'🛍️ Mid-Year Festival',
-  '08-08':'🎒 Back to School',
-  '08-18':'🏖️ End of Summer',
-  '09-09':'🍂 9.9 Sale',
-  '10-10':'🎃 10.10 Sale',
-  '11-11':'🔥 Singles Day (11.11)',
-  '11-29':'🛒 Black Friday',
-  '12-12':'🎄 12.12 Year-End',
-  '12-26':'🎁 Winter Sale',
-};
-// Returns sale label for a given MM-DD, including Choice Days 1-5 of every month
-function getSaleLabel(m1based, day){
-  try{
-    var mmdd=String(m1based).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-    if(ALI_SALE_DAYS[mmdd])return ALI_SALE_DAYS[mmdd];
-    if(day>=1&&day<=5)return'🛍️ Choice Day';
-    return'';
-  }catch(e){return'';}
-}
 function renderCal(){
   const y=G.calY,m=G.calM; // m is 0-based
   const months=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
@@ -2317,27 +2267,15 @@ function renderCal(){
     const total=dp.length;
     const d=cell.d;
 
-    let salePill='';
-    if(cell.cur){
-      const isChoiceDay=cell.d>=1&&cell.d<=5;
-      if(isChoiceDay){
-        // Choice Day: always shown in red/orange with tooltip
-        salePill=`<div title="🛍️ Choice Day — ימי מבצע חודשיים 1-5" style="background:#fef2f2;color:#b91c1c;border-radius:3px;padding:1px 3px;font-size:7px;font-weight:800;margin-bottom:2px;border:1px solid #fca5a5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help">🛍️ Choice Day</div>`;
-      } else if(G.showSaleDays){
-        const label=getSaleLabel(m1,cell.d);
-        if(label)salePill=`<div style="background:#fef3ee;color:var(--acc);border-radius:3px;padding:1px 3px;font-size:7px;font-weight:800;margin-bottom:2px;border:1px solid #fed7aa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${label}</div>`;
-      }
-    }
+
 
     const show=dp.slice(0,2);
     const hasMore=total>0;
-    var isChoiceDay2=cell.cur&&cell.d>=1&&cell.d<=5;
-    return`<div class="cday${isToday?' today':''}${!cell.cur?' other':''}" style="${isChoiceDay2?'border-top:2px solid #e11d48;background:linear-gradient(180deg,#fff1f2 0%,transparent 40%);':salePill?'border-top:2px solid var(--acc);':''}">
+    return`<div class="cday${isToday?' today':''}${!cell.cur?' other':''}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
         <span class="cdn" style="cursor:${total>0?'pointer':'default'}" onclick="${total>0?'openDayModal('+d+','+y+','+m+')':''}">${cell.d}</span>
         ${hasMore&&cell.cur?`<button onclick="event.stopPropagation();openDayModal(${d},${y},${m})" style="background:var(--acc);color:#fff;border:none;border-radius:3px;font-size:8px;font-weight:800;padding:1px 4px;cursor:pointer;font-family:inherit">+${total}</button>`:''}
       </div>
-      ${salePill}
       ${plat?`<div style="display:flex;gap:2px;margin-bottom:2px">
         ${plat.fb.length?`<div style="width:7px;height:7px;border-radius:50%;background:var(--fb)" title="פייסבוק: ${plat.fb.length}"></div>`:''}
         ${plat.tg.length?`<div style="width:7px;height:7px;border-radius:50%;background:var(--tg)" title="טלגרם: ${plat.tg.length}"></div>`:''}
@@ -2951,14 +2889,23 @@ function renderStatsDash(){
     data:{labels:catLabels,datasets:[{data:catVals,backgroundColor:clrs,borderWidth:1,borderColor:'#fff'}]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{
-        legend:{position:'bottom',labels:{font:{size:9},color:'#64748b',boxWidth:8,padding:6,
+        legend:{position:'bottom',
+          onClick:(e,legendItem,legend)=>{
+            // Toggle the segment hidden state then force legend re-render
+            const ci=legend.chart;
+            const meta=ci.getDatasetMeta(0);
+            const item=meta.data[legendItem.index];
+            item.hidden=!item.hidden;
+            ci.update();
+          },
+          labels:{font:{size:9},color:'#64748b',boxWidth:8,padding:6,
           generateLabels:(chart)=>{
             const ds=chart.data.datasets[0];
             const meta=chart.getDatasetMeta(0);
             return chart.data.labels.map((label,i)=>{
               const val=ds.data[i];
               const pct=catTotal?Math.round(val/catTotal*100):0;
-              const isHidden=meta.data[i]&&meta.data[i].hidden;
+              const isHidden=!!(meta.data[i]&&meta.data[i].hidden);
               return{
                 text:label+' '+pct+'%',
                 fillStyle:isHidden?'#ccc':ds.backgroundColor[i],
@@ -2966,6 +2913,7 @@ function renderStatsDash(){
                 lineWidth:1,
                 index:i,
                 hidden:isHidden,
+                color:isHidden?'#aaa':'#64748b',
                 fontColor:isHidden?'#aaa':'#64748b',
                 textDecoration:isHidden?'line-through':'none',
               };
@@ -3061,8 +3009,9 @@ function openCatDrillDown(catName){
         const n=(gc(p,COL.HEB)||gc(p,COL.ENG)||'').trim();
         return n===r.name||n.slice(0,12)===r.name.slice(0,12);
       });
-      const allCatsOpts=[...new Set(G.posts.map(p=>gc(p,COL.CAT).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'he'))
-        .map(cat=>`<option value="${esc(cat)}">${esc(cat)}</option>`).join('');
+      const allCatsList=[...new Set(G.posts.map(p=>gc(p,COL.CAT).trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'he'));
+      const curCatForRow=matchedPosts.length?gc(matchedPosts[0],COL.CAT).trim():'';
+      const allCatsOpts=allCatsList.map(cat=>`<option value="${esc(cat)}" ${cat===curCatForRow?'selected':''}>${esc(cat)}</option>`).join('');
       const rowIds=matchedPosts.map(p=>p.row).join(',');
       return`<tr style="border-bottom:1px solid rgba(226,232,240,.5)">
         <td style="padding:7px 8px;color:var(--acc);font-weight:800">${i+1}</td>
@@ -3073,10 +3022,12 @@ function openCatDrillDown(catName){
         <td style="padding:7px 8px;font-family:monospace;font-weight:700;color:var(--acc)">$${r.totalSales.toFixed(2)}</td>
         <td style="padding:7px 8px;font-family:monospace;color:var(--grn)">$${r.totalComm.toFixed(2)}</td>
         <td style="padding:7px 8px">
-          ${rowIds?`<select onchange="updateDrillDownCat(this,'${rowIds}')"
-            style="font-size:10px;background:var(--s2);border:1px solid var(--b1);border-radius:5px;padding:2px 5px;color:var(--tx);font-family:inherit;cursor:pointer;max-width:110px">
-            <option value="">— שנה קטגוריה —</option>${allCatsOpts}
-          </select>`:'<span style="color:var(--t3);font-size:10px">—</span>'}
+          ${rowIds
+            ?`<select onchange="updateDrillDownCat(this,'${rowIds}')"
+                style="font-size:10px;background:var(--s2);border:1px solid var(--b1);border-radius:5px;padding:2px 5px;color:var(--tx);font-family:inherit;cursor:pointer;max-width:110px">
+                <option value="">— שנה קטגוריה —</option>${allCatsOpts}
+              </select>`
+            :'<span style="color:var(--t3);font-size:10px">—</span>'}
         </td>
       </tr>`;}).join('')}
     </tbody>
