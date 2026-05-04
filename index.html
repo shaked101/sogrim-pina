@@ -2681,7 +2681,7 @@ async function deleteProduct(rowNum){
       method:'POST',
       mode:'cors',
       redirect:'follow',
-      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      headers:{'Content-Type':'text/plain;charset=utf-8','Accept':'application/json'},
       body:JSON.stringify({action:'deleteRow',row:physicalRow})
     });
     let result={ok:false,error:'תשובה לא תקינה מהשרת'};
