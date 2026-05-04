@@ -920,7 +920,8 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           <div class="cfcard">
             <h3>🤖 Make Webhook</h3>
             <div class="ibox" style="font-size:11px">payload: <code style="font-size:10px;background:#dbeafe;padding:1px 4px;border-radius:3px">{"target":"FB","link":"...","row":N}</code></div>
-            <div class="fg" style="margin-bottom:13px"><label>Webhook URL</label><input class="ifield" id="s-make-wh" type="text" placeholder="https://hook.eu2.make.com/..."></div>
+            <div class="fg" style="margin-bottom:9px"><label>Webhook שיגור פוסט</label><input class="ifield" id="s-make-wh" type="text" placeholder="https://hook.eu2.make.com/..."></div>
+            <div class="fg" style="margin-bottom:13px"><label>🪄 Webhook שכתוב פוסט</label><input class="ifield" id="s-rewrite-wh" type="text" placeholder="https://hook.eu1.make.com/YOUR_WEBHOOK_HERE"></div>
             <button class="btn full" id="save-make-btn">💾 שמור</button>
           </div>
           <div class="cfcard" style="grid-column:1/-1">
@@ -1639,12 +1640,12 @@ function renderDash(){
   function _isDraftStatus(s){return s==='טיוטה'||s==='draft'||s==='';}
 
   // ══════════════════════════════════════════════
-  // isStale(dateVal) — פונקציית זיהוי תאריך קריטית
-  // מקבלת ערך גולמי מתא Google Sheets.
+  // checkQueueEligibility(dateVal) — פונקציית זיהוי תאריך מחוזקת v2
+  // חסינה לפורמטים: "8/2/26", "25/02/2026", "23/03/2026 10:18"
   // מחזירה true אם המוצר בתור (ריק, או 25+ ימים עברו).
   // ══════════════════════════════════════════════
-  function isStale(dateVal){
-    // א. ריק → בתור
+  function checkQueueEligibility(dateVal){
+    // א. ריק / null / undefined → בתור
     if(dateVal===null||dateVal===undefined)return true;
     var raw=(dateVal+'').trim();
     if(!raw)return true;
@@ -1652,28 +1653,48 @@ function renderDash(){
     // ב. נקה שעות — "23/03/2026 10:18" → "23/03/2026"
     var datePart=raw.split(' ')[0];
 
-    // ג. פרק לפי לוכסן
+    // ג. החלף נקודות ומקפים בלוכסן לאחידות פורמט
+    datePart=datePart.replace(/[.\-]/g,'/');
+
+    // ד. פרק לפי לוכסן
     var parts=datePart.split('/');
-    if(parts.length<3)return true; // פורמט לא מוכר → נכנס לתור
+    if(parts.length<2)return true; // פורמט לא מוכר → נכנס לתור
 
-    var dd=parseInt(parts[0],10);
-    var mm=parseInt(parts[1],10);
-    var yy=parseInt(parts[2],10);
+    var dd,mm,yy;
+    if(parts.length===2){
+      // DD/MM בלבד → שנה נוכחית
+      dd=parseInt(parts[0],10);
+      mm=parseInt(parts[1],10);
+      yy=new Date().getFullYear();
+    } else if(parts[0].length===4){
+      // YYYY/MM/DD
+      yy=parseInt(parts[0],10);
+      mm=parseInt(parts[1],10);
+      dd=parseInt(parts[2],10);
+    } else {
+      // DD/MM/YYYY or DD/MM/YY — הפורמט הישראלי הרגיל
+      dd=parseInt(parts[0],10);
+      mm=parseInt(parts[1],10);
+      yy=parseInt(parts[2],10);
+    }
 
-    // ד. תיקון שנה קצרה: "26" → 2026
-    if(yy<100)yy+=2000;
+    // ה. תיקון שנה קצרה: "26" → 2026
+    if(yy>0&&yy<100)yy+=2000;
 
-    // ולידציה בסיסית
-    if(!dd||!mm||!yy||dd<1||dd>31||mm<1||mm>12||yy<2000)return true;
+    // ו. ולידציה בסיסית
+    if(isNaN(dd)||isNaN(mm)||isNaN(yy))return true;
+    if(dd<1||dd>31||mm<1||mm>12||yy<2000||yy>2100)return true;
 
-    // ה. חישוב הפרש ימים
+    // ז. חישוב הפרש ימים בצהריים (למניעת בעיות DST)
     var postDate=new Date(yy,mm-1,dd,12,0,0,0);
     var todayNoon=new Date();todayNoon.setHours(12,0,0,0);
-    var diffDays=Math.round((todayNoon-postDate)/864e5);
+    var diffDays=Math.round((todayNoon.getTime()-postDate.getTime())/864e5);
 
     // 25 ימים ומעלה → בתור
     return diffDays>=25;
   }
+  // שם עתיק לתאימות לאחור
+  var isStale=checkQueueEligibility;
 
   var cDraft=0,cFB=0,cTG=0,cIG=0,cFBq=0,cTGq=0,cIGq=0;
   var fbQueuePosts=[],tgQueuePosts=[],igQueuePosts=[];
@@ -2259,6 +2280,8 @@ function renderTableRows(rows){
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         <button class="btn sec sm" onclick="openViewModal(${row})">👁</button>
         <button class="btn sm" onclick="openEditModal(${row})">✏️</button>
+        <button class="btn sec sm" style="color:var(--blue);border-color:var(--blue)" title="שכתוב פוסט באמצעות Make" onclick="rewritePost(${row})">🪄</button>
+        <button class="btn sec sm" style="color:var(--red);border-color:var(--red)" title="מחק מוצר" onclick="deleteProduct(${row})">🗑️</button>
       </div></td>
     </tr>`;}).join('');
 }
@@ -2526,7 +2549,54 @@ async function saveEdit(rowNum){
   }
 }
 
-// Fix 4: Temp Edit Modal — shows editable post text before sending to Make webhook
+// Fix 4: שכתוב פוסט — Webhook ל-Make
+// ☑️ עדכן את הכתובת הבאה ב-getCfg().rewriteWebhook דרך ההגדרות, או שנה כאן
+const REWRITE_WEBHOOK_DEFAULT='https://hook.eu1.make.com/YOUR_WEBHOOK_HERE';
+
+async function rewritePost(rowNum){
+  const p=G.posts.find(x=>x.row===rowNum);if(!p)return;
+  const c=getCfg();
+  const webhookUrl=(c.rewriteWebhook||'').trim()||REWRITE_WEBHOOK_DEFAULT;
+  const text=gc(p,COL.CONTENT)||gc(p,COL.HEB)||'';
+  const payload={row:rowNum,text,name:gc(p,COL.HEB),price:gc(p,COL.PRICE),cat:gc(p,COL.CAT)};
+  toast('📤 בקשת שכתוב נשלחה...','inf');
+  try{
+    await fetch(webhookUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    toast('✅ בקשת שכתוב נשלחה! Make יטפל בה בקרוב.','ok');
+  }catch(e){
+    toast('שגיאה בשליחה: '+e.message,'err');
+  }
+}
+
+// Fix 3: מחיקת מוצר — אייקון פח אשפה בטבלה
+function deleteProduct(rowNum){
+  const p=G.posts.find(x=>x.row===rowNum);
+  const name=p?gc(p,COL.HEB)||gc(p,COL.ENG)||('שורה '+rowNum):'שורה '+rowNum;
+  if(!confirm('האם אתה בטוח שברצונך למחוק את המוצר מהמערכת?\n\n'+name))return;
+  // קריאה ל-GAS למחיקת השורה
+  if(typeof google!=='undefined'&&google.script&&google.script.run){
+    google.script.run
+      .withSuccessHandler(function(){
+        // הסר מהמצב המקומי
+        G.posts=G.posts.filter(x=>x.row!==rowNum);
+        G.filtered=G.filtered.filter(x=>x.row!==rowNum);
+        filterPosts();renderDash();
+        toast('🗑️ המוצר נמחק בהצלחה','ok');
+      })
+      .withFailureHandler(function(e){
+        toast('שגיאה במחיקה: '+(e.message||e),'err');
+      })
+      .deleteRow(rowNum);
+  } else {
+    // סביבה ללא GAS (Vercel / דמו) — מחיקה מקומית בלבד
+    G.posts=G.posts.filter(x=>x.row!==rowNum);
+    G.filtered=G.filtered.filter(x=>x.row!==rowNum);
+    filterPosts();renderDash();
+    toast('🗑️ הוסר מהתצוגה (ללא GAS — הגדר Apps Script למחיקה קבועה)','warn');
+  }
+}
+
+
 // The edited text is sent once and NOT saved back to Google Sheets
 function triggerPublish(rowNum,target){
   const p=G.posts.find(x=>x.row===rowNum);if(!p)return;
@@ -3098,13 +3168,20 @@ function resetCSV(){
 // ════════════════════════════════════════════════
 function fillSettings(){
   const c=getCfg();
-  const m={'s-url':'url','s-sname':'sheetName','s-make-wh':'makeWebhook','s-fb-url':'fbUrl','s-tg-url':'tgUrl','s-ig-url':'igUrl'};
+  const m={'s-url':'url','s-sname':'sheetName','s-make-wh':'makeWebhook','s-rewrite-wh':'rewriteWebhook','s-fb-url':'fbUrl','s-tg-url':'tgUrl','s-ig-url':'igUrl'};
   for(const[id,key]of Object.entries(m)){const e=document.getElementById(id);if(e&&c[key])e.value=c[key];}
   // v45: if no URL in localStorage, show the hardcoded fallback so user knows what's active
   const urlEl=document.getElementById('s-url');
   if(urlEl&&!urlEl.value&&POSTS_GAS_URL_DEFAULT){
     urlEl.placeholder='ברירת מחדל: '+POSTS_GAS_URL_DEFAULT.slice(0,60)+'...';
   }
+  // Fix 2: ודא שפלייסחולדרים לקישורים תמיד מוצגים
+  const fbEl=document.getElementById('s-fb-url');
+  const tgEl=document.getElementById('s-tg-url');
+  const igEl=document.getElementById('s-ig-url');
+  if(fbEl&&!fbEl.value)fbEl.placeholder='https://facebook.com/groups/YOUR_GROUP';
+  if(tgEl&&!tgEl.value)tgEl.placeholder='https://t.me/YOUR_CHANNEL';
+  if(igEl&&!igEl.value)igEl.placeholder='https://instagram.com/YOUR_PROFILE';
 }
 // ════════════════════════════════════════════════
 // COMMUNITY / COMPETITION — v48
@@ -4175,7 +4252,7 @@ document.addEventListener('DOMContentLoaded',function(){
     const url=gv('s-url');if(!url){toast('הזן URL','err');return;}
     saveCfg({url,sheetName:gv('s-sname')||'אישור לטלגרם'});toast('✅ נשמר!','ok');setTimeout(loadData,600);
   });
-  on('save-make-btn','click',function(){saveCfg({makeWebhook:gv('s-make-wh')});toast('✅ Webhook נשמר!','ok');});
+  on('save-make-btn','click',function(){saveCfg({makeWebhook:gv('s-make-wh'),rewriteWebhook:gv('s-rewrite-wh')});toast('✅ Webhook נשמר!','ok');});
   on('save-links-btn','click',function(){
     saveCfg({fbUrl:gv('s-fb-url'),tgUrl:gv('s-tg-url'),igUrl:gv('s-ig-url')});
     renderFCards();toast('✅ קישורים נשמרו!','ok');
