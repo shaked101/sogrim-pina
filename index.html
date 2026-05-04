@@ -1491,12 +1491,15 @@ async function loadData(){
     d = await r.json();
     if(d.error) throw new Error('Apps Script החזיר שגיאה: '+d.error);
   }catch(e){
-    // v45: on any fetch/parse failure → load demo posts immediately
-    // The UI never stays stuck on a spinner
-    console.warn('[v45 loadData] fetch failed:', e.message, '→ loading demo posts');
-    setSS('נתוני דמו ('+e.message+')',false);
-    _loadDemoPosts();
+    console.warn('[loadData] fetch failed:', e.message);
+    setSS('שגיאת טעינה',false);
     _setLoadStep('');
+    // הצג שגיאה ב-UI ובקש מהמשתמש לרענן
+    const tbody=document.getElementById('ptbody');
+    if(tbody)tbody.innerHTML='<tr><td colspan="8"><div class="empty" style="color:var(--red)">❌ שגיאה במשיכת נתונים, אנא רענן את העמוד</div></td></tr>';
+    const upEl=document.getElementById('upcoming-list');
+    if(upEl)upEl.innerHTML='<div class="empty" style="color:var(--red)">שגיאה במשיכת נתונים, אנא רענן את העמוד</div>';
+    toast('❌ שגיאה במשיכת נתונים, אנא רענן את העמוד','err');
     return;
   }
 
@@ -1546,55 +1549,6 @@ function _dmAdd(num,bucket,post){
   if(!G.dateMap[num]){G.dateMap[num]={fb:[],tg:[],ig:[],all:[]};_dmSets[num]=new Set();}
   G.dateMap[num][bucket].push(post);
   if(!_dmSets[num].has(post)){_dmSets[num].add(post);G.dateMap[num].all.push(post);}
-}
-
-// ════════════════════════════════════════════════
-// DEMO POSTS — v45: shown when GAS fetch fails (CORS / network / Vercel cold start)
-// Gives the user something to see immediately instead of a stuck spinner.
-// Uses the same column structure as real Sheets data (COL map).
-// ════════════════════════════════════════════════
-function _loadDemoPosts(){
-  // Build 6 demo rows — same sparse array format as Google Sheets rows
-  function _row(heb,price,cat,fbS,tgs,img,dateE){
-    var r=new Array(21).fill('');
-    r[COL.HEB]=heb; r[COL.PRICE]=price; r[COL.CAT]=cat;
-    r[COL.FB_S]=fbS; r[COL.TG_S]=tgs;
-    r[COL.IMG]=img||''; r[COL.COL_E]=dateE||'';
-    return r;
-  }
-  var today=new Date();
-  var future=new Date(today); future.setDate(today.getDate()+5);
-  var past=new Date(today);   past.setDate(today.getDate()-35);
-  var fmt=function(d){return d.getFullYear()+'-'
-    +String(d.getMonth()+1).padStart(2,'0')+'-'
-    +String(d.getDate()).padStart(2,'0')+'T12:00:00.000Z';};
-
-  var demoRows=[
-    _row('מטען מגנטי לאייפון','8.99','טכנולוגיה','פורסם','פורסם','',fmt(past)),
-    _row('כד מים תרמי 1L','12.50','בית ועיצוב','פורסם','פורסם','',fmt(past)),
-    _row('רצועת שעון סיליקון','3.20','אביזרי רכב','מאושר','','',fmt(future)),
-    _row('מנורת לד USB','6.80','בית ועיצוב','','טיוטה','',''),
-    _row('קליפס לאוזניות','2.10','טכנולוגיה','','','',''),
-    _row('שמיכת פליז מיני','14.00','בית ועיצוב','פורסם','פורסם','',fmt(past)),
-  ];
-
-  G.posts=[];G.dateMap={};G.filtered=[];_dmSets={};
-  G.posts=demoRows.map(function(row,i){
-    var p={row:i+2,data:row,_isDemo:true};
-    p._dateE =parseDateIL(row[COL.COL_E]);
-    p._dateTG=null; p._dateIG=null;
-    if(p._dateE)_dmAdd(p._dateE.num,'fb',p);
-    return p;
-  });
-
-  setSS('נתוני דמו — חבר את המערכת להגדרות',false);
-  toast('⚠️ מציג נתוני דמו. הגדר את ה-Apps Script URL בהגדרות.','warn');
-
-  requestAnimationFrame(function(){
-    populateCats();renderDash();filterPosts();renderCal();
-    populateCartCatFilter();renderCartTable();renderCartItems();
-    var nb=document.getElementById('nbposts');if(nb)nb.textContent=G.posts.length+' (דמו)';
-  });
 }
 
 // writeSheet — uses getPostsUrl() so it works even when localStorage is empty
@@ -2693,7 +2647,49 @@ async function deleteProduct(rowNum){
       // הצלחה — הסר מה-UI רק לאחר אישור מהשרת
       G.posts=G.posts.filter(x=>x.row!==rowNum);
       G.filtered=G.filtered.filter(x=>x.row!==rowNum);
-      filterPosts();renderDash();
+
+      // בדוק אם מודל הטיוטות פתוח — אם כן, עדכן אותו במקום לסגור
+      var draftsModal=document.querySelector('#modal-root h3');
+      var draftsModalOpen=draftsModal&&draftsModal.textContent&&draftsModal.textContent.indexOf('טיוטות')!==-1;
+
+      if(draftsModalOpen){
+        // עדכן את הנתונים ברקע ואז רנדר מחדש רק את תוכן המודל
+        filterPosts();renderDash();
+        // בנה מחדש את רשימת הטיוטות בלי לסגור את החלון
+        var updatedDrafts=G.posts.filter(function(p){
+          var fbS=gc(p,COL.FB_S),tgS=gc(p,COL.TG_S),igS=gc(p,COL.IG_S);
+          var anyPub=fbS==='פורסם'||tgS==='פורסם'||igS==='פורסם';
+          var anyAp=fbS==='מאושר'||tgS==='מאושר'||igS==='מאושר';
+          return !anyPub&&!anyAp&&!p._dateE&&!p._dateTG&&!p._dateIG;
+        });
+        var mcBody=document.getElementById('mc-body');
+        var mcTitle=document.querySelector('#modal-root h3');
+        if(mcTitle)mcTitle.textContent='✍️ טיוטות ('+updatedDrafts.length+')';
+        if(mcBody){
+          if(!updatedDrafts.length){
+            mcBody.innerHTML='<div class="empty">✅ אין טיוטות ממתינות!</div>';
+          }else{
+            var newBody=updatedDrafts.slice(0,60).map(function(p){
+              var img=gc(p,COL.IMG),row=p.row;
+              return'<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--b1);cursor:pointer" onclick="closeModal();openViewModal('+row+')">'
+                +(img?'<img src="'+esc(img)+'" style="width:38px;height:38px;border-radius:6px;object-fit:cover" onerror="this.style.display=\'none\'">':'<div style="width:38px;height:38px;border-radius:6px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:14px">📦</div>')
+                +'<div style="flex:1;min-width:0">'
+                  +'<div style="font-size:12px;font-weight:800;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(gc(p,COL.HEB))+'</div>'
+                  +'<div style="font-size:10px;color:var(--t2)">'+(gc(p,COL.CAT)?'📂 '+esc(gc(p,COL.CAT)):'ללא קטגוריה')+(gc(p,COL.PRICE)?' · '+gc(p,COL.PRICE)+'$':'')+'</div>'
+                +'</div>'
+                +'<button class="btn sec sm" onclick="event.stopPropagation();closeModal();openEditModal('+row+')" title="ערוך">✏️</button>'
+                +'<button class="btn sec sm" style="color:var(--blue);border-color:var(--blue)" onclick="event.stopPropagation();rewritePost('+row+')" title="שכתוב פוסט בעזרת הקופירייטר">🪄</button>'
+                +'<button class="btn sec sm" style="color:var(--red);border-color:var(--red)" onclick="event.stopPropagation();closeModal();deleteProduct('+row+')" title="מחק מוצר">🗑️</button>'
+              +'</div>';
+            }).join('');
+            if(updatedDrafts.length>60)newBody+='<div style="text-align:center;padding:10px;font-size:11px;color:var(--t2)">...ועוד '+(updatedDrafts.length-60)+' טיוטות</div>';
+            mcBody.innerHTML=newBody;
+          }
+        }
+      }else{
+        filterPosts();renderDash();
+        closeModal();
+      }
       toast('🗑️ המוצר נמחק לצמיתות מהגיליון','ok');
     }else{
       toast('שגיאת מחיקה: '+(result.error||'תשובה שלילית מהשרת'),'err');
