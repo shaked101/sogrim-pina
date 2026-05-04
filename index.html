@@ -2463,8 +2463,10 @@ function openViewModal(rowNum){
 function openEditModal(rowNum){
   const p=G.posts.find(x=>x.row===rowNum);if(!p)return;
   const row=rowNum;
+  // Check if we arrived from dashboard recycle modal
+  const fromDash = dashNavigationState.active;
   const body=`
-    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה ${rowNum}.</div>
+    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה ${rowNum}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':''}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px">
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם בעברית</span><input class="ifield" id="e-heb" value="${esc(gc(p,COL.HEB))}"></div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם באנגלית</span><input class="ifield" id="e-eng" value="${esc(gc(p,COL.ENG))}"></div>
@@ -2498,10 +2500,13 @@ function openEditModal(rowNum){
       <div class="fg"><label style="font-size:10px;color:var(--ig);font-weight:800">📸 אינסטגרם</label><select class="fsel" id="e-igs" style="width:100%">${statusOpts(gc(p,COL.IG_S))}</select></div>
     </div>
   `;
-  openModal('✏️ עריכת פוסט — שורה '+rowNum,body,`
-    <button class="btn sec" onclick="closeModal()">ביטול</button>
-    <button class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>
-  `);
+  const footerBtns = fromDash
+    ? `<button class="btn sec" style="border-color:var(--acc);color:var(--acc)" onclick="cancelEditReturnToDash()">🏠 ביטול וחזרה לדשבורד</button>
+       <button class="btn sec" onclick="closeModal()">ביטול</button>
+       <button class="btn grn" onclick="saveEditReturnToDash(${row})">💾 שמור וחזור לדשבורד</button>`
+    : `<button class="btn sec" onclick="closeModal()">ביטול</button>
+       <button class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>`;
+  openModal('✏️ עריכת פוסט — שורה '+rowNum,body,footerBtns);
 }
 
 async function saveEdit(rowNum){
@@ -2554,7 +2559,76 @@ async function saveEdit(rowNum){
   }
 }
 
-// Fix 4: שכתוב פוסט — Webhook ל-Make
+// ── שחזור מצב הדשבורד לאחר עריכה ──────────────────────────────────
+function _restoreDashRecycleModal(){
+  const state = dashNavigationState;
+  // Reset state first so subsequent openEditModal calls don't show "from dash"
+  dashNavigationState = { active:false, sCol:null, channelName:null, channelIcon:null, recycleShown:5 };
+  // Navigate back to dashboard
+  showPage('dash');
+  // Re-open the Recycle Modal with the saved channel
+  setTimeout(function(){
+    if(state.sCol !== null && state.channelName){
+      openRecycleModal(state.sCol, state.channelName, state.channelIcon || '', state.recycleShown);
+    }
+  }, 150);
+}
+
+// ── ביטול עריכה + חזרה לדשבורד ───────────────────────────────────
+function cancelEditReturnToDash(){
+  closeModal();
+  _restoreDashRecycleModal();
+}
+
+// ── שמירה + חזרה לדשבורד ─────────────────────────────────────────
+async function saveEditReturnToDash(rowNum){
+  const contentEl=document.getElementById('e-content');
+  if(!contentEl){toast('שגיאה: שדות לא נמצאו','err');return;}
+
+  const updates={
+    [COL.HEB+1]:gv('e-heb'),[COL.ENG+1]:gv('e-eng'),
+    [COL.PRICE+1]:gv('e-price'),[COL.RATING+1]:gv('e-rating'),
+    [COL.BOUGHT+1]:gv('e-bought'),[COL.CAT+1]:gv('e-cat'),
+    [COL.LINK+1]:gv('e-link'),[COL.IMG+1]:gv('e-img'),
+    [COL.COL_L+1]:gv('e-date-l'),
+    [COL.CONTENT+1]:contentEl.value,[COL.TAGS+1]:gv('e-tags'),
+    [COL.TG_S+1]:gv('e-tgs'),[COL.FB_S+1]:gv('e-fbs'),[COL.IG_S+1]:gv('e-igs'),
+  };
+
+  const p=G.posts.find(x=>x.row===rowNum);
+  const originalDateE=p?String(p.data[COL.COL_E]||'').trim():'';
+  const editedDateE=gv('e-date-e');
+  if(editedDateE!==originalDateE){
+    updates[COL.COL_E+1]=editedDateE;
+  }
+  toast('שומר...','inf');
+  const ok=await writeSheet(rowNum,updates);
+  if(ok){
+    const edited=G.posts.find(x=>x.row===rowNum);
+    if(edited){
+      try{edited._dateE=parseDateIL(gc(edited,COL.COL_E));}catch(e){edited._dateE=null;}
+      try{edited._dateTG=parseDateIL(gc(edited,COL.COL_Q));}catch(e){edited._dateTG=null;}
+      try{edited._dateIG=parseDateIL(gc(edited,COL.COL_IG_D));}catch(e){edited._dateIG=null;}
+      G.dateMap={};
+      G.posts.forEach(function(p){
+        function ins(num,bkt){
+          if(!G.dateMap[num])G.dateMap[num]={fb:[],tg:[],ig:[],all:[]};
+          G.dateMap[num][bkt].push(p);
+          if(G.dateMap[num].all.indexOf(p)===-1)G.dateMap[num].all.push(p);
+        }
+        if(p._dateE)ins(p._dateE.num,'fb');
+        if(p._dateTG)ins(p._dateTG.num,'tg');
+        if(p._dateIG)ins(p._dateIG.num,'ig');
+      });
+    }
+    closeModal();
+    toast('✅ נשמר!','ok');
+    renderDash();filterPosts();renderCal();
+    _restoreDashRecycleModal();
+  }
+}
+
+
 // ☑️ עדכן את הכתובת הבאה ב-getCfg().rewriteWebhook דרך ההגדרות, או שנה כאן
 const REWRITE_WEBHOOK_DEFAULT='https://hook.eu1.make.com/YOUR_WEBHOOK_HERE';
 
@@ -2635,7 +2709,7 @@ async function confirmPublish(rowNum,target){
   }catch(e){toast('שגיאה: '+e.message,'err');}
 }
 
-function openRecycleModal(sCol,name,ico){
+function openRecycleModal(sCol,name,ico,initialShown){
   const sColNum=parseInt(sCol);
   const tgt=sColNum===COL.TG_S?'TG':sColNum===COL.FB_S?'FB':'IG';
   const getDate=p=>tgt==='TG'?p._dateTG:tgt==='IG'?p._dateIG:p._dateE;
@@ -2646,8 +2720,8 @@ function openRecycleModal(sCol,name,ico){
       if(!da)return 1;if(!db)return -1;
       return da.num-db.num;
     });
-  // State: how many items are currently shown
-  let _recycleShown=5;
+  // State: how many items are currently shown — restore previous offset if provided
+  let _recycleShown=initialShown&&initialShown>5?initialShown:5;
   const PAGE=5;
 
   function _buildRecycleItem(p){
@@ -2660,7 +2734,7 @@ function openRecycleModal(sCol,name,ico){
       ${imgHtml}
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:800;color:var(--acc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px"
-          onclick="closeModal();navToPostEdit(${row})" title="לחץ לעריכת המוצר">${esc(gc(p,COL.HEB))}</div>
+          onclick="saveDashNavState(${sCol},'${name}','${ico}',_recycleShown);closeModal();navToPostEdit(${row})" title="לחץ לעריכת המוצר">${esc(gc(p,COL.HEB))}</div>
         <div style="font-size:10px;color:var(--t2)">${fmtDate(d)} · ${gc(p,COL.PRICE)?gc(p,COL.PRICE)+'$':''}</div>
       </div>
       <button class="btn sec sm" onclick="closeModal();triggerPublish(${row},'${tgt}')">שגר עכשיו</button>
@@ -2698,6 +2772,30 @@ function openRecycleModal(sCol,name,ico){
   openModal(`♻️ מחזור — ${ico} ${name} (${allPublished.length} פורסמו)`,
     _renderRecycleBody(),
     '<button class="btn sec" onclick="closeModal()">סגור</button>');
+}
+
+// ════════════════════════════════════════════════
+// DASH NAVIGATION STATE — Deep Linking / State Restore
+// Saves context when navigating from Recycle Modal → Edit Modal
+// so we can auto-restore the user's exact position on return.
+// ════════════════════════════════════════════════
+let dashNavigationState = {
+  active: false,       // האם הגענו מהדשבורד
+  sCol: null,          // עמודת הסטטוס של הערוץ (COL.TG_S / COL.FB_S / COL.IG_S)
+  channelName: null,   // שם הערוץ (למשל: 'פייסבוק')
+  channelIcon: null,   // אייקון הערוץ (למשל: '📘')
+  recycleShown: 5,     // כמה מוצרים היו פתוחים (ה-Offset)
+};
+
+// ── שמירת מצב ניווט מהדשבורד ────────────────────────────────────
+function saveDashNavState(sCol, channelName, channelIcon, recycleShown){
+  dashNavigationState = {
+    active: true,
+    sCol: sCol,
+    channelName: channelName,
+    channelIcon: channelIcon,
+    recycleShown: recycleShown || 5,
+  };
 }
 
 // ── ניווט לעריכת מוצר מתוך פופ-אפ ────────────────────────────────
