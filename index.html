@@ -996,6 +996,17 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
 
   // Synchronous errors (syntax errors, runtime crashes in non-async code)
   window.onerror = function(msg, src, line, col, err){
+    // Ignore cross-origin "ghost" errors from WebView / Telegram browser —
+    // these arrive with no useful info and are not actionable.
+    var msgStr = String(msg || '');
+    if(
+      msgStr === 'Script error.' ||
+      msgStr === 'Script error' ||
+      (!src && !line && !col) ||
+      (src === '' && line === 0) ||
+      (src === 'null' || src === 'about:blank')
+    ){ return true; }
+
     var stack = err && err.stack ? '\n\nStack:\n' + err.stack : '';
     _showErr(
       msg,
