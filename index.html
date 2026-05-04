@@ -1722,8 +1722,8 @@ function renderDash(){
     var igStatus =(row[19]||'').toString().trim();
     var igDate   =(row[20]||'').toString().trim();
 
-    // ספירת טיוטות: מוצר שכל הסטטוסים שלו הם 'טיוטה'
-    if(fbStatus==='טיוטה'&&tgStatus==='טיוטה'&&igStatus==='טיוטה')cDraft++;
+    // ספירת טיוטות: עמודה G (אינדקס 6) = 'טיוטה' או 'draft'
+    var colGVal=(row[6]||'').toString().trim();if(colGVal==='טיוטה'||colGVal.toLowerCase()==='draft')cDraft++;
 
     // ── פייסבוק ────────────────────────────────────
     if(fbStatus==='פורסם'){
@@ -1814,14 +1814,11 @@ function renderDash(){
 }
 function mkChRow(label,sCol,name,pub,q,color,total){
   var pct=total?Math.min(100,Math.round(pub/total*100)):0;
-  var queueKey=sCol===COL.TG_S?'tg':sCol===COL.FB_S?'fb':'ig';
   var icon=label.split(' ')[0];
   return `<div style="padding:7px 0;border-bottom:1px solid var(--b1)">
     <div style="display:flex;justify-content:space-between;margin-bottom:4px;align-items:center">
       <button class="btn sec sm" onclick="openRecycleModal(${sCol},'${name}','${icon}')">${label}</button>
-      <span style="font-size:10px;color:var(--t2)">${pub} פורסמו |
-        <button onclick="openQueueModal('${queueKey}')" style="background:#fef3ee;border:1px solid #fed7aa;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:800;color:var(--acc);cursor:pointer;font-family:inherit">${q} בתור ↗</button>
-      </span>
+      <span style="font-size:10px;color:var(--t2)">${pub} פורסמו</span>
     </div>
     <div style="height:4px;background:var(--s2);border-radius:2px">
       <div style="height:100%;width:${pct}%;background:${color};border-radius:2px"></div>
@@ -2640,31 +2637,75 @@ async function confirmPublish(rowNum,target){
 
 function openRecycleModal(sCol,name,ico){
   const sColNum=parseInt(sCol);
-  // v23 POPUP BUG FIX: use the correct date column per platform
-  // FB → _dateE (COL_E), TG → _dateTG (COL_Q), IG → _dateIG (COL_IG_D)
   const tgt=sColNum===COL.TG_S?'TG':sColNum===COL.FB_S?'FB':'IG';
   const getDate=p=>tgt==='TG'?p._dateTG:tgt==='IG'?p._dateIG:p._dateE;
-  const published=G.posts
+  const allPublished=G.posts
     .filter(p=>gc(p,sColNum)==='פורסם'&&getDate(p))
     .sort((a,b)=>{
       const da=getDate(a),db=getDate(b);
       if(!da)return 1;if(!db)return -1;
       return da.num-db.num;
-    }).slice(0,5);
-  const body=published.length?published.map(p=>{
+    });
+  // State: how many items are currently shown
+  let _recycleShown=5;
+  const PAGE=5;
+
+  function _buildRecycleItem(p){
     const img=gc(p,COL.IMG),row=p.row;
     const d=getDate(p);
+    const imgHtml=img
+      ?`<img src="${img}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:zoom-in;flex-shrink:0" onerror="this.style.display='none'" onclick="event.stopPropagation();openImageLightbox('${img.replace(/'/g,"\'")}')">` 
+      :`<div style="width:40px;height:40px;border-radius:6px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📦</div>`;
     return`<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--b1)">
-      ${img?`<img src="${img}" style="width:40px;height:40px;border-radius:6px;object-fit:cover" onerror="this.style.display='none'">`:
-        `<div style="width:40px;height:40px;border-radius:6px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:14px">📦</div>`}
+      ${imgHtml}
       <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-weight:800;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(gc(p,COL.HEB))}</div>
+        <div style="font-size:12px;font-weight:800;color:var(--acc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px"
+          onclick="closeModal();navToPostEdit(${row})" title="לחץ לעריכת המוצר">${esc(gc(p,COL.HEB))}</div>
         <div style="font-size:10px;color:var(--t2)">${fmtDate(d)} · ${gc(p,COL.PRICE)?gc(p,COL.PRICE)+'$':''}</div>
       </div>
       <button class="btn sec sm" onclick="closeModal();triggerPublish(${row},'${tgt}')">שגר עכשיו</button>
-    </div>`;}).join(''):
-  '<div class="empty">אין פוסטים מפורסמים</div>';
-  openModal(`♻️ מחזור — ${ico} ${name} (5 ישנים)`,body,'<button class="btn sec" onclick="closeModal()">סגור</button>');
+    </div>`;
+  }
+
+  function _renderRecycleBody(){
+    if(!allPublished.length)return'<div class="empty">אין פוסטים מפורסמים</div>';
+    const slice=allPublished.slice(0,_recycleShown);
+    const itemsHtml=slice.map(_buildRecycleItem).join('');
+    const remaining=allPublished.length-_recycleShown;
+    const moreBtn=remaining>0
+      ?`<div style="text-align:center;padding:10px 0"><button class="btn sec sm" onclick="_recycleLoadMore()" style="width:100%">הצג עוד (${remaining} נותרו)</button></div>`
+      :'';
+    return`<div id="recycle-items">${itemsHtml}</div>${moreBtn?'<div id="recycle-more-wrap">'+moreBtn+'</div>':'<div id="recycle-more-wrap"></div>'}`;
+  }
+
+  window._recycleLoadMore=function(){
+    _recycleShown+=PAGE;
+    const mcBody=document.getElementById('mc-body');
+    if(!mcBody)return;
+    const body=mcBody.querySelector('#recycle-items');
+    const moreWrap=mcBody.querySelector('#recycle-more-wrap');
+    if(body){
+      body.innerHTML=allPublished.slice(0,_recycleShown).map(_buildRecycleItem).join('');
+    }
+    if(moreWrap){
+      const rem=allPublished.length-_recycleShown;
+      moreWrap.innerHTML=rem>0
+        ?`<div style="text-align:center;padding:10px 0"><button class="btn sec sm" onclick="_recycleLoadMore()" style="width:100%">הצג עוד (${rem} נותרו)</button></div>`
+        :'';
+    }
+  };
+
+  openModal(`♻️ מחזור — ${ico} ${name} (${allPublished.length} פורסמו)`,
+    _renderRecycleBody(),
+    '<button class="btn sec" onclick="closeModal()">סגור</button>');
+}
+
+// ── ניווט לעריכת מוצר מתוך פופ-אפ ────────────────────────────────
+function navToPostEdit(rowNum){
+  // Switch to the "פוסטים" tab using showPage (data-page="posts")
+  showPage('posts');
+  // Open edit modal for this product after a short delay to let the page render
+  setTimeout(function(){openEditModal(rowNum);},120);
 }
 
 // ════════════════════════════════════════════════
