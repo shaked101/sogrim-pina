@@ -2724,6 +2724,13 @@ function openRecycleModal(sCol,name,ico,initialShown){
   let _recycleShown=initialShown&&initialShown>5?initialShown:5;
   const PAGE=5;
 
+  // Keep dashNavigationState.recycleShown in sync so saveDashNavState can read it
+  // without needing to pass _recycleShown through an inline onclick string.
+  dashNavigationState.recycleShown = _recycleShown;
+  dashNavigationState._pendingSCol = sCol;
+  dashNavigationState._pendingName = name;
+  dashNavigationState._pendingIco  = ico;
+
   function _buildRecycleItem(p){
     const img=gc(p,COL.IMG),row=p.row;
     const d=getDate(p);
@@ -2734,7 +2741,7 @@ function openRecycleModal(sCol,name,ico,initialShown){
       ${imgHtml}
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:800;color:var(--acc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px"
-          onclick="saveDashNavState(${sCol},'${name}','${ico}',_recycleShown);closeModal();navToPostEdit(${row})" title="לחץ לעריכת המוצר">${esc(gc(p,COL.HEB))}</div>
+          onclick="saveDashNavState();closeModal();navToPostEdit(${row})" title="לחץ לעריכת המוצר">${esc(gc(p,COL.HEB))}</div>
         <div style="font-size:10px;color:var(--t2)">${fmtDate(d)} · ${gc(p,COL.PRICE)?gc(p,COL.PRICE)+'$':''}</div>
       </div>
       <button class="btn sec sm" onclick="closeModal();triggerPublish(${row},'${tgt}')">שגר עכשיו</button>
@@ -2754,6 +2761,8 @@ function openRecycleModal(sCol,name,ico,initialShown){
 
   window._recycleLoadMore=function(){
     _recycleShown+=PAGE;
+    // Keep global state in sync so saveDashNavState always has the current count
+    dashNavigationState.recycleShown = _recycleShown;
     const mcBody=document.getElementById('mc-body');
     if(!mcBody)return;
     const body=mcBody.querySelector('#recycle-items');
@@ -2788,13 +2797,19 @@ let dashNavigationState = {
 };
 
 // ── שמירת מצב ניווט מהדשבורד ────────────────────────────────────
-function saveDashNavState(sCol, channelName, channelIcon, recycleShown){
+// נקראת מה-onclick של שם מוצר בפופ-אפ המחזור.
+// הנתונים כבר מעודכנים ב-dashNavigationState ע"י openRecycleModal ו-_recycleLoadMore,
+// כך שאין צורך להעביר פרמטרים דרך מחרוזת HTML (שהיה גורם ל-ReferenceError).
+function saveDashNavState(){
   dashNavigationState = {
     active: true,
-    sCol: sCol,
-    channelName: channelName,
-    channelIcon: channelIcon,
-    recycleShown: recycleShown || 5,
+    sCol: dashNavigationState._pendingSCol,
+    channelName: dashNavigationState._pendingName,
+    channelIcon: dashNavigationState._pendingIco,
+    recycleShown: dashNavigationState.recycleShown || 5,
+    _pendingSCol: null,
+    _pendingName: null,
+    _pendingIco: null,
   };
 }
 
