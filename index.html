@@ -918,10 +918,16 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
             <button class="btn full" id="change-pw-btn">🔑 שנה</button>
           </div>
           <div class="cfcard">
-            <h3>🤖 Make Webhook</h3>
-            <div class="ibox" style="font-size:11px">payload: <code style="font-size:10px;background:#dbeafe;padding:1px 4px;border-radius:3px">{"target":"FB","link":"...","row":N}</code></div>
-            <div class="fg" style="margin-bottom:9px"><label>Webhook שיגור פוסט</label><input class="ifield" id="s-make-wh" type="text" placeholder="https://hook.eu2.make.com/..."></div>
-            <div class="fg" style="margin-bottom:13px"><label>🪄 Webhook שכתוב פוסט</label><input class="ifield" id="s-rewrite-wh" type="text" placeholder="https://hook.eu1.make.com/YOUR_WEBHOOK_HERE"></div>
+            <h3>🤖 Make Webhooks</h3>
+            <div class="ibox" style="font-size:11px">payload שיגור: <code style="font-size:10px;background:#dbeafe;padding:1px 4px;border-radius:3px">{"target":"FB","link":"...","row":N}</code></div>
+            <div class="fg" style="margin-bottom:9px">
+              <label>🤖 Make Webhook - משגר לפלטפורמות השונות</label>
+              <input class="ifield" id="s-make-wh" type="text" placeholder="https://hook.eu2.make.com/...">
+            </div>
+            <div class="fg" style="margin-bottom:13px">
+              <label>🪄 Make Webhook - סנריו ראשי לעריכה ומחיקה</label>
+              <input class="ifield" id="s-rewrite-wh" type="text" placeholder="https://hook.eu1.make.com/YOUR_WEBHOOK_HERE">
+            </div>
             <button class="btn full" id="save-make-btn">💾 שמור</button>
           </div>
           <div class="cfcard" style="grid-column:1/-1">
@@ -1640,52 +1646,51 @@ function renderDash(){
   function _isDraftStatus(s){return s==='טיוטה'||s==='draft'||s==='';}
 
   // ══════════════════════════════════════════════
-  // checkQueueEligibility(dateVal) — פונקציית זיהוי תאריך מחוזקת v2
-  // חסינה לפורמטים: "8/2/26", "25/02/2026", "23/03/2026 10:18"
+  // checkQueueEligibility(dateVal) — פונקציית זיהוי תאריך מחוזקת v3
+  // חסינה לפורמטים: "8/2/26", "25/02/2026", "23/03/2026 10:18", ISO strings
   // מחזירה true אם המוצר בתור (ריק, או 25+ ימים עברו).
   // ══════════════════════════════════════════════
   function checkQueueEligibility(dateVal){
-    // א. ריק / null / undefined → בתור
-    if(dateVal===null||dateVal===undefined)return true;
-    var raw=(dateVal+'').trim();
-    if(!raw)return true;
-
-    // ב. נקה שעות — "23/03/2026 10:18" → "23/03/2026"
-    var datePart=raw.split(' ')[0];
-
-    // ג. החלף נקודות ומקפים בלוכסן לאחידות פורמט
-    datePart=datePart.replace(/[.\-]/g,'/');
-
-    // ד. פרק לפי לוכסן
-    var parts=datePart.split('/');
-    if(parts.length<2)return true; // פורמט לא מוכר → נכנס לתור
+    // א. ריק / null / undefined / מחרוזת ריקה → בתור
+    if(!dateVal||String(dateVal).trim()==='')return true;
 
     var dd,mm,yy;
-    if(parts.length===2){
-      // DD/MM בלבד → שנה נוכחית
-      dd=parseInt(parts[0],10);
-      mm=parseInt(parts[1],10);
-      yy=new Date().getFullYear();
-    } else if(parts[0].length===4){
-      // YYYY/MM/DD
-      yy=parseInt(parts[0],10);
-      mm=parseInt(parts[1],10);
-      dd=parseInt(parts[2],10);
+
+    // ב. Date object (מגיע מ-_dateE.dt / _dateTG.dt / _dateIG.dt)
+    if(dateVal instanceof Date){
+      if(isNaN(dateVal.getTime()))return true;
+      dd=dateVal.getDate();mm=dateVal.getMonth()+1;yy=dateVal.getFullYear();
     } else {
-      // DD/MM/YYYY or DD/MM/YY — הפורמט הישראלי הרגיל
-      dd=parseInt(parts[0],10);
-      mm=parseInt(parts[1],10);
-      yy=parseInt(parts[2],10);
+      var raw=String(dateVal).trim();
+      if(!raw)return true;
+
+      // ג. ISO string מגוגל שיטס: "2026-02-05T22:00:00.000Z"
+      if(raw.indexOf('T')!==-1||raw.charAt(raw.length-1)==='Z'){
+        var dObj=new Date(raw);
+        if(isNaN(dObj.getTime()))return true;
+        dd=dObj.getDate();mm=dObj.getMonth()+1;yy=dObj.getFullYear();
+      } else {
+        // ד. פורמט ידני — נקה שעות ונרמל מפריד
+        var datePart=raw.split(' ')[0].replace(/[.\-]/g,'/');
+        var parts=datePart.split('/');
+        if(parts.length<2)return true;
+
+        if(parts.length===2){
+          dd=parseInt(parts[0],10);mm=parseInt(parts[1],10);yy=new Date().getFullYear();
+        } else if(parts[0].length===4){
+          yy=parseInt(parts[0],10);mm=parseInt(parts[1],10);dd=parseInt(parts[2],10);
+        } else {
+          dd=parseInt(parts[0],10);mm=parseInt(parts[1],10);yy=parseInt(parts[2],10);
+        }
+        if(yy>0&&yy<100)yy+=2000;
+      }
     }
 
-    // ה. תיקון שנה קצרה: "26" → 2026
-    if(yy>0&&yy<100)yy+=2000;
-
-    // ו. ולידציה בסיסית
+    // ה. ולידציה
     if(isNaN(dd)||isNaN(mm)||isNaN(yy))return true;
     if(dd<1||dd>31||mm<1||mm>12||yy<2000||yy>2100)return true;
 
-    // ז. חישוב הפרש ימים בצהריים (למניעת בעיות DST)
+    // ו. חישוב הפרש ימים בצהריים (למניעת בעיות DST)
     var postDate=new Date(yy,mm-1,dd,12,0,0,0);
     var todayNoon=new Date();todayNoon.setHours(12,0,0,0);
     var diffDays=Math.round((todayNoon.getTime()-postDate.getTime())/864e5);
@@ -1718,7 +1723,8 @@ function renderDash(){
     if(gs==='טיוטה'||gs==='draft')continue;
 
     // ── פייסבוק: סטטוס (COL.FB_S) + תאריך (COL.COL_E / עמודה E) ──
-    var rawFbDate=(p.data[COL.COL_E]||'').toString().trim();
+    // v3: מעדיפים את _dateE שכבר פורסר ע"י parseDateIL; fallback לגולמי
+    var rawFbDate=p._dateE ? p._dateE.dt : (p.data[COL.COL_E]||'');
     if(fbS==='פורסם'){
       cFB++;
     } else if(isStale(rawFbDate)){
@@ -1727,7 +1733,8 @@ function renderDash(){
       if(!_debugLogged){
         console.log('[QUEUE DEBUG] FB מוצר בתור:',
           (p.data[COL.HEB]||'ללא שם'),
-          '| עמודה E גולמי:', rawFbDate,
+          '| _dateE:', p._dateE,
+          '| עמודה E גולמי:', p.data[COL.COL_E],
           '| סטטוס FB:', fbS,
           '| סטטוס גלובלי:', globalS);
         _debugLogged=true;
@@ -1735,7 +1742,7 @@ function renderDash(){
     }
 
     // ── טלגרם: סטטוס (COL.TG_S) + תאריך (COL.COL_Q / עמודה Q) ──
-    var rawTgDate=(p.data[COL.COL_Q]||'').toString().trim();
+    var rawTgDate=p._dateTG ? p._dateTG.dt : (p.data[COL.COL_Q]||'');
     if(tgS==='פורסם'){
       cTG++;
     } else if(isStale(rawTgDate)){
@@ -1744,7 +1751,7 @@ function renderDash(){
     }
 
     // ── אינסטגרם: סטטוס (COL.IG_S) + תאריך (COL.COL_IG_D / עמודה U) ──
-    var rawIgDate=(p.data[COL.COL_IG_D]||'').toString().trim();
+    var rawIgDate=p._dateIG ? p._dateIG.dt : (p.data[COL.COL_IG_D]||'');
     if(igS==='פורסם'){
       cIG++;
     } else if(isStale(rawIgDate)){
