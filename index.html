@@ -1630,7 +1630,9 @@ function openDraftsModal(){
         +'<div style="font-size:12px;font-weight:800;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(gc(p,COL.HEB))+'</div>'
         +'<div style="font-size:10px;color:var(--t2)">'+(gc(p,COL.CAT)?'📂 '+esc(gc(p,COL.CAT)):'ללא קטגוריה')+(gc(p,COL.PRICE)?' · '+gc(p,COL.PRICE)+'$':'')+'</div>'
       +'</div>'
-      +'<button class="btn sec sm" onclick="event.stopPropagation();closeModal();openEditModal('+row+')">✏️</button>'
+      +'<button class="btn sec sm" onclick="event.stopPropagation();closeModal();openEditModal('+row+')" title="ערוך">✏️</button>'
+      +'<button class="btn sec sm" style="color:var(--blue);border-color:var(--blue)" onclick="event.stopPropagation();rewritePost('+row+')" title="שכתוב פוסט בעזרת הקופירייטר">🪄</button>'
+      +'<button class="btn sec sm" style="color:var(--red);border-color:var(--red)" onclick="event.stopPropagation();closeModal();deleteProduct('+row+')" title="מחק מוצר">🗑️</button>'
     +'</div>';
   }).join('');
   if(drafts.length>60)body+='<div style="text-align:center;padding:10px;font-size:11px;color:var(--t2)">...ועוד '+(drafts.length-60)+' טיוטות</div>';
@@ -2294,7 +2296,7 @@ function renderTableRows(rows){
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         <button class="btn sec sm" onclick="openViewModal(${row})">👁</button>
         <button class="btn sm" onclick="openEditModal(${row})">✏️</button>
-        <button class="btn sec sm" style="color:var(--blue);border-color:var(--blue)" title="שכתוב פוסט באמצעות Make" onclick="rewritePost(${row})">🪄</button>
+        <button class="btn sec sm" style="color:var(--blue);border-color:var(--blue)" title="שכתוב פוסט בעזרת הקופירייטר" onclick="rewritePost(${row})">🪄</button>
         <button class="btn sec sm" style="color:var(--red);border-color:var(--red)" title="מחק מוצר" onclick="deleteProduct(${row})">🗑️</button>
       </div></td>
     </tr>`;}).join('');
@@ -2657,30 +2659,23 @@ async function rewritePost(rowNum){
 }
 
 // Fix 3: מחיקת מוצר — אייקון פח אשפה בטבלה
-function deleteProduct(rowNum){
+async function deleteProduct(rowNum){
   const p=G.posts.find(x=>x.row===rowNum);
   const name=p?gc(p,COL.HEB)||gc(p,COL.ENG)||('שורה '+rowNum):'שורה '+rowNum;
-  if(!confirm('האם אתה בטוח שברצונך למחוק את המוצר מהמערכת?\n\n'+name))return;
-  // קריאה ל-GAS למחיקת השורה
-  if(typeof google!=='undefined'&&google.script&&google.script.run){
-    google.script.run
-      .withSuccessHandler(function(){
-        // הסר מהמצב המקומי
-        G.posts=G.posts.filter(x=>x.row!==rowNum);
-        G.filtered=G.filtered.filter(x=>x.row!==rowNum);
-        filterPosts();renderDash();
-        toast('🗑️ המוצר נמחק בהצלחה','ok');
-      })
-      .withFailureHandler(function(e){
-        toast('שגיאה במחיקה: '+(e.message||e),'err');
-      })
-      .deleteRow(rowNum);
-  } else {
-    // סביבה ללא GAS (Vercel / דמו) — מחיקה מקומית בלבד
+  if(!confirm('האם אתה בטוח שברצונך למחוק את המוצר?\n\n'+name+'\n\nהפעולה תסמן את המוצר כ"נמחק" בגיליון.'))return;
+  toast('מוחק...','inf');
+  // כתוב 'נמחק' לעמודה G (COL.FB_S = אינדקס 6 → עמודה 7 ב-1-based)
+  const colG=COL.FB_S+1; // = 7
+  const ok=await writeSheet(rowNum,{[colG]:'נמחק'});
+  if(ok){
+    // עדכן מקומית רק לאחר אישור מהשרת
+    if(p){p.data[COL.FB_S]='נמחק';}
     G.posts=G.posts.filter(x=>x.row!==rowNum);
     G.filtered=G.filtered.filter(x=>x.row!==rowNum);
     filterPosts();renderDash();
-    toast('🗑️ הוסר מהתצוגה (ללא GAS — הגדר Apps Script למחיקה קבועה)','warn');
+    toast('🗑️ המוצר סומן כנמחק ועודכן בגיליון','ok');
+  }else{
+    toast('שגיאה: המוצר לא נמחק — בדוק חיבור ל-Apps Script','err');
   }
 }
 
