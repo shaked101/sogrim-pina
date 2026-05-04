@@ -2658,24 +2658,48 @@ async function rewritePost(rowNum){
   }
 }
 
-// Fix 3: מחיקת מוצר — אייקון פח אשפה בטבלה
+// Fix 3: מחיקת מוצר — מחיקה פיזית של השורה מהגיליון
 async function deleteProduct(rowNum){
   const p=G.posts.find(x=>x.row===rowNum);
   const name=p?gc(p,COL.HEB)||gc(p,COL.ENG)||('שורה '+rowNum):'שורה '+rowNum;
-  if(!confirm('האם אתה בטוח שברצונך למחוק את המוצר?\n\n'+name+'\n\nהפעולה תסמן את המוצר כ"נמחק" בגיליון.'))return;
+
+  // עמודה AA = אינדקס 26 (0-based) — מספר שורה פיזי בגיליון לפי המערכת
+  // אם קיים ותקין — נשתמש בו; אחרת נחזור ל-rowNum המחושב
+  const physicalRow=(p&&p.data[26]&&!isNaN(parseInt(p.data[26])))
+    ?parseInt(p.data[26])
+    :rowNum;
+
+  if(!confirm('האם אתה בטוח שברצונך למחוק לצמיתות את המוצר מהגיליון?\n\n📦 '+name+'\n(שורה '+physicalRow+')\n\n⚠️ פעולה זו אינה הפיכה!'))return;
+
+  const url=getPostsUrl();
+  if(!url){toast('Apps Script לא מוגדר','err');return;}
+
   toast('מוחק...','inf');
-  // כתוב 'נמחק' לעמודה G (COL.FB_S = אינדקס 6 → עמודה 7 ב-1-based)
-  const colG=COL.FB_S+1; // = 7
-  const ok=await writeSheet(rowNum,{[colG]:'נמחק'});
-  if(ok){
-    // עדכן מקומית רק לאחר אישור מהשרת
-    if(p){p.data[COL.FB_S]='נמחק';}
-    G.posts=G.posts.filter(x=>x.row!==rowNum);
-    G.filtered=G.filtered.filter(x=>x.row!==rowNum);
-    filterPosts();renderDash();
-    toast('🗑️ המוצר סומן כנמחק ועודכן בגיליון','ok');
-  }else{
-    toast('שגיאה: המוצר לא נמחק — בדוק חיבור ל-Apps Script','err');
+  try{
+    // POST עם mode:'cors' כדי לקבל תשובה אמיתית (לא no-cors שמחזיר opaque)
+    const resp=await fetch(url,{
+      method:'POST',
+      mode:'cors',
+      redirect:'follow',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({action:'deleteRow',row:physicalRow})
+    });
+    let result={ok:false,error:'תשובה לא תקינה מהשרת'};
+    try{result=await resp.json();}catch(e){
+      // Apps Script מחזיר לפעמים 200 עם גוף ריק — נחשב הצלחה
+      if(resp.ok)result={ok:true};
+    }
+    if(result.ok){
+      // הצלחה — הסר מה-UI רק לאחר אישור מהשרת
+      G.posts=G.posts.filter(x=>x.row!==rowNum);
+      G.filtered=G.filtered.filter(x=>x.row!==rowNum);
+      filterPosts();renderDash();
+      toast('🗑️ המוצר נמחק לצמיתות מהגיליון','ok');
+    }else{
+      toast('שגיאת מחיקה: '+(result.error||'תשובה שלילית מהשרת'),'err');
+    }
+  }catch(e){
+    toast('שגיאת תקשורת: '+e.message,'err');
   }
 }
 
