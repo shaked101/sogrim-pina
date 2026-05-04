@@ -1643,124 +1643,125 @@ function renderDash(){
   // v34: todayNum computed ONCE, guaranteed pure integer via getTodayNum()
   var todayNum=getTodayNum();
 
-  function _isDraftStatus(s){return s==='טיוטה'||s==='draft'||s==='';}
-
   // ══════════════════════════════════════════════
-  // checkQueueEligibility(dateVal) — פונקציית זיהוי תאריך מחוזקת v3
-  // חסינה לפורמטים: "8/2/26", "25/02/2026", "23/03/2026 10:18", ISO strings
-  // מחזירה true אם המוצר בתור (ריק, או 25+ ימים עברו).
+  // isEligibleForQueue(statusVal, dateVal) — v4
+  // מבנה עמודות מאושר:
+  //   FB:  סטטוס = עמודה G (index 6),  תאריך = עמודה E (index 4)
+  //   TG:  סטטוס = עמודה P (index 15), תאריך = עמודה Q (index 16)
+  //   IG:  סטטוס = עמודה T (index 19), תאריך = עמודה U (index 20)
+  // ערכי סטטוס אפשריים: 'טיוטה' | 'מאושר' | 'פורסם'
   // ══════════════════════════════════════════════
-  function checkQueueEligibility(dateVal){
-    // א. ריק / null / undefined / מחרוזת ריקה → בתור
-    if(!dateVal||String(dateVal).trim()==='')return true;
+  function isEligibleForQueue(statusVal, dateVal){
+    var s=(statusVal||'').toString().trim();
 
+    // 1. טיוטה → לא בתור לעולם
+    if(s==='טיוטה'||s.toLowerCase()==='draft')return false;
+
+    // 2. פורסם → לא בתור (כבר יצא)
+    if(s==='פורסם')return false;
+
+    // 3. מאושר (או כל ערך אחר שאינו טיוטה/פורסם) — בדוק תאריך
+    var d=(dateVal||'').toString().trim();
+
+    // תאריך ריק = מאושר ללא תיזמון = בתור!
+    if(!d)return true;
+
+    // ── פרסר תאריך ──
     var dd,mm,yy;
-
-    // ב. Date object (מגיע מ-_dateE.dt / _dateTG.dt / _dateIG.dt)
-    if(dateVal instanceof Date){
-      if(isNaN(dateVal.getTime()))return true;
-      dd=dateVal.getDate();mm=dateVal.getMonth()+1;yy=dateVal.getFullYear();
-    } else {
-      var raw=String(dateVal).trim();
-      if(!raw)return true;
-
-      // ג. ISO string מגוגל שיטס: "2026-02-05T22:00:00.000Z"
-      if(raw.indexOf('T')!==-1||raw.charAt(raw.length-1)==='Z'){
-        var dObj=new Date(raw);
-        if(isNaN(dObj.getTime()))return true;
-        dd=dObj.getDate();mm=dObj.getMonth()+1;yy=dObj.getFullYear();
+    try{
+      if(d.indexOf('T')!==-1||d.charAt(d.length-1)==='Z'){
+        // ISO מגוגל שיטס: "2026-02-05T22:00:00.000Z"
+        var iso=new Date(d);
+        if(isNaN(iso.getTime()))return true; // לא ניתן לפרסר → בתור
+        dd=iso.getDate();mm=iso.getMonth()+1;yy=iso.getFullYear();
       } else {
-        // ד. פורמט ידני — נקה שעות ונרמל מפריד
-        var datePart=raw.split(' ')[0].replace(/[.\-]/g,'/');
-        var parts=datePart.split('/');
-        if(parts.length<2)return true;
-
-        if(parts.length===2){
-          dd=parseInt(parts[0],10);mm=parseInt(parts[1],10);yy=new Date().getFullYear();
-        } else if(parts[0].length===4){
-          yy=parseInt(parts[0],10);mm=parseInt(parts[1],10);dd=parseInt(parts[2],10);
+        // פורמט ידני ישראלי: "8/2/26", "25/02/2026", "23/03/2026 10:18"
+        var clean=d.split(' ')[0].replace(/[.\-]/g,'/');
+        var pts=clean.split('/');
+        if(pts.length<2)return true;
+        if(pts.length===2){
+          dd=parseInt(pts[0],10);mm=parseInt(pts[1],10);yy=new Date().getFullYear();
+        } else if(pts[0].length===4){
+          yy=parseInt(pts[0],10);mm=parseInt(pts[1],10);dd=parseInt(pts[2],10);
         } else {
-          dd=parseInt(parts[0],10);mm=parseInt(parts[1],10);yy=parseInt(parts[2],10);
+          dd=parseInt(pts[0],10);mm=parseInt(pts[1],10);yy=parseInt(pts[2],10);
         }
         if(yy>0&&yy<100)yy+=2000;
       }
-    }
+    }catch(e){return true;}
 
-    // ה. ולידציה
+    // ולידציה
     if(isNaN(dd)||isNaN(mm)||isNaN(yy))return true;
     if(dd<1||dd>31||mm<1||mm>12||yy<2000||yy>2100)return true;
 
-    // ו. חישוב הפרש ימים בצהריים (למניעת בעיות DST)
+    // חישוב הפרש ימים בצהריים (למניעת בעיות DST)
     var postDate=new Date(yy,mm-1,dd,12,0,0,0);
     var todayNoon=new Date();todayNoon.setHours(12,0,0,0);
     var diffDays=Math.round((todayNoon.getTime()-postDate.getTime())/864e5);
 
-    // 25 ימים ומעלה → בתור
+    // 25 ימים ומעלה = מוצר ישן שמחכה למחזור → בתור
     return diffDays>=25;
   }
-  // שם עתיק לתאימות לאחור
-  var isStale=checkQueueEligibility;
 
   var cDraft=0,cFB=0,cTG=0,cIG=0,cFBq=0,cTGq=0,cIGq=0;
   var fbQueuePosts=[],tgQueuePosts=[],igQueuePosts=[];
-  var _debugLogged=false; // נדפיס דוגמה אחת לקונסול
+  var _queueDebugDone=false; // debug חד-פעמי לקונסול
 
   for(var i=0;i<n;i++){
     var p=ps[i];
+    var row=p.data; // קיצור נוח: row[N] = ערך עמודה N
 
-    // קריאת סטטוסים גולמיים לפי COL map
-    var globalS=(p.data[COL.STATUS]||'').toString().trim();   // עמודה G (index 6)
-    var fbS    =(p.data[COL.FB_S]  ||'').toString().trim();   // עמודה F/R (index 17)
-    var tgS    =(p.data[COL.TG_S]  ||'').toString().trim();   // עמודה R   (index 15)
-    var igS    =(p.data[COL.IG_S]  ||'').toString().trim();   // עמודה V   (index 19)
+    // ── אינדקסים מאושרים ──────────────────────────
+    // FB:  סטטוס = row[6]  (עמודה G), תאריך = row[4]  (עמודה E)
+    // TG:  סטטוס = row[15] (עמודה P), תאריך = row[16] (עמודה Q)
+    // IG:  סטטוס = row[19] (עמודה T), תאריך = row[20] (עמודה U)
+    var fbStatus =(row[6] ||'').toString().trim();
+    var fbDate   =(row[4] ||'').toString().trim();
+    var tgStatus =(row[15]||'').toString().trim();
+    var tgDate   =(row[16]||'').toString().trim();
+    var igStatus =(row[19]||'').toString().trim();
+    var igDate   =(row[20]||'').toString().trim();
 
-    // ספירת טיוטות
-    var allBlank=_isDraftStatus(fbS)&&_isDraftStatus(tgS)&&_isDraftStatus(igS);
-    if(allBlank&&(_isDraftStatus(globalS)||!globalS))cDraft++;
+    // ספירת טיוטות: מוצר שכל הסטטוסים שלו הם 'טיוטה'
+    if(fbStatus==='טיוטה'&&tgStatus==='טיוטה'&&igStatus==='טיוטה')cDraft++;
 
-    // תנאי חובה: סטטוס גלובלי מפורש 'טיוטה'/'draft' → דלג לחלוטין
-    var gs=globalS.toLowerCase();
-    if(gs==='טיוטה'||gs==='draft')continue;
-
-    // ── פייסבוק: סטטוס (COL.FB_S) + תאריך (COL.COL_E / עמודה E) ──
-    // v3: מעדיפים את _dateE שכבר פורסר ע"י parseDateIL; fallback לגולמי
-    var rawFbDate=p._dateE ? p._dateE.dt : (p.data[COL.COL_E]||'');
-    if(fbS==='פורסם'){
+    // ── פייסבוק ────────────────────────────────────
+    if(fbStatus==='פורסם'){
       cFB++;
-    } else if(isStale(rawFbDate)){
+    } else if(isEligibleForQueue(fbStatus, fbDate)){
       cFBq++;
       fbQueuePosts.push(p);
-      if(!_debugLogged){
-        console.log('[QUEUE DEBUG] FB מוצר בתור:',
-          (p.data[COL.HEB]||'ללא שם'),
-          '| _dateE:', p._dateE,
-          '| עמודה E גולמי:', p.data[COL.COL_E],
-          '| סטטוס FB:', fbS,
-          '| סטטוס גלובלי:', globalS);
-        _debugLogged=true;
+      // 🐛 Debug: מדפיס את המוצר הראשון שנמצא בתור
+      if(!_queueDebugDone){
+        console.log('[QUEUE v4] ✅ FB מוצר ראשון בתור:', {
+          name: (row[0]||'ללא שם'),
+          fbStatus: fbStatus,
+          fbDate:   fbDate,
+          rawRow4:  row[4],
+          rawRow6:  row[6],
+        });
+        _queueDebugDone=true;
       }
     }
 
-    // ── טלגרם: סטטוס (COL.TG_S) + תאריך (COL.COL_Q / עמודה Q) ──
-    var rawTgDate=p._dateTG ? p._dateTG.dt : (p.data[COL.COL_Q]||'');
-    if(tgS==='פורסם'){
+    // ── טלגרם ─────────────────────────────────────
+    if(tgStatus==='פורסם'){
       cTG++;
-    } else if(isStale(rawTgDate)){
+    } else if(isEligibleForQueue(tgStatus, tgDate)){
       cTGq++;
       tgQueuePosts.push(p);
     }
 
-    // ── אינסטגרם: סטטוס (COL.IG_S) + תאריך (COL.COL_IG_D / עמודה U) ──
-    var rawIgDate=p._dateIG ? p._dateIG.dt : (p.data[COL.COL_IG_D]||'');
-    if(igS==='פורסם'){
+    // ── אינסטגרם ───────────────────────────────────
+    if(igStatus==='פורסם'){
       cIG++;
-    } else if(isStale(rawIgDate)){
+    } else if(isEligibleForQueue(igStatus, igDate)){
       cIGq++;
       igQueuePosts.push(p);
     }
   }
 
-  console.log('[QUEUE TOTALS] FB:',cFBq,'| TG:',cTGq,'| IG:',cIGq,'| סה"כ מוצרים:',n);
+  console.log('[QUEUE v4 TOTALS] FB:',cFBq,'| TG:',cTGq,'| IG:',cIGq,'| סה"כ מוצרים:',n);
   // Store queue posts for popup
   G._fbQueue=fbQueuePosts;G._tgQueue=tgQueuePosts;G._igQueue=igQueuePosts;
   document.getElementById('st-total').textContent=n;
