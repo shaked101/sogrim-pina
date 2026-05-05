@@ -1556,9 +1556,14 @@ async function writeSheet(rowNum,updates){
   const url=getPostsUrl();
   if(!url){toast('Apps Script לא מוגדר','err');return false;}
   try{
-    await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',row:rowNum,updates})});
-    // Optimistic update — assume success since no-cors gives opaque response
+    // FIX: Use column AA (data[26], 0-based) as the stable physical row ID.
+    // p.row is position-based and drifts after deletions; data[26] is the true unique key.
     const p=G.posts.find(x=>x.row===rowNum);
+    const physicalRow=(p&&p.data[26]&&!isNaN(parseInt(p.data[26])))
+      ?parseInt(p.data[26])
+      :rowNum;
+    await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',row:physicalRow,updates})});
+    // Optimistic update — assume success since no-cors gives opaque response
     if(p){for(const[col,val]of Object.entries(updates))p.data[parseInt(col)-1]=val;}
     return true;
   }catch(e){toast('שגיאת כתיבה: '+e.message,'err');return false;}
@@ -1586,7 +1591,7 @@ function openDraftsModal(){
       +'</div>'
       +'<button class="btn sec sm" onclick="event.stopPropagation();closeModal();openEditModal('+row+')" title="ערוך">✏️</button>'
       +'<button class="btn sec sm" style="color:var(--blue);border-color:var(--blue)" onclick="event.stopPropagation();rewritePost('+row+')" title="שכתוב פוסט בעזרת הקופירייטר">🪄</button>'
-      +'<button class="btn sec sm" style="color:var(--red);border-color:var(--red)" onclick="event.stopPropagation();closeModal();deleteProduct('+row+')" title="מחק מוצר">🗑️</button>'
+      +'<button class="btn sec sm" style="color:var(--red);border-color:var(--red)" onclick="event.stopPropagation();deleteProduct('+row+')" title="מחק מוצר">🗑️</button>'
     +'</div>';
   }).join('');
   if(drafts.length>60)body+='<div style="text-align:center;padding:10px;font-size:11px;color:var(--t2)">...ועוד '+(drafts.length-60)+' טיוטות</div>';
@@ -2679,7 +2684,7 @@ async function deleteProduct(rowNum){
                 +'</div>'
                 +'<button class="btn sec sm" onclick="event.stopPropagation();closeModal();openEditModal('+row+')" title="ערוך">✏️</button>'
                 +'<button class="btn sec sm" style="color:var(--blue);border-color:var(--blue)" onclick="event.stopPropagation();rewritePost('+row+')" title="שכתוב פוסט בעזרת הקופירייטר">🪄</button>'
-                +'<button class="btn sec sm" style="color:var(--red);border-color:var(--red)" onclick="event.stopPropagation();closeModal();deleteProduct('+row+')" title="מחק מוצר">🗑️</button>'
+                +'<button class="btn sec sm" style="color:var(--red);border-color:var(--red)" onclick="event.stopPropagation();deleteProduct('+row+')" title="מחק מוצר">🗑️</button>'
               +'</div>';
             }).join('');
             if(updatedDrafts.length>60)newBody+='<div style="text-align:center;padding:10px;font-size:11px;color:var(--t2)">...ועוד '+(updatedDrafts.length-60)+' טיוטות</div>';
