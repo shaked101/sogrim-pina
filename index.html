@@ -569,8 +569,8 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
                   </table>
                 </div>
               </div>
-              <!-- Product detail cards -->
-              <div id="idea-posts-wrap"></div>
+              <!-- Product detail cards — hidden, replaced by table above -->
+              <div id="idea-posts-wrap" style="display:none"></div>
               <div id="idea-tags-wrap" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--b1);display:none">
                 <div class="slbl2" style="margin-bottom:6px">האשטגים מוצעים</div>
                 <div id="idea-tags" style="font-size:12px;color:var(--blue);line-height:1.8"></div>
@@ -688,10 +688,8 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
       <!-- CALENDAR -->
       <div class="pg" id="pg-calendar">
         <div class="ph">
-          <div><div class="pt">לוח שנה</div><div class="ps">עמודה E בלבד — פרסום ידני פייסבוק</div></div>
+          <div><div class="pt">לוח שנה</div></div>
           <div style="display:flex;gap:8px;font-size:11px;align-items:center">
-            <span style="color:var(--fb)">■ FB (עמודה E)</span>
-
           </div>
         </div>
         <div class="calwrap">
@@ -2464,10 +2462,18 @@ function openEditModal(rowNum){
     </div>
     <div class="sep"></div>
     <div class="slbl2" style="margin-bottom:8px">סטטוס ערוצים</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-      <div class="fg"><label style="font-size:10px;color:#0369a1;font-weight:800">✈️ טלגרם</label><select class="fsel" id="e-tgs" style="width:100%">${statusOpts(gc(p,COL.TG_S))}</select></div>
-      <div class="fg"><label style="font-size:10px;color:var(--fb);font-weight:800">📘 פייסבוק</label><select class="fsel" id="e-fbs" style="width:100%">${statusOpts(gc(p,COL.FB_S))}</select></div>
+    <!-- כפתור אשר הכל -->
+    <div style="margin-bottom:9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <button class="btn sm" style="background:#15803d;color:#fff" onclick="approveAllStatuses('מאושר')">✅ אשר הכל (מאושר)</button>
+      <button class="btn sm" style="background:#1d4ed8;color:#fff" onclick="approveAllStatuses('פורסם')">📢 אשר הכל (פורסם)</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">
+      <div class="fg"><label style="font-size:10px;color:var(--tx);font-weight:800">📋 סטטוס כללי (G)</label><select class="fsel" id="e-status" style="width:100%">${statusOpts(gc(p,COL.STATUS))}</select></div>
+      <div class="fg"><label style="font-size:10px;color:#0369a1;font-weight:800">✈️ טלגרם</label><select class="fsel" id="e-tgs" style="width:100%" onchange="onFBStatusChange(this,'e-tgs')">${statusOpts(gc(p,COL.TG_S))}</select></div>
       <div class="fg"><label style="font-size:10px;color:var(--ig);font-weight:800">📸 אינסטגרם</label><select class="fsel" id="e-igs" style="width:100%">${statusOpts(gc(p,COL.IG_S))}</select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      <div class="fg"><label style="font-size:10px;color:var(--fb);font-weight:800">📘 פייסבוק (→G,R)</label><select class="fsel" id="e-fbs" style="width:100%" onchange="onFBStatusChange(this,'e-fbs')">${statusOpts(gc(p,COL.FB_S))}</select></div>
     </div>
   `;
   const footerBtns = fromDash
@@ -2477,6 +2483,26 @@ function openEditModal(rowNum){
     : `<button class="btn sec" onclick="closeModal()">ביטול</button>
        <button class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>`;
   openModal('✏️ עריכת פוסט — שורה '+rowNum,body,footerBtns);
+}
+
+// ── כפתור "אשר הכל": מעדכן G, P, R, T לאותו ערך ───────────────────
+function approveAllStatuses(val){
+  // G = STATUS (e-status), P = TG_S (e-tgs), R = FB_S (e-fbs), T = IG_S (e-igs)
+  ['e-status','e-tgs','e-fbs','e-igs'].forEach(function(id){
+    const el=document.getElementById(id);
+    if(el)el.value=val;
+  });
+}
+
+// ── שינוי סטטוס פייסבוק מעדכן גם G (סטטוס כללי) ─────────────────
+function onFBStatusChange(sel,sourceId){
+  if(sourceId!=='e-fbs')return; // רק פייסבוק מפעיל לוגיקה זו
+  const val=sel.value;
+  if(val==='מאושר'||val==='פורסם'){
+    // עדכן G (e-status)
+    const statusEl=document.getElementById('e-status');
+    if(statusEl)statusEl.value=val;
+  }
 }
 
 async function saveEdit(rowNum){
@@ -2491,6 +2517,7 @@ async function saveEdit(rowNum){
     [COL.LINK+1]:gv('e-link'),[COL.IMG+1]:gv('e-img'),
     [COL.COL_L+1]:gv('e-date-l'),
     [COL.CONTENT+1]:contentEl.value,[COL.TAGS+1]:gv('e-tags'),
+    [COL.STATUS+1]:gv('e-status'),
     [COL.TG_S+1]:gv('e-tgs'),[COL.FB_S+1]:gv('e-fbs'),[COL.IG_S+1]:gv('e-igs'),
   };
 
@@ -2562,6 +2589,7 @@ async function saveEditReturnToDash(rowNum){
     [COL.LINK+1]:gv('e-link'),[COL.IMG+1]:gv('e-img'),
     [COL.COL_L+1]:gv('e-date-l'),
     [COL.CONTENT+1]:contentEl.value,[COL.TAGS+1]:gv('e-tags'),
+    [COL.STATUS+1]:gv('e-status'),
     [COL.TG_S+1]:gv('e-tgs'),[COL.FB_S+1]:gv('e-fbs'),[COL.IG_S+1]:gv('e-igs'),
   };
 
@@ -2607,7 +2635,7 @@ async function rewritePost(rowNum){
   const c=getCfg();
   const webhookUrl=(c.rewriteWebhook||'').trim()||REWRITE_WEBHOOK_DEFAULT;
   const text=gc(p,COL.CONTENT)||gc(p,COL.HEB)||'';
-  const payload={row:rowNum,text,name:gc(p,COL.HEB),price:gc(p,COL.PRICE),cat:gc(p,COL.CAT)};
+  const payload={rowNumber:Number(rowNum),row:Number(rowNum),text,name:gc(p,COL.HEB),price:gc(p,COL.PRICE),cat:gc(p,COL.CAT)};
   toast('📤 בקשת שכתוב נשלחה...','inf');
   try{
     await fetch(webhookUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -2920,15 +2948,14 @@ function renderIdeaPosts(){
     const name=gc(p,COL.HEB)||gc(p,COL.ENG)||'מוצר',price=gc(p,COL.PRICE),link=gc(p,COL.LINK),content=gc(p,COL.CONTENT),img=gc(p,COL.IMG),tags=gc(p,COL.TAGS),rating=gc(p,COL.RATING),bought=gc(p,COL.BOUGHT);
     return`<div style="border:1px solid var(--b1);border-radius:8px;overflow:hidden;margin-bottom:9px;background:var(--s2)">
       <div style="display:flex;gap:12px;padding:12px">
-        ${img?`<img src="${img}" style="width:96px;height:96px;object-fit:cover;border-radius:7px;flex-shrink:0" onerror="this.style.display='none'">`:
+        ${img?`<img src="${img}" style="width:96px;height:96px;object-fit:cover;border-radius:7px;flex-shrink:0;cursor:zoom-in" onerror="this.style.display='none'" onclick="openImageLightbox('${img.replace(/'/g,"\\'")}')" title="לחץ להגדלה">`:
           `<div style="width:96px;height:96px;border-radius:7px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">📦</div>`}
         <div style="flex:1;min-width:0">
-          <div style="font-size:11px;font-weight:800;color:var(--acc);margin-bottom:5px">${i+1}. ${esc(name)}</div>
+          <div style="font-size:11px;font-weight:800;color:var(--acc);margin-bottom:5px">${i+1}. ${link?`<a href="${esc(link)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;text-underline-offset:2px;cursor:pointer" title="פתח באלי אקספרס">${esc(name)}</a>`:esc(name)}</div>
           ${content?`<div style="font-size:12px;color:var(--tx);line-height:1.6;white-space:pre-wrap;max-height:100px;overflow-y:auto">${esc(content.slice(0,250))}${content.length>250?'...':''}</div>`:
             `<div style="font-size:12px;color:var(--tx);line-height:1.6">${esc(name)}${price?' — '+price+'$':''}${rating?'<br>⭐ '+rating:''}${bought?'<br>🔥 '+Number(bought).toLocaleString()+' רכישות':''}</div>`}
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:7px">
             ${price?`<span style="font-family:monospace;font-weight:800;color:var(--acc);font-size:14px">${price}$</span>`:''}
-            ${link?`<a href="${esc(link)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--blue);font-weight:700;text-decoration:none">🔗 קישור</a>`:''}
           </div>
           ${tags?`<div style="font-size:10px;color:var(--t2);margin-top:5px">${esc(tags)}</div>`:''}
         </div>
@@ -3188,10 +3215,10 @@ function renderStatsDash(){
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false},
         // Fix 10: $ in tooltips
-        tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`}}},
+        tooltip:{mode:'index',intersect:false,callbacks:{label:ctx=>`${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`}}},
       scales:{x:{ticks:{color:'#64748b',font:{size:9},maxRotation:45,autoSkip:true}},
-        y:{ticks:{color:'#64748b',font:{size:9},callback:v=>'$'+v.toLocaleString()}}}}
-  });
+        y:{ticks:{color:'#64748b',font:{size:9},callback:v=>'$'+v.toLocaleString()}}},
+      datasets:{bar:{minBarLength:4}}}  });
 
   // Category chart from filteredData
   const catMap={};
