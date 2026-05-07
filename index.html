@@ -2616,9 +2616,12 @@ async function rewritePost(rowNum){
   // ── תיקון קריטי: וודא שמספר השורה תקין לפני השליחה ──────────────
   const p=G.posts.find(x=>x.row===rowNum);if(!p)return;
 
-  // מקור אמת: p.row — המספר שנשמר על האובייקט בעת טעינת הנתונים מהגיליון
-  const safeRow=Number(p.row);
-  console.log('[rewritePost] rowNum received:',rowNum,' | p.row:',p.row,' | safeRow:',safeRow);
+  // מקור אמת: עמודה AA (data[26]) — המספר הפיזי של השורה בגיליון (כמו writeSheet).
+  // אם עמודה AA קיימת ותקינה — נשתמש בה; אחרת נחזור ל-p.row המחושב.
+  const safeRow=(p.data[26]&&!isNaN(parseInt(p.data[26])))
+    ?parseInt(p.data[26])
+    :Number(p.row);
+  console.log('[rewritePost] rowNum received:',rowNum,' | p.data[26]:',p.data[26],' | p.row:',p.row,' | safeRow:',safeRow);
 
   if(!safeRow||isNaN(safeRow)||safeRow<=0){
     alert('שגיאה: מספר שורה חסר או לא תקין ('+safeRow+'). הפעולה בוטלה.');
@@ -4355,7 +4358,7 @@ function renderCartTable(){
     return`<tr>
       <td>${img?`<img class="timg" src="${img}" onerror="this.style.display='none'" style="cursor:zoom-in" onclick="openImageLightbox(this.src)" title="לחץ להגדלה">`:
         `<div class="timg-ph">📦</div>`}</td>
-      <td class="cname">${esc(gc(p,COL.HEB))}<small>${esc(gc(p,COL.ENG)).slice(0,44)}</small></td>
+      <td class="cname">${gc(p,COL.LINK)?`<a href="${esc(gc(p,COL.LINK))}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;text-underline-offset:2px" title="פתח באלי אקספרס ↗">${esc(gc(p,COL.HEB))}</a>`:esc(gc(p,COL.HEB))}<small>${esc(gc(p,COL.ENG)).slice(0,44)}</small></td>
       <td class="cprice">${gc(p,COL.PRICE)?gc(p,COL.PRICE)+'$':'—'}</td>
       <td><span class="chip2">${esc(gc(p,COL.CAT))||'—'}</span></td>
       <td><div class="chips">
