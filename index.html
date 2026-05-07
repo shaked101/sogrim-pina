@@ -619,6 +619,8 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           </div>
         </div>
 
+        </div><!-- /idea-result-wrap -->
+
         <!-- Empty state when no category selected yet -->
         <div id="creator-empty" style="text-align:center;padding:40px;color:var(--t2);font-size:13px">
           👆 בחר קטגוריה למעלה כדי להתחיל לבנות פוסט קולקציה
@@ -4358,7 +4360,7 @@ function renderCartTable(){
     return`<tr>
       <td>${img?`<img class="timg" src="${img}" onerror="this.style.display='none'" style="cursor:zoom-in" onclick="openImageLightbox(this.src)" title="לחץ להגדלה">`:
         `<div class="timg-ph">📦</div>`}</td>
-      <td class="cname">${gc(p,COL.LINK)?`<a href="${esc(gc(p,COL.LINK))}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;text-underline-offset:2px" title="פתח באלי אקספרס ↗">${esc(gc(p,COL.HEB))}</a>`:esc(gc(p,COL.HEB))}<small>${esc(gc(p,COL.ENG)).slice(0,44)}</small></td>
+      <td class="cname">${gc(p,COL.LINK)?`<a href="${esc(gc(p,COL.LINK))}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:inherit;text-decoration:underline dotted;text-underline-offset:2px" title="פתח באלי אקספרס ↗">${esc(gc(p,COL.HEB))}</a>`:esc(gc(p,COL.HEB))}<small>${esc(gc(p,COL.ENG)).slice(0,44)}</small></td>
       <td class="cprice">${gc(p,COL.PRICE)?gc(p,COL.PRICE)+'$':'—'}</td>
       <td><span class="chip2">${esc(gc(p,COL.CAT))||'—'}</span></td>
       <td><div class="chips">
