@@ -493,6 +493,21 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
             <div style="margin-top:5px;font-size:11px;font-weight:700;color:var(--tx);text-decoration:underline;text-underline-offset:2px" id="dash-comp-name">—</div>
           </div>
         </div>
+        <!-- Raffle active widget — shown only when a raffle is active -->
+        <div id="dash-raffle-widget" style="display:none;margin-bottom:13px">
+          <div class="scard" style="--cc:#7c3aed;cursor:pointer;position:relative" onclick="openDashRaffleModal()" title="לחץ לפרטי ההגרלה">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <div class="slbl" style="color:#7c3aed">🎟️ הגרלה פעילה</div>
+              <span style="font-size:9px;background:#7c3aed;color:#fff;border-radius:8px;padding:1px 7px;font-weight:800">פרטים ↗</span>
+            </div>
+            <div class="sval" id="dash-raffle-days" style="font-size:22px">—</div>
+            <div class="ssub">ימים נותרו</div>
+            <div style="margin-top:5px;display:flex;gap:12px;flex-wrap:wrap">
+              <span style="font-size:11px;font-weight:700;color:var(--tx);text-decoration:underline;text-underline-offset:2px" id="dash-raffle-name">—</span>
+              <span style="font-size:10px;color:var(--t2)" id="dash-raffle-stats"></span>
+            </div>
+          </div>
+        </div>
         <div class="sgrid4" style="grid-template-columns:repeat(3,1fr)">
           <div class="scard" style="--cc:var(--acc)"><div class="slbl">סה״כ פוסטים</div><div class="sval" id="st-total">—</div><div class="ssub">בשיטס</div></div>
           <div class="scard" style="--cc:#d97706;cursor:pointer" onclick="openDraftsModal()" title="לחץ לצפייה בטיוטות"><div class="slbl">טיוטות ✍️</div><div class="sval" id="st-draft">—</div><div class="ssub">לחץ לפירוט</div></div>
@@ -958,7 +973,6 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
             <div style="display:flex;gap:7px;flex-wrap:wrap">
               <button class="btn sec sm" onclick="openEditRaffleModal()" style="font-size:11px">✏️ ערוך הגרלה</button>
               <button class="btn sm" onclick="confirmEndRaffle()" style="background:var(--red);color:#fff;font-size:11px">🏁 סיים הגרלה</button>
-              <button class="btn sm" onclick="deleteActiveRaffle()" style="background:#7f1d1d;color:#fff;font-size:11px" title="מחק הגרלה לחלוטין">🗑️ מחק</button>
             </div>
           </div>
         </div>
@@ -1528,6 +1542,7 @@ function bootApp(){
   initCart();updateCartBadge();
   fillSettings();renderFCards();renderCatCards();
   _renderDashCompWidget();
+  _renderDashRaffleWidget();
 
   // v54: load ALL cloud data in parallel on boot
   Promise.all([
@@ -3960,6 +3975,93 @@ function _renderDashCompWidget(){
   if(nameEl)nameEl.textContent=cmp.name||'תחרות פעילה';
 }
 
+/* ── Dashboard raffle widget ── */
+function _renderDashRaffleWidget(){
+  var widget=document.getElementById('dash-raffle-widget');
+  if(!widget)return;
+  var ar=_getActiveRaffle();
+  if(!ar){
+    widget.style.display='none';
+    return;
+  }
+  widget.style.display='block';
+  // Days left
+  var daysLeft='—';
+  if(ar.endDate){
+    var d=new Date(ar.endDate);
+    if(!isNaN(d.getTime()))daysLeft=Math.max(0,Math.ceil((d.getTime()-Date.now())/86400000));
+    if(daysLeft===0)daysLeft='היום!';
+  }
+  var daysEl=document.getElementById('dash-raffle-days');
+  var nameEl=document.getElementById('dash-raffle-name');
+  var statsEl=document.getElementById('dash-raffle-stats');
+  if(daysEl)daysEl.textContent=daysLeft;
+  if(nameEl)nameEl.textContent=ar.name||'הגרלה פעילה';
+  if(statsEl){
+    var participantCount=RAFFLE.data.filter(function(p){return p.raffleId===ar.id;}).length;
+    var totalTickets=RAFFLE.data.filter(function(p){return p.raffleId===ar.id;}).reduce(function(s,p){return s+p.tickets;},0);
+    statsEl.textContent=participantCount+' משתתפים · '+totalTickets+' כרטיסים · מקס\' '+ar.maxTickets;
+  }
+}
+
+function openDashRaffleModal(){
+  var ar=_getActiveRaffle();
+  if(!ar){toast('אין הגרלה פעילה','inf');return;}
+  var participants=RAFFLE.data.filter(function(p){return p.raffleId===ar.id;});
+  var totalTickets=participants.reduce(function(s,p){return s+p.tickets;},0);
+  var daysLeft='—';
+  if(ar.endDate){
+    var d=new Date(ar.endDate);
+    if(!isNaN(d.getTime())){
+      var dl=Math.max(0,Math.ceil((d.getTime()-Date.now())/86400000));
+      daysLeft=dl===0?'היום!':dl+' ימים';
+    }
+  }
+  var top3=participants.slice().sort(function(a,b){return b.tickets-a.tickets;}).slice(0,3);
+  var top3Html=top3.length
+    ?top3.map(function(p,i){
+        var medals=['🥇','🥈','🥉'];
+        return'<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(226,232,240,.4);font-size:12px">'
+          +'<span>'+medals[i]+' '+esc(p.nameHe)+'</span>'
+          +'<span style="font-weight:900;color:#7c3aed">'+p.tickets+' 🎟️</span>'
+        +'</div>';
+      }).join('')
+    :'<div style="font-size:12px;color:var(--t3);padding:6px 0">אין משתתפים עדיין</div>';
+
+  var body=''
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
+      +'<div style="background:var(--s2);border-radius:8px;padding:12px;text-align:center">'
+        +'<div style="font-size:10px;color:var(--t2);font-weight:800;margin-bottom:4px">ימים נותרו</div>'
+        +'<div style="font-size:28px;font-weight:900;color:#7c3aed">'+daysLeft+'</div>'
+      +'</div>'
+      +'<div style="background:var(--s2);border-radius:8px;padding:12px;text-align:center">'
+        +'<div style="font-size:10px;color:var(--t2);font-weight:800;margin-bottom:4px">מקס׳ כרטיסים (Y)</div>'
+        +'<div style="font-size:28px;font-weight:900;color:var(--acc)">'+(ar.maxTickets||'—')+'</div>'
+      +'</div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'
+      +'<div style="background:var(--s2);border-radius:7px;padding:10px;text-align:center">'
+        +'<div style="font-size:9px;color:var(--t2);font-weight:800">משתתפים</div>'
+        +'<div style="font-size:20px;font-weight:900;color:var(--blue)">'+participants.length+'</div>'
+      +'</div>'
+      +'<div style="background:var(--s2);border-radius:7px;padding:10px;text-align:center">'
+        +'<div style="font-size:9px;color:var(--t2);font-weight:800">כרטיסים בסיר</div>'
+        +'<div style="font-size:20px;font-weight:900;color:#7c3aed">'+totalTickets+'</div>'
+      +'</div>'
+    +'</div>'
+    +(top3.length?'<div style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">TOP מובילים</div>'
+      +'<div style="background:var(--s2);border-radius:8px;padding:8px 12px">'+top3Html+'</div>':'')
+    +'<div style="font-size:11px;color:var(--t2);display:flex;gap:14px;flex-wrap:wrap;margin-top:12px">'
+      +'<span>📅 התחלה: <strong>'+_fmtRaffleDate(ar.startDate)+'</strong></span>'
+      +'<span>📅 סיום: <strong>'+_fmtRaffleDate(ar.endDate)+'</strong></span>'
+    +'</div>';
+
+  openModal('🎟️ '+esc(ar.name||'הגרלה פעילה'),body,
+    '<button class="btn sec" onclick="closeModal()">סגור</button>'
+    +'<button class="btn" onclick="closeModal();showPage(\'raffles\')" style="background:#7c3aed">עבור להגרלות ↗</button>'
+  );
+}
+
 function openDashCompModal(){
   var cmp=_getCmp();
   if(!cmp.endDate){toast('אין תחרות פעילה','inf');return;}
@@ -4376,6 +4478,7 @@ function deleteActiveRaffle(){
   _raffleRefreshSnapshots();
   _updateRaffleDatalist();
   _renderRaffleTable();
+  _renderDashRaffleWidget();
   toast('🗑️ הגרלה נמחקה לחלוטין','inf');
 }
 
@@ -4568,6 +4671,7 @@ function _saveNewRaffle(){
   _renderRaffleBanner();
   _raffleRefreshSnapshots();
   _renderRaffleTable();
+  _renderDashRaffleWidget();
   toast('✅ הגרלה נוצרה! FB:'+fbNow+' IG:'+igNow+' TG:'+tgNow,'ok');
 }
 
@@ -4582,7 +4686,7 @@ function openEditRaffleModal(){
       +'<div class="fg"><label>תאריך סיום</label><input type="date" class="ifield" id="re-end" value="'+(ar.endDate||'')+'"></div>'
     +'</div>'
     +'<div class="fg"><label>מספר כרטיסים מקסימלי (Y)</label><input type="number" class="ifield" id="re-max" value="'+(ar.maxTickets||0)+'" min="0"></div>',
-    '<button class="btn" style="background:var(--red);color:#fff" onclick="closeModal();confirmEndRaffle()">🗑 סיים הגרלה</button>'
+    '<button class="btn sm" style="background:#7f1d1d;color:#fff" onclick="closeModal();deleteActiveRaffle()">🗑️ מחק הגרלה</button>'
     +'<span style="flex:1"></span>'
     +'<button class="btn sec" onclick="closeModal()">ביטול</button>'
     +'<button class="btn grn" onclick="_saveEditRaffle()">💾 שמור</button>'
@@ -4615,6 +4719,7 @@ function confirmEndRaffle(){
   _renderRaffleBanner();
   _raffleRefreshSnapshots();
   _renderRaffleTable();
+  _renderDashRaffleWidget();
   toast('🏁 הגרלה הסתיימה','inf');
 }
 
@@ -4672,7 +4777,7 @@ function openAddRaffleParticipantModal(){
     '<div class="fg" style="margin-bottom:8px"><label>שם בעברית</label><input class="ifield" id="rnew-namehe" placeholder="שם בעברית"></div>'
     +'<div class="fg" style="margin-bottom:8px"><label>שם באנגלית (אופציונלי)</label><input class="ifield" id="rnew-nameen" placeholder="English name"></div>'
     +'<div class="fg" style="margin-bottom:8px"><label>כרטיסים</label><input type="number" class="ifield" id="rnew-tickets" value="0" min="0"></div>'
-    +'<div class="fg" style="margin-bottom:8px"><label>משימות שהושלמו (X)</label><input type="number" class="ifield" id="rnew-tasksdone" value="0" min="0"></div>',
+    +'<div class="fg" style="margin-bottom:8px"><label>משימות שהושלמו (X) — ברירת מחדל: 1 (משימת חובה)</label><input type="number" class="ifield" id="rnew-tasksdone" value="1" min="0"></div>',
     '<button class="btn sec" onclick="closeModal()">ביטול</button>'
     +'<button class="btn grn" onclick="_saveNewRaffleParticipant()">הוסף</button>'
   );
@@ -4683,7 +4788,8 @@ function _saveNewRaffleParticipant(){
   var nameHe=(document.getElementById('rnew-namehe')?.value||'').trim();
   var nameEn=(document.getElementById('rnew-nameen')?.value||'').trim();
   var tickets=parseInt(document.getElementById('rnew-tickets')?.value)||0;
-  var tasksDone=parseInt(document.getElementById('rnew-tasksdone')?.value)||0;
+  var tasksDone=parseInt(document.getElementById('rnew-tasksdone')?.value);
+  if(isNaN(tasksDone)||tasksDone<1)tasksDone=1; // ברירת מחדל: לפחות 1 משימת חובה
   if(!nameHe){toast('הזן שם בעברית','err');return;}
   RAFFLE.data.push({id:Date.now(),raffleId:ar.id,nameHe,nameEn,tickets,tasksDone,ticketHistory:[]});
   _saveRaffleStore({raffles:RAFFLE.raffles,participants:RAFFLE.data});
@@ -4873,7 +4979,7 @@ function showPage(name){
     renderCommunityTab();
   }
   if(name==='raffles'){
-    loadRaffleData();
+    loadRaffleData().then(function(){_renderDashRaffleWidget();});
     _raffleRefreshSnapshots();
   }
 }
