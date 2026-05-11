@@ -4630,7 +4630,7 @@ function openNewRaffleModal(){
       +'<div class="fg"><label>תאריך התחלה</label><input type="date" class="ifield" id="rn-start" value="'+today+'"></div>'
       +'<div class="fg"><label>תאריך סיום</label><input type="date" class="ifield" id="rn-end"></div>'
     +'</div>'
-    +'<div class="fg" style="margin-bottom:8px"><label>מספר כרטיסים מקסימלי (Y)</label><input type="number" class="ifield" id="rn-max" value="10" min="1" placeholder="מספר מרבי של כרטיסים למשתתף"></div>'
+    +'<div class="fg" style="margin-bottom:8px"><label>מספר כרטיסים מקסימלי</label><input type="number" class="ifield" id="rn-max" value="2" min="1" placeholder="מספר מרבי של כרטיסים למשתתף"></div>'
     +'<div class="ibox" style="font-size:11px">⚡ שמירת ההגרלה תיצור אוטומטית צילום מצב של כמות העוקבים הנוכחית בכל הפלטפורמות.</div>',
     '<button class="btn sec" onclick="closeModal()">ביטול</button>'
     +'<button class="btn grn" onclick="_saveNewRaffle()">💾 שמור והפעל</button>'
@@ -4685,7 +4685,7 @@ function openEditRaffleModal(){
       +'<div class="fg"><label>תאריך התחלה</label><input type="date" class="ifield" id="re-start" value="'+(ar.startDate||'')+'"></div>'
       +'<div class="fg"><label>תאריך סיום</label><input type="date" class="ifield" id="re-end" value="'+(ar.endDate||'')+'"></div>'
     +'</div>'
-    +'<div class="fg"><label>מספר כרטיסים מקסימלי (Y)</label><input type="number" class="ifield" id="re-max" value="'+(ar.maxTickets||0)+'" min="0"></div>',
+    +'<div class="fg"><label>מספר כרטיסים מקסימלי</label><input type="number" class="ifield" id="re-max" value="'+(ar.maxTickets||0)+'" min="0"></div>',
     '<button class="btn sm" style="background:#7f1d1d;color:#fff" onclick="closeModal();deleteActiveRaffle()">🗑️ מחק הגרלה</button>'
     +'<span style="flex:1"></span>'
     +'<button class="btn sec" onclick="closeModal()">ביטול</button>'
@@ -4741,6 +4741,14 @@ function addRaffleTickets(){
     return r.raffleId===ar.id&&(r.nameHe===name||r.nameEn===name);
   });
 
+  // ── Ticket-limit validation ──
+  var maxT=ar.maxTickets||0;
+  var currentTickets=existing?existing.tickets:0;
+  if(maxT>0&&(currentTickets+count)>maxT){
+    toast('לא ניתן להוסיף כרטיסים מעבר למקסימום המוגדר להגרלה זו (מקסימום: '+maxT+')','err');
+    return;
+  }
+
   if(existing){
     existing.tickets+=count;
     // FIX: sync tasksDone = total tickets accumulated
@@ -4791,6 +4799,14 @@ function _saveNewRaffleParticipant(){
   var tasksDone=parseInt(document.getElementById('rnew-tasksdone')?.value);
   if(isNaN(tasksDone)||tasksDone<1)tasksDone=1; // ברירת מחדל: לפחות 1 משימת חובה
   if(!nameHe){toast('הזן שם בעברית','err');return;}
+
+  // ── Ticket-limit validation ──
+  var maxT=ar.maxTickets||0;
+  if(maxT>0&&tickets>maxT){
+    toast('לא ניתן להוסיף כרטיסים מעבר למקסימום המוגדר להגרלה זו (מקסימום: '+maxT+')','err');
+    return;
+  }
+
   RAFFLE.data.push({id:Date.now(),raffleId:ar.id,nameHe,nameEn,tickets,tasksDone,ticketHistory:[]});
   _saveRaffleStore({raffles:RAFFLE.raffles,participants:RAFFLE.data});
   _updateRaffleDatalist();
@@ -4816,9 +4832,19 @@ function openEditRaffleParticipantModal(id){
 
 function _saveEditRaffleParticipant(id){
   var r=RAFFLE.data.find(function(x){return x.id===id;});if(!r)return;
+  var newTickets=parseInt(document.getElementById('redit-tickets')?.value)||0;
+
+  // ── Ticket-limit validation ──
+  var ar=RAFFLE.raffles.find(function(x){return x.id===r.raffleId;})||{maxTickets:0};
+  var maxT=ar.maxTickets||0;
+  if(maxT>0&&newTickets>maxT){
+    toast('לא ניתן להוסיף כרטיסים מעבר למקסימום המוגדר להגרלה זו (מקסימום: '+maxT+')','err');
+    return;
+  }
+
   r.nameHe=(document.getElementById('redit-namehe')?.value||'').trim()||r.nameHe;
   r.nameEn=(document.getElementById('redit-nameen')?.value||'').trim();
-  r.tickets=parseInt(document.getElementById('redit-tickets')?.value)||0;
+  r.tickets=newTickets;
   r.tasksDone=parseInt(document.getElementById('redit-tasksdone')?.value)||0;
   if(!Array.isArray(r.ticketHistory))r.ticketHistory=[];
   _saveRaffleStore({raffles:RAFFLE.raffles,participants:RAFFLE.data});
