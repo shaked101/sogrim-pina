@@ -4589,13 +4589,17 @@ function _renderRaffleTable(){
     return;
   }
 
+  var totalTickets=RAFFLE.filtered.reduce(function(s,r){return s+r.tickets;},0);
+
   var rows=RAFFLE.filtered.slice().sort(function(a,b){return b.tickets-a.tickets;}).map(function(r){
     var statusTxt=maxY>0?(r.tasksDone+' מתוך '+maxY):(r.tasksDone>0?r.tasksDone+' מתוך ?':'—');
+    var chancePct=totalTickets>0?(r.tickets/totalTickets*100).toFixed(1)+'%':'—';
     return'<tr>'
       +'<td class="lb-name" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;color:var(--acc)" '
         +'onclick="openRaffleTicketHistoryModal('+r.id+')" title="לחץ לצפייה בהיסטוריית כרטיסים">'+esc(r.nameHe||'—')+'</td>'
       +'<td style="font-size:11px;color:var(--t3)">'+esc(r.nameEn||'—')+'</td>'
       +'<td style="text-align:center"><span style="background:#fef3ee;color:var(--acc);border-radius:6px;padding:2px 10px;font-weight:900;font-size:13px">'+r.tickets+'</span></td>'
+      +'<td style="text-align:center"><span style="background:#f0fdf4;color:var(--grn);border-radius:6px;padding:2px 10px;font-weight:800;font-size:12px">'+chancePct+'</span></td>'
       +'<td style="font-size:12px;font-weight:700;color:var(--tx)">'+esc(statusTxt)+'</td>'
       +'<td><div style="display:flex;gap:3px">'
         +'<button class="btn sec sm" onclick="openEditRaffleParticipantModal('+r.id+')" title="ערוך">✏️</button>'
@@ -4604,13 +4608,12 @@ function _renderRaffleTable(){
     +'</tr>';
   });
 
-  var totalTickets=RAFFLE.filtered.reduce(function(s,r){return s+r.tickets;},0);
-
   wrap.innerHTML='<div class="tscroll"><table class="lb-table">'
     +'<thead><tr>'
     +'<th>שם בעברית</th>'
     +'<th>שם באנגלית</th>'
     +'<th style="text-align:center">כרטיסים</th>'
+    +'<th style="text-align:center">סיכוי זכייה</th>'
     +'<th>סטטוס</th>'
     +'<th style="width:80px">פעולות</th>'
     +'</tr></thead>'
@@ -4796,8 +4799,7 @@ function _saveNewRaffleParticipant(){
   var nameHe=(document.getElementById('rnew-namehe')?.value||'').trim();
   var nameEn=(document.getElementById('rnew-nameen')?.value||'').trim();
   var tickets=parseInt(document.getElementById('rnew-tickets')?.value)||0;
-  var tasksDone=parseInt(document.getElementById('rnew-tasksdone')?.value);
-  if(isNaN(tasksDone)||tasksDone<1)tasksDone=1; // ברירת מחדל: לפחות 1 משימת חובה
+  var tasksDone=tickets; // FIX: always sync tasksDone = tickets
   if(!nameHe){toast('הזן שם בעברית','err');return;}
 
   // ── Ticket-limit validation ──
@@ -4845,7 +4847,7 @@ function _saveEditRaffleParticipant(id){
   r.nameHe=(document.getElementById('redit-namehe')?.value||'').trim()||r.nameHe;
   r.nameEn=(document.getElementById('redit-nameen')?.value||'').trim();
   r.tickets=newTickets;
-  r.tasksDone=parseInt(document.getElementById('redit-tasksdone')?.value)||0;
+  r.tasksDone=newTickets; // FIX: always sync tasksDone = tickets before save
   if(!Array.isArray(r.ticketHistory))r.ticketHistory=[];
   _saveRaffleStore({raffles:RAFFLE.raffles,participants:RAFFLE.data});
   _updateRaffleDatalist();
@@ -4951,41 +4953,113 @@ function openRaffleDrawModal(){
 
   if(!pool.length){toast('אין כרטיסים בסיר — הוסף כרטיסים למשתתפים','err');return;}
 
-  // Weighted random pick
+  // Weighted random pick — computed immediately but revealed after roulette
   var winner=pool[Math.floor(Math.random()*pool.length)];
-  var winPct=Math.round((winner.tickets/pool.length)*100);
+  var winPct=(winner.tickets/pool.length*100).toFixed(1);
 
-  // Build podium for top 3 by tickets
-  var top3=src.slice().sort(function(a,b){return b.tickets-a.tickets;}).slice(0,3);
-  var podiumHtml=top3.map(function(p,i){
-    var medals=['🥇','🥈','🥉'];
-    return'<div style="text-align:center;background:var(--s2);border-radius:8px;padding:8px 12px">'
-      +'<div style="font-size:18px">'+medals[i]+'</div>'
-      +'<div style="font-size:11px;font-weight:800;color:var(--tx)">'+esc(p.nameHe)+'</div>'
-      +'<div style="font-size:10px;color:var(--t3)">'+p.tickets+' כרטיסים</div>'
-    +'</div>';
-  }).join('');
-
+  // Build initial roulette body
   var body='<div style="text-align:center;padding:10px 0 16px">'
-    +'<div style="font-size:52px;margin-bottom:8px;animation:fup .4s ease">🎉</div>'
-    +'<div style="font-size:24px;font-weight:900;color:var(--acc);margin-bottom:3px">'+esc(winner.nameHe)+'</div>'
-    +(winner.nameEn?'<div style="font-size:13px;color:var(--t3);margin-bottom:8px">'+esc(winner.nameEn)+'</div>':'')
-    +'<div style="font-size:12px;color:var(--t2);margin-bottom:18px">'
-      +'<strong>'+winner.tickets+'</strong> כרטיסים · סיכוי זכייה: <strong>'+winPct+'%</strong>'
-    +'</div>'
+    +'<div style="font-size:52px;margin-bottom:8px">🎲</div>'
+    +'<div id="roulette-name" style="font-size:28px;font-weight:900;color:var(--acc);margin-bottom:3px;min-height:36px;transition:opacity .05s">מגריל...</div>'
+    +'<div id="roulette-sub" style="font-size:13px;color:var(--t3);margin-bottom:8px;min-height:18px"></div>'
+    +'<div id="roulette-stats" style="font-size:12px;color:var(--t2);margin-bottom:18px;min-height:20px"></div>'
     +'<div style="background:var(--s2);border-radius:10px;padding:10px;margin-bottom:14px">'
       +'<div style="font-size:9px;color:var(--t2);font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px">כרטיסים בסיר</div>'
       +'<div style="font-size:26px;font-weight:900;color:var(--tx)">'+pool.length+'</div>'
       +'<div style="font-size:10px;color:var(--t3)">'+src.length+' משתתפים</div>'
     +'</div>'
-    +(top3.length?'<div style="font-size:9px;color:var(--t2);font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px">TOP משתתפים</div>'
-      +'<div style="display:grid;grid-template-columns:repeat('+top3.length+',1fr);gap:6px">'+podiumHtml+'</div>':'')
+    +'<canvas id="fireworks-canvas" style="position:fixed;inset:0;pointer-events:none;z-index:99998;display:none"></canvas>'
   +'</div>';
 
   openModal('🎲 הגרלה — '+(ar?esc(ar.name):''),body,
-    '<button class="btn sec" onclick="closeModal()">סגור</button>'
-    +'<button class="btn" onclick="closeModal();openRaffleDrawModal()">🔁 הגרל שוב</button>'
+    '<button class="btn sec" id="raffle-draw-close-btn" onclick="closeModal()" style="display:none">סגור</button>'
+    +'<button class="btn" id="raffle-draw-again-btn" onclick="closeModal();openRaffleDrawModal()" style="display:none">🔁 הגרל שוב</button>'
   );
+
+  // ── Roulette animation ──
+  var allNames=src.map(function(r){return r.nameHe||'—';});
+  var elapsed=0;
+  var interval=100; // ms between name changes
+  var duration=3000; // total spin time ms
+  var nameEl=document.getElementById('roulette-name');
+  var subEl=document.getElementById('roulette-sub');
+  var statsEl=document.getElementById('roulette-stats');
+
+  var spinInterval=setInterval(function(){
+    elapsed+=interval;
+    if(!nameEl){clearInterval(spinInterval);return;}
+    // Pick a random name from all participants (weighted for realism)
+    var rndP=pool[Math.floor(Math.random()*pool.length)];
+    nameEl.textContent=rndP.nameHe||'—';
+    if(elapsed>=duration){
+      clearInterval(spinInterval);
+      // Reveal real winner
+      nameEl.style.color='var(--acc)';
+      nameEl.textContent=winner.nameHe;
+      if(subEl&&winner.nameEn)subEl.textContent=winner.nameEn;
+      if(statsEl)statsEl.innerHTML='<strong>'+winner.tickets+'</strong> כרטיסים · סיכוי זכייה: <strong>'+winPct+'%</strong>';
+      // Show action buttons
+      var closeBtn=document.getElementById('raffle-draw-close-btn');
+      var againBtn=document.getElementById('raffle-draw-again-btn');
+      if(closeBtn)closeBtn.style.display='';
+      if(againBtn)againBtn.style.display='';
+      // Launch fireworks
+      _launchFireworks();
+    }
+  },interval);
+}
+
+// ── Canvas fireworks ──────────────────────────────
+function _launchFireworks(){
+  var canvas=document.getElementById('fireworks-canvas');
+  if(!canvas)return;
+  canvas.style.display='block';
+  canvas.width=window.innerWidth;
+  canvas.height=window.innerHeight;
+  var ctx=canvas.getContext('2d');
+  var particles=[];
+  var colors=['#d4541a','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#fff'];
+
+  function _spawnBurst(x,y){
+    for(var i=0;i<80;i++){
+      var angle=Math.random()*Math.PI*2;
+      var speed=2+Math.random()*6;
+      particles.push({
+        x:x,y:y,
+        vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed-3,
+        color:colors[Math.floor(Math.random()*colors.length)],
+        life:1,decay:0.015+Math.random()*0.015,
+        size:2+Math.random()*4
+      });
+    }
+  }
+
+  // Spawn several bursts
+  var burstCount=0;
+  var maxBursts=8;
+  var burstInterval=setInterval(function(){
+    var x=canvas.width*(.15+Math.random()*.7);
+    var y=canvas.height*(.1+Math.random()*.5);
+    _spawnBurst(x,y);
+    burstCount++;
+    if(burstCount>=maxBursts)clearInterval(burstInterval);
+  },350);
+
+  function _animate(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    for(var i=particles.length-1;i>=0;i--){
+      var p=particles[i];
+      p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.life-=p.decay;
+      if(p.life<=0){particles.splice(i,1);continue;}
+      ctx.globalAlpha=p.life;
+      ctx.fillStyle=p.color;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,Math.PI*2);ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    if(particles.length>0||burstCount<maxBursts){requestAnimationFrame(_animate);}
+    else{canvas.style.display='none';}
+  }
+  _animate();
 }
 
 // ════════════════════════════════════════════════
