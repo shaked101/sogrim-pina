@@ -5418,35 +5418,42 @@ document.addEventListener('DOMContentLoaded',function(){
     var p = G.posts.find(function(x){ return x.row === rowNum; });
     if(!p){ toast('פוסט לא נמצא','err'); return; }
 
-    // א. תוכן ומחיר (COL.CONTENT=9, COL.PRICE=2)
-    var content = gc(p, COL.CONTENT);
+    // פונקציית ניקוי HTML אגרסיבית — מפעילים אותה על התוכן לפני ההרכבה
+    function cleanHtml(s){
+      return (s||'')
+        .replace(/<br\s*\/?>/gi, '\n')          // <br> → \n
+        .replace(/<\/p>|<\/div>/gi, '\n')        // סגירת פסקה/div → \n
+        .replace(/<[^>]+>/g, '')                 // הסרת כל תגיות HTML שנותרו
+        .replace(/[ \t]+\n/g, '\n')              // רווחים לפני שורה חדשה
+        .replace(/\n[ \t]+/g, '\n')              // רווחים אחרי שורה חדשה
+        .replace(/\n{2,}/g, '\n')                // כיווץ אגרסיבי: כל שורה ריקה → שורה אחת (גוף תוכן צפוף)
+        .trim();
+    }
+
+    // א. ניקוי תוכן (COL.CONTENT=9) והזרקת מחיר (COL.PRICE=2)
+    var content = cleanHtml(gc(p, COL.CONTENT));
     var price   = gc(p, COL.PRICE);
     var hasDollar = /\$|דולר/.test(content);
     if(!hasDollar && price){
-      // הזרק מחיר מיד אחרי " ב-"
       content = content.replace(/( ב-)/, '$1' + price + '$');
     }
 
-    // ב. קישור (COL.LINK=3)
+    // ב. קישור (COL.LINK=3) — ירידת שורה אחת בלבד לפני הקישור
     var link = gc(p, COL.LINK);
-    var post = content + '\n' + link;
 
     // ג. סטטיסטיקה (COL.BOUGHT=7, COL.RATING=14)
     var bought = gc(p, COL.BOUGHT) || '0';
     var rating = gc(p, COL.RATING) || '0';
-    post += '\n🔥 מעל ' + bought + ' רכישות | ⭐ ' + rating + ' דירוג';
+    var stats = '🔥 מעל ' + bought + ' רכישות | ⭐ ' + rating + ' דירוג';
 
-    // ד. האשטגים (COL.TAGS=8)
+    // ד. האשטגים (COL.TAGS=8) — שורה ריקה אחת לפניהם (\n\n)
     var tags = gc(p, COL.TAGS);
-    post += '\n\n' + tags;
 
-    // ניקוי טקסט
-    post = post
-      .replace(/<br\s*\/?>/gi, '\n')   // <br> → \n
-      .replace(/<[^>]+>/g, '')          // הסרת תגיות HTML
-      .replace(/[ \t]+\n/g, '\n')       // רווחים לפני שורה חדשה
-      .replace(/\n[ \t]+/g, '\n')       // רווחים אחרי שורה חדשה
-      .replace(/\n{3,}/g, '\n\n');      // צמצום יותר מ-2 ירידות שורה
+    // הרכבת הפוסט הסופי — מבנה הדוק: תוכן\nקישור\nסטטיסטיקה\n\nהאשטגים
+    var post = content + '\n' + link + '\n' + stats + '\n\n' + tags;
+
+    // ניקוי סופי: רק וידוא שלא נוצרו יותר מ-2 ירידות שורה רצופות (מניעת אסונות)
+    post = post.replace(/\n{3,}/g, '\n\n').trim();
 
     // העתקה
     navigator.clipboard.writeText(post)
