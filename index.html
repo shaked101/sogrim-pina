@@ -5449,29 +5449,22 @@ document.addEventListener('DOMContentLoaded',function(){
     // ד. האשטגים (COL.TAGS=8) — שורה ריקה אחת לפניהם (\n\n)
     var tags = gc(p, COL.TAGS);
 
-    // הרכבת הפוסט הסופי — מבנה ביניים עם \n רגיל לפני פילטר הפייסבוק
-    // גוף הפוסט (תוכן + קישור + סטטיסטיקה) מוחזק כבלוק אחד
-    var bodyLines = (content + '\n' + link + '\n' + stats).split('\n');
-    var tagsLines = tags.split('\n');
-
-    // פילטר Facebook Mobile Fix:
-    // 1. trim() על כל שורה — מחטא trailing spaces שגורמים לפסקאות ענק
-    // 2. סינון שורות ריקות מגוף הפוסט (לא מהאשטגים)
-    // 3. חיבור מחדש עם \u2028 (Unicode Line Separator = Soft Break בפייסבוק)
-    var LS = '\u2028'; // Line Separator — מכריח soft break בעורך פייסבוק מובייל
-
-    var cleanBody = bodyLines
+    // הרכבת הפוסט הסופי
+    // גוף הפוסט (תוכן + קישור + סטטיסטיקה) — split/trim/filter לניקוי trailing spaces ושורות ריקות
+    var cleanBody = (content + '\n' + link + '\n' + stats)
+      .split('\n')
       .map(function(l){ return l.trim(); })
       .filter(function(l){ return l !== ''; })
-      .join(LS);
+      .join('\n');
 
-    var cleanTags = tagsLines
+    var cleanTags = tags
+      .split('\n')
       .map(function(l){ return l.trim(); })
       .filter(function(l){ return l !== ''; })
-      .join(LS);
+      .join('\n');
 
-    // הפרדה כפולה לפני האשטגים (\u2028\u2028 = שורה ריקה אחת בפייסבוק)
-    var post = cleanBody + LS + LS + cleanTags;
+    // שורה ריקה אחת (\n\n) מפרידה בין הגוף לאשטגים
+    var post = cleanBody + '\n\n' + cleanTags;
 
     // העתקה
     navigator.clipboard.writeText(post)
