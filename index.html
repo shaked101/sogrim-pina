@@ -5449,65 +5449,43 @@ document.addEventListener('DOMContentLoaded',function(){
     // ד. האשטגים (COL.TAGS=8) — שורה ריקה אחת לפניהם (\n\n)
     var tags = gc(p, COL.TAGS);
 
-    // הרכבת הפוסט הסופי — שימוש ב-<br> במקום \n כדי שה-Clipboard יכיל text/html
+    // הרכבת הפוסט הסופי — Plain Text עם \n סטנדרטי
     // גוף הפוסט (תוכן + קישור + סטטיסטיקה) — split/trim/filter לניקוי trailing spaces ושורות ריקות
     var cleanBody = (content + '\n' + link + '\n' + stats)
       .split('\n')
       .map(function(l){ return l.trim(); })
       .filter(function(l){ return l !== ''; })
-      .join('<br>');
+      .join('\n');
 
     var cleanTags = tags
       .split('\n')
       .map(function(l){ return l.trim(); })
       .filter(function(l){ return l !== ''; })
-      .join('<br>');
+      .join('\n');
 
-    // <br><br> מפרידה בין הגוף לאשטגים — שורת רווח אחת
-    var post = cleanBody + '<br><br>' + cleanTags;
+    // \n\n מפרידה בין הגוף לאשטגים — שורת רווח אחת
+    var finalPost = cleanBody + '\n\n' + cleanTags;
 
-    // הצגת מודל — המשתמש מעתיק ידנית מתוך contenteditable div (text/html ב-Clipboard)
-    var overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+    // העתקה שקופה ברקע
+    function doFallbackCopy(){
+      var ta = document.createElement('textarea');
+      ta.value = finalPost;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try{ document.execCommand('copy'); toast('✅ הפוסט הועתק בהצלחה!','ok'); }
+      catch(e){ toast('שגיאה בהעתקה','err'); }
+      ta.remove();
+    }
 
-    var modal = document.createElement('div');
-    modal.style.cssText = 'background:#fff;border-radius:14px;padding:20px;width:100%;max-width:520px;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:Heebo,sans-serif';
-
-    var title = document.createElement('div');
-    title.style.cssText = 'font-size:15px;font-weight:900;color:#1e293b';
-    title.textContent = '📋 הפוסט מוכן! העתק אותו כעת';
-
-    var hint = document.createElement('div');
-    hint.style.cssText = 'font-size:11px;color:#64748b;line-height:1.5';
-    hint.textContent = 'לחץ לחיצה ארוכה על הטקסט ← "בחר הכל" ← "העתק" — ולאחר מכן הדבק ישירות בפייסבוק.';
-
-    var editDiv = document.createElement('div');
-    editDiv.contentEditable = 'true';
-    editDiv.innerHTML = post;
-    editDiv.style.cssText = 'width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:13px;font-family:Heebo,sans-serif;line-height:1.7;color:#1e293b;background:#fff;direction:rtl;min-height:220px;max-height:420px;overflow-y:auto;outline:none;white-space:pre-wrap;word-break:break-word';
-
-    var closeBtn = document.createElement('button');
-    closeBtn.textContent = 'סגור';
-    closeBtn.style.cssText = 'background:#d4541a;color:#fff;border:none;border-radius:8px;padding:9px 0;font-size:13px;font-weight:800;cursor:pointer;font-family:Heebo,sans-serif;width:100%';
-    closeBtn.onclick = function(){ document.body.removeChild(overlay); };
-    overlay.onclick = function(e){ if(e.target === overlay) document.body.removeChild(overlay); };
-
-    modal.appendChild(title);
-    modal.appendChild(hint);
-    modal.appendChild(editDiv);
-    modal.appendChild(closeBtn);
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    // בחירת כל הטקסט בתוך ה-div לנוחות המשתמש
-    setTimeout(function(){
-      editDiv.focus();
-      var range = document.createRange();
-      range.selectNodeContents(editDiv);
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }, 80);
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(finalPost)
+        .then(function(){ toast('✅ הפוסט הועתק בהצלחה!','ok'); })
+        .catch(function(){ doFallbackCopy(); });
+    } else {
+      doFallbackCopy();
+    }
   };
 
   // ── INIT ───────────────────────────────────────
