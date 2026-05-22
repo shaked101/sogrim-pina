@@ -5455,27 +5455,53 @@ document.addEventListener('DOMContentLoaded',function(){
       .split('\n')
       .map(function(l){ return l.trim(); })
       .filter(function(l){ return l !== ''; })
-      .join('\u200B\r\n');
+      .join('\n');
 
     var cleanTags = tags
       .split('\n')
       .map(function(l){ return l.trim(); })
       .filter(function(l){ return l !== ''; })
-      .join('\u200B\r\n');
+      .join('\n');
 
-    // שורה ריקה אחת מפרידה בין הגוף לאשטגים — עם Zero-width space + CRLF כפול
-    var post = cleanBody + '\u200B\r\n\u200B\r\n' + cleanTags;
+    // שורה ריקה אחת (\n\n) מפרידה בין הגוף לאשטגים
+    var post = cleanBody + '\n\n' + cleanTags;
 
-    // העתקה — Textarea Hack קשיח: מבטיח Plain Text נקי ללא Rich Text Meta-data
+    // הצגת מודל — המשתמש מעתיק ידנית (Native OS Copy) למניעת Rich Text של פייסבוק
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:#fff;border-radius:14px;padding:20px;width:100%;max-width:520px;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:Heebo,sans-serif';
+
+    var title = document.createElement('div');
+    title.style.cssText = 'font-size:15px;font-weight:900;color:#1e293b';
+    title.textContent = '📋 הפוסט מוכן! העתק אותו כעת';
+
+    var hint = document.createElement('div');
+    hint.style.cssText = 'font-size:11px;color:#64748b;line-height:1.5';
+    hint.textContent = 'לחץ לחיצה ארוכה על הטקסט ← "בחר הכל" ← "העתק" — ולאחר מכן הדבק ישירות בפייסבוק.';
+
     var ta = document.createElement('textarea');
     ta.value = post;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try{ document.execCommand('copy'); toast('✅ הפוסט הועתק בהצלחה ומוכן להדבקה!','ok'); }
-    catch(e){ toast('שגיאה בהעתקה','err'); }
-    ta.remove();
+    ta.rows = 18;
+    ta.style.cssText = 'width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:13px;font-family:Heebo,sans-serif;line-height:1.7;color:#1e293b;resize:none;background:#f8fafc;direction:rtl';
+    ta.readOnly = false;
+
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = 'סגור';
+    closeBtn.style.cssText = 'background:#d4541a;color:#fff;border:none;border-radius:8px;padding:9px 0;font-size:13px;font-weight:800;cursor:pointer;font-family:Heebo,sans-serif;width:100%';
+    closeBtn.onclick = function(){ document.body.removeChild(overlay); };
+    overlay.onclick = function(e){ if(e.target === overlay) document.body.removeChild(overlay); };
+
+    modal.appendChild(title);
+    modal.appendChild(hint);
+    modal.appendChild(ta);
+    modal.appendChild(closeBtn);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // בחירה אוטומטית של הטקסט לנוחות המשתמש
+    setTimeout(function(){ ta.focus(); ta.select(); }, 80);
   };
 
   // ── INIT ───────────────────────────────────────
