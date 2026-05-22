@@ -646,7 +646,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
       <!-- POSTS -->
       <div class="pg" id="pg-posts">
         <div class="ph">
-          <div><div class="pt">ניהול פוסטים</div><div class="ps">לחץ 👁 לצפייה · ✏️ לעריכה</div></div>
+          <div><div class="pt">ניהול פוסטים</div><div class="ps">לחץ 👁 לצפייה · ✏️ לעריכה · 📋 להעתקה לפייסבוק</div></div>
           <div class="pacts">
             <button class="btn sec" id="export-btn">⬇️ CSV</button>
             <button class="btn" id="refresh-posts-btn">🔄 רענן</button>
@@ -2362,6 +2362,7 @@ function renderTableRows(rows){
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         <button class="btn sec sm" onclick="openViewModal(${row})">👁</button>
         <button class="btn sm" onclick="openEditModal(${row})">✏️</button>
+        <button class="btn sec sm" style="color:var(--fb);border-color:var(--fb)" title="העתק פוסט לפייסבוק" onclick="copyPostToFB(${row})">📋</button>
         <button class="btn sec sm" style="color:var(--blue);border-color:var(--blue)" title="שכתוב פוסט בעזרת הקופירייטר" onclick="rewritePost(${row})">🪄</button>
         <button class="btn sec sm" style="color:var(--red);border-color:var(--red)" title="מחק מוצר" onclick="deleteProduct(${row})">🗑️</button>
       </div></td>
@@ -5411,6 +5412,58 @@ document.addEventListener('DOMContentLoaded',function(){
   on('raffle-refresh-btn','click',loadRaffleData);
   var raffleSearch=document.getElementById('raffle-search');
   if(raffleSearch)raffleSearch.addEventListener('input',_renderRaffleTable);
+
+  // ── Copy Post to Facebook ──────────────────────
+  window.copyPostToFB = function(rowNum){
+    var p = G.posts.find(function(x){ return x.row === rowNum; });
+    if(!p){ toast('פוסט לא נמצא','err'); return; }
+
+    // א. תוכן ומחיר (COL.CONTENT=9, COL.PRICE=2)
+    var content = gc(p, COL.CONTENT);
+    var price   = gc(p, COL.PRICE);
+    var hasDollar = /\$|דולר/.test(content);
+    if(!hasDollar && price){
+      // הזרק מחיר מיד אחרי " ב-"
+      content = content.replace(/( ב-)/, '$1' + price + '$');
+    }
+
+    // ב. קישור (COL.LINK=3)
+    var link = gc(p, COL.LINK);
+    var post = content + '\n' + link;
+
+    // ג. סטטיסטיקה (COL.BOUGHT=7, COL.RATING=14)
+    var bought = gc(p, COL.BOUGHT) || '0';
+    var rating = gc(p, COL.RATING) || '0';
+    post += '\n🔥 מעל ' + bought + ' רכישות | ⭐ ' + rating + ' דירוג';
+
+    // ד. האשטגים (COL.TAGS=8)
+    var tags = gc(p, COL.TAGS);
+    post += '\n\n' + tags;
+
+    // ניקוי טקסט
+    post = post
+      .replace(/<br\s*\/?>/gi, '\n')   // <br> → \n
+      .replace(/<[^>]+>/g, '')          // הסרת תגיות HTML
+      .replace(/[ \t]+\n/g, '\n')       // רווחים לפני שורה חדשה
+      .replace(/\n[ \t]+/g, '\n')       // רווחים אחרי שורה חדשה
+      .replace(/\n{3,}/g, '\n\n');      // צמצום יותר מ-2 ירידות שורה
+
+    // העתקה
+    navigator.clipboard.writeText(post)
+      .then(function(){ toast('✅ הפוסט הועתק בהצלחה ומוכן להדבקה!','ok'); })
+      .catch(function(){
+        // fallback
+        var ta = document.createElement('textarea');
+        ta.value = post;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try{ document.execCommand('copy'); toast('✅ הפוסט הועתק בהצלחה ומוכן להדבקה!','ok'); }
+        catch(e){ toast('שגיאה בהעתקה','err'); }
+        document.body.removeChild(ta);
+      });
+  };
 
   // ── INIT ───────────────────────────────────────
   if(sessionStorage.getItem('sp_auth')){
