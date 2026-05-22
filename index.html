@@ -2565,8 +2565,25 @@ function openEditModal(rowNum){
       </div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">🔗 קישור אלי אקספרס</span><input class="ifield" id="e-link" value="${esc(gc(p,COL.LINK))}"></div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">קישור תמונה</span><input class="ifield" id="e-img" value="${esc(gc(p,COL.IMG))}"></div>
-      <div class="fg"><span class="slbl2">תאריך E (DD/MM/YYYY)</span><input class="ifield" id="e-date-e" value="${esc((function(){var d=parseDateIL(gc(p,COL.COL_E));return d?fmtDate(d):gc(p,COL.COL_E);})())}" placeholder="08/02/2025"></div>
-      <div class="fg"><span class="slbl2">תאריך L (DD/MM/YYYY)</span><input class="ifield" id="e-date-l" value="${esc((function(){var d=parseDateIL(gc(p,COL.COL_L));return d?fmtDate(d):gc(p,COL.COL_L);})())}" placeholder="08/02/2025" readonly title="תאריך L — לקריאה בלבד"></div>
+      <div class="fg"><span class="slbl2">תאריך E (פרסום פייסבוק)</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="date" class="ifield" id="e-date-e" style="flex:1"
+            value="${(function(){
+              var d=parseDateIL(gc(p,COL.COL_E));
+              if(d){
+                // המרה מ-DD/MM/YYYY לפורמט YYYY-MM-DD הנדרש לשדה date
+                var parts=fmtDate(d).split('/');
+                return parts[2]+'-'+parts[1]+'-'+parts[0];
+              }
+              // fallback: נסה לפרש ישירות
+              var raw=gc(p,COL.COL_E)||'';
+              var m=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+              if(m)return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+              return '';
+            })()}">
+          <button type="button" class="btn sec sm" onclick="(function(){var t=new Date();var y=t.getFullYear();var m=String(t.getMonth()+1).padStart(2,'0');var d=String(t.getDate()).padStart(2,'0');document.getElementById('e-date-e').value=y+'-'+m+'-'+d;})()">📅 היום</button>
+        </div>
+      </div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">תוכן הפוסט</span><textarea class="tedit" id="e-content">${esc(gc(p,COL.CONTENT))}</textarea></div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">האשטגים</span><input class="ifield" id="e-tags" value="${esc(gc(p,COL.TAGS))}"></div>
     </div>
@@ -2623,23 +2640,26 @@ async function saveEdit(rowNum){
     [COL.PRICE+1]:gv('e-price'),[COL.RATING+1]:gv('e-rating'),
     [COL.BOUGHT+1]:gv('e-bought'),[COL.CAT+1]:gv('e-cat'),
     [COL.LINK+1]:gv('e-link'),[COL.IMG+1]:gv('e-img'),
-    [COL.COL_L+1]:gv('e-date-l'),
     [COL.CONTENT+1]:contentEl.value,[COL.TAGS+1]:gv('e-tags'),
     [COL.STATUS+1]:gv('e-status'),
     [COL.TG_S+1]:gv('e-tgs'),[COL.FB_S+1]:gv('e-fbs'),[COL.IG_S+1]:gv('e-igs'),
   };
 
-  // v38+fix: עמודה E (תאריך פרסום) — נכתב רק אם המשתמש שינה את הערך
-  // originalDateE מחושב באותו פורמט DD/MM/YYYY שמוצג בשדה, כדי שההשוואה תהיה תקינה
+  // עמודה E — המרת YYYY-MM-DD חזרה ל-DD/MM/YYYY + כתיבה רק אם השתנה
   const p=G.posts.find(x=>x.row===rowNum);
   const _origParsed=p?parseDateIL(p.data[COL.COL_E]):null;
   const originalDateE=_origParsed?fmtDate(_origParsed):(p?String(p.data[COL.COL_E]||'').trim():'');
-  const editedDateE=gv('e-date-e').trim();
+  const rawDateE=gv('e-date-e').trim(); // פורמט YYYY-MM-DD מ-input type=date
+  var editedDateE='';
+  if(rawDateE){
+    var dp=rawDateE.split('-');
+    if(dp.length===3)editedDateE=dp[2]+'/'+dp[1]+'/'+dp[0]; // DD/MM/YYYY
+    else editedDateE=rawDateE;
+  }
   if(editedDateE&&editedDateE!==originalDateE){
-    // המשתמש שינה את תאריך E ידנית — מותר לכתוב, בפורמט DD/MM/YYYY
     updates[COL.COL_E+1]=editedDateE;
   }
-  // אחרת: עמודה E לא נכנסת ל-updates בכלל → לא נדרסת
+  // אחרת: עמודה E לא נכנסת ל-updates → לא נדרסת
   toast('שומר...','inf');
   const ok=await writeSheet(rowNum,updates);
   if(ok){
@@ -2696,7 +2716,6 @@ async function saveEditReturnToDash(rowNum){
     [COL.PRICE+1]:gv('e-price'),[COL.RATING+1]:gv('e-rating'),
     [COL.BOUGHT+1]:gv('e-bought'),[COL.CAT+1]:gv('e-cat'),
     [COL.LINK+1]:gv('e-link'),[COL.IMG+1]:gv('e-img'),
-    [COL.COL_L+1]:gv('e-date-l'),
     [COL.CONTENT+1]:contentEl.value,[COL.TAGS+1]:gv('e-tags'),
     [COL.STATUS+1]:gv('e-status'),
     [COL.TG_S+1]:gv('e-tgs'),[COL.FB_S+1]:gv('e-fbs'),[COL.IG_S+1]:gv('e-igs'),
@@ -2705,7 +2724,13 @@ async function saveEditReturnToDash(rowNum){
   const p=G.posts.find(x=>x.row===rowNum);
   const _origParsed2=p?parseDateIL(p.data[COL.COL_E]):null;
   const originalDateE=_origParsed2?fmtDate(_origParsed2):(p?String(p.data[COL.COL_E]||'').trim():'');
-  const editedDateE=gv('e-date-e').trim();
+  const rawDateE2=gv('e-date-e').trim();
+  var editedDateE='';
+  if(rawDateE2){
+    var dp2=rawDateE2.split('-');
+    if(dp2.length===3)editedDateE=dp2[2]+'/'+dp2[1]+'/'+dp2[0];
+    else editedDateE=rawDateE2;
+  }
   if(editedDateE&&editedDateE!==originalDateE){
     updates[COL.COL_E+1]=editedDateE;
   }
@@ -5418,7 +5443,7 @@ document.addEventListener('DOMContentLoaded',function(){
     var p = G.posts.find(function(x){ return x.row === rowNum; });
     if(!p){ toast('פוסט לא נמצא','err'); return; }
 
-    // פונקציית ניקוי HTML אגרסיבית — מפעילים אותה על התוכן לפני ההרכבה
+    // פונקציית ניקוי HTML — מסירה תגיות ורווחי קצה, שומרת \n\n מקוריים
     function cleanHtml(s){
       return (s||'')
         .replace(/<br\s*\/?>/gi, '\n')          // <br> → \n
@@ -5426,11 +5451,11 @@ document.addEventListener('DOMContentLoaded',function(){
         .replace(/<[^>]+>/g, '')                 // הסרת כל תגיות HTML שנותרו
         .replace(/[ \t]+\n/g, '\n')              // רווחים לפני שורה חדשה
         .replace(/\n[ \t]+/g, '\n')              // רווחים אחרי שורה חדשה
-        .replace(/\n{2,}/g, '\n')                // כיווץ אגרסיבי: כל שורה ריקה → שורה אחת (גוף תוכן צפוף)
+        // ⚠️ ירידות שורה כפולות נשמרות כפי שהמשתמש הגדיר — אין כיווץ \n{2,}
         .trim();
     }
 
-    // א. ניקוי תוכן (COL.CONTENT=9) והזרקת מחיר (COL.PRICE=2)
+    // א. ניקוי תוכן (COL.CONTENT=9) והזרקת מחיר חכמה (COL.PRICE=2)
     var content = cleanHtml(gc(p, COL.CONTENT));
     var price   = gc(p, COL.PRICE);
     var hasDollar = /\$|דולר/.test(content);
@@ -5438,7 +5463,7 @@ document.addEventListener('DOMContentLoaded',function(){
       content = content.replace(/( ב-)/, '$1' + price + '$');
     }
 
-    // ב. קישור (COL.LINK=3) — ירידת שורה אחת בלבד לפני הקישור
+    // ב. קישור (COL.LINK=3)
     var link = gc(p, COL.LINK);
 
     // ג. סטטיסטיקה (COL.BOUGHT=7, COL.RATING=14)
@@ -5446,11 +5471,11 @@ document.addEventListener('DOMContentLoaded',function(){
     var rating = gc(p, COL.RATING) || '0';
     var stats = '🔥 מעל ' + bought + ' רכישות | ⭐ ' + rating + ' דירוג';
 
-    // ד. האשטגים (COL.TAGS=8) — שורה ריקה אחת לפניהם (\n\n)
+    // ד. האשטגים (COL.TAGS=8)
     var tags = gc(p, COL.TAGS);
 
-    // הרכבת הפוסט הסופי — Plain Text עם \n סטנדרטי
-    // גוף הפוסט (תוכן + קישור + סטטיסטיקה) — split/trim/filter לניקוי trailing spaces ושורות ריקות
+    // הרכבת הפוסט הסופי — trim לכל שורה בנפרד, שמירת \n\n מקוריים מהתוכן
+    // גוף: כל שורה מנוקית מרווחי קצה בלבד; שורות ריקות לחלוטין מוסרות
     var cleanBody = (content + '\n' + link + '\n' + stats)
       .split('\n')
       .map(function(l){ return l.trim(); })
@@ -5463,7 +5488,7 @@ document.addEventListener('DOMContentLoaded',function(){
       .filter(function(l){ return l !== ''; })
       .join('\n');
 
-    // \n\n מפרידה בין הגוף לאשטגים — שורת רווח אחת
+    // \n\n מפרידה בין הגוף לאשטגים
     var finalPost = cleanBody + '\n\n' + cleanTags;
 
     // העתקה שקופה ברקע
