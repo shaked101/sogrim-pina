@@ -5449,24 +5449,24 @@ document.addEventListener('DOMContentLoaded',function(){
     // ד. האשטגים (COL.TAGS=8) — שורה ריקה אחת לפניהם (\n\n)
     var tags = gc(p, COL.TAGS);
 
-    // הרכבת הפוסט הסופי
+    // הרכבת הפוסט הסופי — שימוש ב-<br> במקום \n כדי שה-Clipboard יכיל text/html
     // גוף הפוסט (תוכן + קישור + סטטיסטיקה) — split/trim/filter לניקוי trailing spaces ושורות ריקות
     var cleanBody = (content + '\n' + link + '\n' + stats)
       .split('\n')
       .map(function(l){ return l.trim(); })
       .filter(function(l){ return l !== ''; })
-      .join('\n');
+      .join('<br>');
 
     var cleanTags = tags
       .split('\n')
       .map(function(l){ return l.trim(); })
       .filter(function(l){ return l !== ''; })
-      .join('\n');
+      .join('<br>');
 
-    // שורה ריקה אחת (\n\n) מפרידה בין הגוף לאשטגים
-    var post = cleanBody + '\n\n' + cleanTags;
+    // <br><br> מפרידה בין הגוף לאשטגים — שורת רווח אחת
+    var post = cleanBody + '<br><br>' + cleanTags;
 
-    // הצגת מודל — המשתמש מעתיק ידנית (Native OS Copy) למניעת Rich Text של פייסבוק
+    // הצגת מודל — המשתמש מעתיק ידנית מתוך contenteditable div (text/html ב-Clipboard)
     var overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
 
@@ -5481,11 +5481,10 @@ document.addEventListener('DOMContentLoaded',function(){
     hint.style.cssText = 'font-size:11px;color:#64748b;line-height:1.5';
     hint.textContent = 'לחץ לחיצה ארוכה על הטקסט ← "בחר הכל" ← "העתק" — ולאחר מכן הדבק ישירות בפייסבוק.';
 
-    var ta = document.createElement('textarea');
-    ta.value = post;
-    ta.rows = 18;
-    ta.style.cssText = 'width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:13px;font-family:Heebo,sans-serif;line-height:1.7;color:#1e293b;resize:none;background:#f8fafc;direction:rtl';
-    ta.readOnly = false;
+    var editDiv = document.createElement('div');
+    editDiv.contentEditable = 'true';
+    editDiv.innerHTML = post;
+    editDiv.style.cssText = 'width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:13px;font-family:Heebo,sans-serif;line-height:1.7;color:#1e293b;background:#fff;direction:rtl;min-height:220px;max-height:420px;overflow-y:auto;outline:none;white-space:pre-wrap;word-break:break-word';
 
     var closeBtn = document.createElement('button');
     closeBtn.textContent = 'סגור';
@@ -5495,13 +5494,20 @@ document.addEventListener('DOMContentLoaded',function(){
 
     modal.appendChild(title);
     modal.appendChild(hint);
-    modal.appendChild(ta);
+    modal.appendChild(editDiv);
     modal.appendChild(closeBtn);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // בחירה אוטומטית של הטקסט לנוחות המשתמש
-    setTimeout(function(){ ta.focus(); ta.select(); }, 80);
+    // בחירת כל הטקסט בתוך ה-div לנוחות המשתמש
+    setTimeout(function(){
+      editDiv.focus();
+      var range = document.createRange();
+      range.selectNodeContents(editDiv);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }, 80);
   };
 
   // ── INIT ───────────────────────────────────────
