@@ -5455,32 +5455,27 @@ document.addEventListener('DOMContentLoaded',function(){
       .split('\n')
       .map(function(l){ return l.trim(); })
       .filter(function(l){ return l !== ''; })
-      .join('\n');
+      .join('\u200B\r\n');
 
     var cleanTags = tags
       .split('\n')
       .map(function(l){ return l.trim(); })
       .filter(function(l){ return l !== ''; })
-      .join('\n');
+      .join('\u200B\r\n');
 
-    // שורה ריקה אחת (\n\n) מפרידה בין הגוף לאשטגים
-    var post = cleanBody + '\n\n' + cleanTags;
+    // שורה ריקה אחת מפרידה בין הגוף לאשטגים — עם Zero-width space + CRLF כפול
+    var post = cleanBody + '\u200B\r\n\u200B\r\n' + cleanTags;
 
-    // העתקה
-    navigator.clipboard.writeText(post)
-      .then(function(){ toast('✅ הפוסט הועתק בהצלחה ומוכן להדבקה!','ok'); })
-      .catch(function(){
-        // fallback
-        var ta = document.createElement('textarea');
-        ta.value = post;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        try{ document.execCommand('copy'); toast('✅ הפוסט הועתק בהצלחה ומוכן להדבקה!','ok'); }
-        catch(e){ toast('שגיאה בהעתקה','err'); }
-        document.body.removeChild(ta);
-      });
+    // העתקה — Textarea Hack קשיח: מבטיח Plain Text נקי ללא Rich Text Meta-data
+    var ta = document.createElement('textarea');
+    ta.value = post;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand('copy'); toast('✅ הפוסט הועתק בהצלחה ומוכן להדבקה!','ok'); }
+    catch(e){ toast('שגיאה בהעתקה','err'); }
+    ta.remove();
   };
 
   // ── INIT ───────────────────────────────────────
