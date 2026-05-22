@@ -1662,14 +1662,10 @@ async function writeSheet(rowNum,updates){
   const url=getPostsUrl();
   if(!url){toast('Apps Script לא מוגדר','err');return false;}
   try{
-    // FIX: Use column AA (data[26], 0-based) as the stable physical row ID.
-    // p.row is position-based and drifts after deletions; data[26] is the true unique key.
+    // שימוש ב-rowNum כמזהה השורה — זהו האינדקס המקורי שהשרת מזהה
     const p=G.posts.find(x=>x.row===rowNum);
-    const aaVal=p&&p.data[26];
-    const physicalRow=(aaVal&&!isNaN(parseInt(aaVal)))?parseInt(aaVal):rowNum;
-    if(!aaVal||isNaN(parseInt(aaVal)))console.warn('[writeSheet] ⚠️ עמודה AA ריקה לשורה',rowNum,'— fallback ל-rowNum:',rowNum);
-    console.log('[writeSheet] rowNum:',rowNum,'| AA(data[26]):',aaVal,'| physicalRow:',physicalRow,'| action:update');
-    await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',row:physicalRow,updates})});
+    console.log('[writeSheet] rowNum:',rowNum,'| action:update');
+    await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',row:rowNum,updates})});
     // Optimistic update — assume success since no-cors gives opaque response
     if(p){for(const[col,val]of Object.entries(updates))p.data[parseInt(col)-1]=val;}
     return true;
@@ -2544,7 +2540,7 @@ function openEditModal(rowNum){
   // Check if we arrived from dashboard recycle modal
   const fromDash = dashNavigationState.active;
   const body=`
-    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה מיקומית: ${rowNum} | שורה פיזית (AA): ${(p.data[26]&&!isNaN(parseInt(p.data[26])))?parseInt(p.data[26]):'⚠️ ריק'}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':''}</div>
+    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה: ${rowNum}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':''}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px">
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם בעברית</span><input class="ifield" id="e-heb" value="${esc(gc(p,COL.HEB))}"></div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם באנגלית</span><input class="ifield" id="e-eng" value="${esc(gc(p,COL.ENG))}"></div>
@@ -5443,20 +5439,11 @@ document.addEventListener('DOMContentLoaded',function(){
     var p = G.posts.find(function(x){ return x.row === rowNum; });
     if(!p){ toast('פוסט לא נמצא','err'); return; }
 
-    // פונקציית ניקוי HTML — מסירה תגיות ורווחי קצה, שומרת \n\n מקוריים
-    function cleanHtml(s){
-      return (s||'')
-        .replace(/<br\s*\/?>/gi, '\n')          // <br> → \n
-        .replace(/<\/p>|<\/div>/gi, '\n')        // סגירת פסקה/div → \n
-        .replace(/<[^>]+>/g, '')                 // הסרת כל תגיות HTML שנותרו
-        .replace(/[ \t]+\n/g, '\n')              // רווחים לפני שורה חדשה
-        .replace(/\n[ \t]+/g, '\n')              // רווחים אחרי שורה חדשה
-        // ⚠️ ירידות שורה כפולות נשמרות כפי שהמשתמש הגדיר — אין כיווץ \n{2,}
-        .trim();
-    }
+    // א. תוכן גולמי (COL.CONTENT=9) — ללא שום split/trim/filter/join
+    // לוקחים את המחרוזת כפי שהיא מגיעה מהדאטה-בייס, שומרים על כל ירידות השורה
+    var content = gc(p, COL.CONTENT) || '';
 
-    // א. ניקוי תוכן (COL.CONTENT=9) והזרקת מחיר חכמה (COL.PRICE=2)
-    var content = cleanHtml(gc(p, COL.CONTENT));
+    // הזרקת מחיר חכמה (COL.PRICE=2) — replace פשוט על המחרוזת הגולמית
     var price   = gc(p, COL.PRICE);
     var hasDollar = /\$|דולר/.test(content);
     if(!hasDollar && price){
@@ -5472,24 +5459,11 @@ document.addEventListener('DOMContentLoaded',function(){
     var stats = '🔥 מעל ' + bought + ' רכישות | ⭐ ' + rating + ' דירוג';
 
     // ד. האשטגים (COL.TAGS=8)
-    var tags = gc(p, COL.TAGS);
+    var tags = gc(p, COL.TAGS) || '';
 
-    // הרכבת הפוסט הסופי — trim לכל שורה בנפרד, שמירת \n\n מקוריים מהתוכן
-    // גוף: כל שורה מנוקית מרווחי קצה בלבד; שורות ריקות לחלוטין מוסרות
-    var cleanBody = (content + '\n' + link + '\n' + stats)
-      .split('\n')
-      .map(function(l){ return l.trim(); })
-      .filter(function(l){ return l !== ''; })
-      .join('\n');
-
-    var cleanTags = tags
-      .split('\n')
-      .map(function(l){ return l.trim(); })
-      .filter(function(l){ return l !== ''; })
-      .join('\n');
-
-    // \n\n מפרידה בין הגוף לאשטגים
-    var finalPost = cleanBody + '\n\n' + cleanTags;
+    // הרכבת הפוסט הסופי — שרשור ישיר של המחרוזת הגולמית עם \n רגיל
+    // אין split/trim/filter/join על התוכן — ירידות השורה של המשתמש נשמרות
+    var finalPost = content + '\n' + link + '\n' + stats + '\n\n' + tags;
 
     // העתקה שקופה ברקע
     function doFallbackCopy(){
