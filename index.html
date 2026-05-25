@@ -1630,8 +1630,10 @@ async function loadData(){
   G.posts=new Array(validRows.length);
   for(var i=0;i<validRows.length;i++){
     var vr=validRows[i];
-    // row = originalRowNumber = מספר השורה הפיזי האמיתי בגיליון (לא האינדקס המסונן)
-    var p={row:vr.sheetRowNum,originalRowNumber:vr.sheetRowNum,data:vr.data};
+    // row = מספר השורה הפיזי האמיתי בגיליון (לא האינדקס המסונן)
+    // uid = Message ID מעמודה K (אינדקס 10) — מזהה קשיח למניעת Index Shifting
+    var p={row:vr.sheetRowNum,data:vr.data};
+    p.uid = (vr.data[10]||'').toString().trim() || null;
     p._dateE =parseDateIL(vr.data[COL.COL_E]);
     p._dateTG=parseDateIL(vr.data[COL.COL_Q]);
     p._dateIG=parseDateIL(vr.data[COL.COL_IG_D]);
@@ -1666,11 +1668,10 @@ async function writeSheet(rowNum,updates){
   if(!url){toast('Apps Script לא מוגדר','err');return false;}
   try{
     const p=G.posts.find(x=>x.row===rowNum);
-    // שימוש ב-originalRowNumber — מספר השורה הפיזי הנצרב בשלב הטעינה
-    // מבטיח שהשרת מעדכן את השורה הנכונה גם לאחר סינון/מיון/מחיקה
-    const physicalRow = (p && p.originalRowNumber) ? p.originalRowNumber : rowNum;
-    console.log('[writeSheet] rowNum:',rowNum,'| originalRowNumber:',physicalRow,'| action:update');
-    await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',row:physicalRow,updates})});
+    // uid = מזהה קשיח מעמודה K — השרת יחפש לפיו ויחזור fallback ל-row אם חסר
+    const uid = p ? (p.uid||null) : null;
+    console.log('[writeSheet] rowNum:',rowNum,'| uid:',uid,'| action:update');
+    await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',row:rowNum,uid,updates})});
     // Optimistic update — assume success since no-cors gives opaque response
     if(p){for(const[col,val]of Object.entries(updates))p.data[parseInt(col)-1]=val;}
     return true;
@@ -2545,7 +2546,7 @@ function openEditModal(rowNum){
   // Check if we arrived from dashboard recycle modal
   const fromDash = dashNavigationState.active;
   const body=`
-    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.originalRowNumber||rowNum}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':''}</div>
+    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.row||rowNum}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':''}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px">
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם בעברית</span><input class="ifield" id="e-heb" value="${esc(gc(p,COL.HEB))}"></div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם באנגלית</span><input class="ifield" id="e-eng" value="${esc(gc(p,COL.ENG))}"></div>
@@ -2770,9 +2771,9 @@ async function rewritePost(rowNum){
   // ── תיקון קריטי: וודא שמספר השורה תקין לפני השליחה ──────────────
   const p=G.posts.find(x=>x.row===rowNum);if(!p)return;
 
-  // שימוש ב-originalRowNumber — מספר השורה הפיזי הנצרב בשלב הטעינה
-  const safeRow=p.originalRowNumber?p.originalRowNumber:Number(p.row);
-  console.log('[rewritePost] rowNum received:',rowNum,' | p.originalRowNumber:',p.originalRowNumber,' | safeRow:',safeRow);
+  // uid — השרת יחפש לפי uid בעמודה K; fallback ל-row
+  const safeRow=Number(p.row);
+  console.log('[rewritePost] rowNum received:',rowNum,' | p.uid:',p.uid,' | safeRow:',safeRow);
 
   if(!safeRow||isNaN(safeRow)||safeRow<=0){
     alert('שגיאה: מספר שורה חסר או לא תקין ('+safeRow+'). הפעולה בוטלה.');
@@ -2806,10 +2807,10 @@ async function deleteProduct(rowNum){
   const p=G.posts.find(x=>x.row===rowNum);
   const name=p?gc(p,COL.HEB)||gc(p,COL.ENG)||('שורה '+rowNum):'שורה '+rowNum;
 
-  // שימוש ב-originalRowNumber — מספר השורה הפיזי הנצרב בשלב הטעינה
-  const physicalRow=(p&&p.originalRowNumber)?p.originalRowNumber:rowNum;
+  // uid = מזהה קשיח מעמודה K — השרת יחפש לפיו, fallback ל-row אם חסר
+  const uid = p ? (p.uid||null) : null;
 
-  if(!confirm('האם אתה בטוח שברצונך למחוק לצמיתות את המוצר מהגיליון?\n\n📦 '+name+'\n(שורה '+physicalRow+')\n\n⚠️ פעולה זו אינה הפיכה!'))return;
+  if(!confirm('האם אתה בטוח שברצונך למחוק לצמיתות את המוצר מהגיליון?\n\n📦 '+name+'\n(שורה '+rowNum+')\n\n⚠️ פעולה זו אינה הפיכה!'))return;
 
   const url=getPostsUrl();
   if(!url){toast('Apps Script לא מוגדר','err');return;}
@@ -2822,7 +2823,7 @@ async function deleteProduct(rowNum){
       mode:'cors',
       redirect:'follow',
       headers:{'Content-Type':'text/plain;charset=utf-8','Accept':'application/json'},
-      body:JSON.stringify({action:'deleteRow',row:physicalRow})
+      body:JSON.stringify({action:'deleteRow',row:rowNum,uid})
     });
     let result={ok:false,error:'תשובה לא תקינה מהשרת'};
     try{result=await resp.json();}catch(e){
