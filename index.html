@@ -4773,33 +4773,55 @@ function _saveRaffleHistory(arr){
   try{ localStorage.setItem(RAFFLE_HISTORY_KEY, JSON.stringify(arr)); }catch(e){}
 }
 
-// ── Seed default history if empty ────────────────
-// Scrapes current live participants from RAFFLE.data so no data is lost.
+// ── Seed / repair default history entry ────────────────────────
+// Runs on every load. Creates the first-raffle entry if the store is empty
+// OR if the existing seed has the old schema (no fbEnd / no growth data).
+// Participants are scraped live from RAFFLE.data so nothing is lost.
 function _seedRaffleHistoryIfEmpty(){
-  var existing = _getRaffleHistory();
-  if(existing && existing.length > 0) return;
+  var hist = _getRaffleHistory();
 
-  // Scrape every participant currently loaded in memory
+  // Detect if the seed entry needs to be written or repaired
+  var needsSeed = (hist.length === 0);
+  if(!needsSeed){
+    var first = hist[0];
+    // Repair condition: old schema had no fbEnd, or had empty participants
+    var hasNewSchema = first.social && first.social.fbEnd != null;
+    var hasParticipants = Array.isArray(first.participants) && first.participants.length > 0;
+    if(first.id === 'seed_001' && (!hasNewSchema || !hasParticipants)){
+      needsSeed = true; // overwrite the stale seed
+    }
+  }
+  if(!needsSeed) return;
+
+  // Scrape all participants currently loaded in memory
   var liveParticipants = (RAFFLE.data||[]).map(function(p){
-    return { name: p.nameHe||p.nameEn||'\u2014', tickets: p.tickets||0 };
+    return { name: p.nameHe||p.nameEn||'—', tickets: p.tickets||0 };
   });
 
-  var seed = [{
+  var seedEntry = {
     id:           'seed_001',
-    raffleName:   '\u05d4\u05d2\u05e8\u05dc\u05d4 \u05e8\u05d0\u05e9\u05d5\u05e0\u05d4',
-    startDate:    '2026-05-15',
+    raffleName:   'הגרלה ראשונה',
+    startDate:    '15/05/2026',
+    endDate:      '28/05/2026 20:00',
     date:         '2026-05-28T20:00:00.000Z',
-    winner:       '\u05d0\u05d9\u05dc\u05df \u05de\u05d2\u05df',
+    winner:       'אילן מגן',
     uniqueCount:  30,
     totalTickets: 81,
     social: {
-      fbStart: 174, fbEnd: 211,
-      igStart: 504, igEnd: 516,
-      tgStart: 205, tgEnd: 200
+      fbStart: 174,  fbEnd: 211,  fbGrowth: '+37',
+      igStart: 504,  igEnd: 516,  igGrowth: '+12',
+      tgStart: 205,  tgEnd: 200,  tgGrowth: '-5'
     },
     participants: liveParticipants
-  }];
-  _saveRaffleHistory(seed);
+  };
+
+  // Replace or prepend
+  if(hist.length > 0 && hist[0].id === 'seed_001'){
+    hist[0] = seedEntry;
+  } else {
+    hist.unshift(seedEntry);
+  }
+  _saveRaffleHistory(hist);
 }
 
 function confirmEndRaffle(){
@@ -4966,118 +4988,128 @@ function renderRaffleHistory(){
   var hist = _getRaffleHistory();
 
   if(badge){
-    if(hist.length){ badge.style.display='inline'; badge.textContent=hist.length; }
-    else { badge.style.display='none'; }
+    badge.style.display = hist.length ? 'inline' : 'none';
+    badge.textContent   = hist.length;
   }
 
   if(!hist.length){
     wrap.innerHTML =
       '<div class="comm-empty" style="padding:32px">'
       +'<div style="font-size:32px;margin-bottom:10px">📭</div>'
-      +'<div style="font-size:12px;color:var(--t2)">אין הגרלות קודמות עדיין.<br>לאחר סיום הגרלה היא תופיע כאן.</div>'
+      +'<div style="font-size:12px;color:var(--t2)">אין הגרלות קודמות עדיין.</div>'
       +'</div>';
     return;
   }
 
-  // Helper: format growth delta chip
-  function _growthChip(start, end){
-    var diff = end - start;
-    if(start === 0 && end === 0) return '';
-    var sign  = diff >= 0 ? '+' : '';
-    var color = diff > 0 ? 'var(--grn)' : diff < 0 ? 'var(--red)' : 'var(--t2)';
-    var bg    = diff > 0 ? '#f0fdf4'    : diff < 0 ? '#fef2f2'    : 'var(--s2)';
-    var border= diff > 0 ? '#86efac'    : diff < 0 ? '#fca5a5'    : 'var(--b1)';
-    return '<span style="font-size:10px;font-weight:800;color:'+color+';background:'+bg+';border:1px solid '+border+';border-radius:4px;padding:1px 5px;margin-right:3px">'+sign+diff+'</span>';
+  // ── Growth chip: accepts a pre-formatted string like "+37" or "-5"
+  //    OR computes from two numbers when no string is given.
+  function _chip(strVal, start, end){
+    var display, isPos, isNeg;
+    if(strVal != null && strVal !== ''){
+      display = String(strVal);
+      isPos   = display.charAt(0) === '+';
+      isNeg   = display.charAt(0) === '-';
+    } else {
+      var diff  = (end||0) - (start||0);
+      display   = (diff >= 0 ? '+' : '') + diff;
+      isPos     = diff > 0;
+      isNeg     = diff < 0;
+    }
+    var color  = isPos ? 'var(--grn)' : isNeg ? 'var(--red)' : 'var(--t2)';
+    var bg     = isPos ? '#f0fdf4'    : isNeg ? '#fef2f2'    : 'var(--s2)';
+    var border = isPos ? '#86efac'    : isNeg ? '#fca5a5'    : 'var(--b1)';
+    return '<span style="font-size:10px;font-weight:800;color:'+color+';background:'+bg
+           +';border:1px solid '+border+';border-radius:4px;padding:1px 6px">'+esc(display)+'</span>';
   }
 
-  // Helper: format date display
-  function _fmtDate(iso){
+  // ── Date helpers ───────────────────────────────
+  function _fmtIso(iso){   // ISO → "28/05/2026 20:00"
     if(!iso) return '—';
     try{
       var d = new Date(iso);
-      return d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'});
+      var date = d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'});
+      var time = d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+      return date+' '+time;
     }catch(e){ return iso.slice(0,10)||'—'; }
-  }
-  function _fmtLocalDate(str){ // "2026-05-15" → "15/05/2026"
-    if(!str) return '—';
-    var p = str.split('-');
-    if(p.length===3) return p[2]+'/'+p[1]+'/'+p[0];
-    return str;
   }
 
   var cards = hist.map(function(entry, idx){
-    var s = entry.social||{};
-    // Support both old schema {fb,ig,tg} and new {fbStart,fbEnd,...}
-    var fbStart = s.fbStart != null ? s.fbStart : (s.fb||0);
-    var fbEnd   = s.fbEnd   != null ? s.fbEnd   : (s.fb||0);
-    var igStart = s.igStart != null ? s.igStart : (s.ig||0);
-    var igEnd   = s.igEnd   != null ? s.igEnd   : (s.ig||0);
-    var tgStart = s.tgStart != null ? s.tgStart : (s.tg||0);
-    var tgEnd   = s.tgEnd   != null ? s.tgEnd   : (s.tg||0);
+    var s = entry.social || {};
 
-    var startDateStr = entry.startDate ? _fmtLocalDate(entry.startDate) : '—';
-    var endDateStr   = _fmtDate(entry.date);
-    var partsCount   = (entry.participants||[]).length;
+    // Support both schemas: new has fbEnd/fbGrowth, old had just fb
+    var fbEnd    = s.fbEnd   != null ? s.fbEnd   : (s.fb||0);
+    var igEnd    = s.igEnd   != null ? s.igEnd   : (s.ig||0);
+    var tgEnd    = s.tgEnd   != null ? s.tgEnd   : (s.tg||0);
+    var fbStart  = s.fbStart != null ? s.fbStart : fbEnd;
+    var igStart  = s.igStart != null ? s.igStart : igEnd;
+    var tgStart  = s.tgStart != null ? s.tgStart : tgEnd;
+    var fbGrowth = s.fbGrowth != null ? s.fbGrowth : null;
+    var igGrowth = s.igGrowth != null ? s.igGrowth : null;
+    var tgGrowth = s.tgGrowth != null ? s.tgGrowth : null;
+
+    // Dates: prefer human-readable fields, fall back to ISO
+    var startStr = entry.startDate || '—';                  // already "15/05/2026"
+    var endStr   = entry.endDate   || _fmtIso(entry.date);  // "28/05/2026 20:00"
+
+    var partsCount = (entry.participants||[]).length;
 
     return ''
-      // ── Card ──
       +'<div style="background:var(--s1);border:1px solid var(--b1);border-radius:13px;overflow:hidden;margin-bottom:12px">'
 
-        // Card header strip
-        +'<div style="background:linear-gradient(135deg,#fef3ee,#fff7ed);border-bottom:1px solid var(--b1);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">'
+        // ── Header strip ──
+        +'<div style="background:linear-gradient(135deg,#fef3ee,#fff7ed);border-bottom:1px solid var(--b1);padding:11px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">'
           +'<div style="display:flex;align-items:center;gap:8px">'
-            +'<span style="font-size:16px">🎟️</span>'
+            +'<span style="font-size:18px">🎟️</span>'
             +'<span style="font-size:14px;font-weight:900;color:var(--tx)">'+esc(entry.raffleName||'הגרלה')+'</span>'
           +'</div>'
-          +'<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2)">'
-            +'<span>📅 '+startDateStr+' — '+endDateStr+'</span>'
+          +'<div style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:5px">'
+            +'<span>📅</span>'
+            +'<span style="font-weight:700">'+esc(startStr)+'</span>'
+            +'<span style="color:var(--t3)">—</span>'
+            +'<span style="font-weight:700">'+esc(endStr)+'</span>'
           +'</div>'
         +'</div>'
 
-        // Card body
-        +'<div style="padding:12px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;align-items:start">'
+        // ── Body grid ──
+        +'<div style="padding:12px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">'
 
-          // Winner
-          +'<div style="background:var(--s2);border:1px solid #86efac;border-radius:9px;padding:10px;text-align:center">'
-            +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">זוכה</div>'
-            +'<div style="font-size:18px;margin-bottom:3px">🏆</div>'
-            +'<div style="font-size:13px;font-weight:900;color:var(--grn)">'+esc(entry.winner||'לא צוין')+'</div>'
+          // Winner box
+          +'<div style="background:var(--s2);border:1.5px solid #86efac;border-radius:10px;padding:12px;text-align:center">'
+            +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">🏆 זוכה</div>'
+            +'<div style="font-size:14px;font-weight:900;color:var(--grn)">'+esc(entry.winner||'לא צוין')+'</div>'
           +'</div>'
 
-          // Stats
-          +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:10px;text-align:center">'
-            +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">נתוני הגרלה</div>'
-            +'<div style="font-size:20px;font-weight:900;color:var(--tx);line-height:1">'+esc(String(entry.uniqueCount||0))+'</div>'
-            +'<div style="font-size:10px;color:var(--t3);margin-top:2px;margin-bottom:6px">משתתפים</div>'
-            +'<div style="font-size:16px;font-weight:900;color:var(--acc);line-height:1">'+esc(String(entry.totalTickets||0))+'</div>'
+          // Stats box
+          +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:12px;text-align:center">'
+            +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">📊 נתוני הגרלה</div>'
+            +'<div style="font-size:22px;font-weight:900;color:var(--tx);line-height:1">'+esc(String(entry.uniqueCount||0))+'</div>'
+            +'<div style="font-size:10px;color:var(--t3);margin-bottom:7px">משתתפים</div>'
+            +'<div style="font-size:18px;font-weight:900;color:var(--acc);line-height:1">'+esc(String(entry.totalTickets||0))+'</div>'
             +'<div style="font-size:10px;color:var(--t3);margin-top:2px">כרטיסים</div>'
           +'</div>'
 
-          // Growth metrics
-          +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:10px">'
-            +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">📈 צמיחת קהילה</div>'
-            // FB
-            +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">'
-              +'<span style="font-size:11px;color:#1558c0;font-weight:700;display:flex;align-items:center;gap:3px">📘 <span style="font-family:monospace">'+fbEnd.toLocaleString()+'</span></span>'
-              +_growthChip(fbStart,fbEnd)
+          // Growth box
+          +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:12px">'
+            +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">📈 צמיחת קהילה</div>'
+            +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+              +'<span style="font-size:11px;color:#1558c0;font-weight:700">📘 '+fbEnd.toLocaleString()+'</span>'
+              +_chip(fbGrowth, fbStart, fbEnd)
             +'</div>'
-            // IG
-            +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">'
-              +'<span style="font-size:11px;color:#e1306c;font-weight:700;display:flex;align-items:center;gap:3px">📷 <span style="font-family:monospace">'+igEnd.toLocaleString()+'</span></span>'
-              +_growthChip(igStart,igEnd)
+            +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+              +'<span style="font-size:11px;color:#e1306c;font-weight:700">📷 '+igEnd.toLocaleString()+'</span>'
+              +_chip(igGrowth, igStart, igEnd)
             +'</div>'
-            // TG
             +'<div style="display:flex;align-items:center;justify-content:space-between">'
-              +'<span style="font-size:11px;color:#0369a1;font-weight:700;display:flex;align-items:center;gap:3px">✈️ <span style="font-family:monospace">'+tgEnd.toLocaleString()+'</span></span>'
-              +_growthChip(tgStart,tgEnd)
+              +'<span style="font-size:11px;color:#0369a1;font-weight:700">✈️ '+tgEnd.toLocaleString()+'</span>'
+              +_chip(tgGrowth, tgStart, tgEnd)
             +'</div>'
           +'</div>'
 
         +'</div>'
 
-        // Card footer
-        +'<div style="padding:8px 16px 10px;border-top:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'
-          +'<span style="font-size:11px;color:var(--t3)">'+esc(String(partsCount))+' שמות שמורים ברשימה</span>'
+        // ── Footer ──
+        +'<div style="padding:8px 16px 11px;border-top:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">'
+          +'<span style="font-size:11px;color:var(--t3)">'+partsCount+' שמות שמורים ברשימה</span>'
           +'<button class="btn sec sm" style="font-size:11px" onclick="openRaffleHistoryDetail('+idx+')">👥 הצג רשימת משתתפים</button>'
         +'</div>'
 
@@ -5087,74 +5119,87 @@ function renderRaffleHistory(){
   wrap.innerHTML = '<div style="padding:12px 14px">'+cards+'</div>';
 }
 
-// ── Detail popup: participants of a past raffle ──────────────
+// ── Detail popup ─────────────────────────────────────────────
 function openRaffleHistoryDetail(idx){
   var hist  = _getRaffleHistory();
   var entry = hist[idx];
   if(!entry) return;
 
-  var parts = (entry.participants||[]).slice().sort(function(a,b){ return b.tickets-a.tickets; });
-
   var s = entry.social||{};
-  var fbStart = s.fbStart != null ? s.fbStart : (s.fb||0);
-  var fbEnd   = s.fbEnd   != null ? s.fbEnd   : (s.fb||0);
-  var igStart = s.igStart != null ? s.igStart : (s.ig||0);
-  var igEnd   = s.igEnd   != null ? s.igEnd   : (s.ig||0);
-  var tgStart = s.tgStart != null ? s.tgStart : (s.tg||0);
-  var tgEnd   = s.tgEnd   != null ? s.tgEnd   : (s.tg||0);
+  var fbEnd    = s.fbEnd   != null ? s.fbEnd   : (s.fb||0);
+  var igEnd    = s.igEnd   != null ? s.igEnd   : (s.ig||0);
+  var tgEnd    = s.tgEnd   != null ? s.tgEnd   : (s.tg||0);
+  var fbStart  = s.fbStart != null ? s.fbStart : fbEnd;
+  var igStart  = s.igStart != null ? s.igStart : igEnd;
+  var tgStart  = s.tgStart != null ? s.tgStart : tgEnd;
+  var fbGrowth = s.fbGrowth != null ? String(s.fbGrowth) : null;
+  var igGrowth = s.igGrowth != null ? String(s.igGrowth) : null;
+  var tgGrowth = s.tgGrowth != null ? String(s.tgGrowth) : null;
 
-  function _chip(start, end){
-    var diff=end-start; var sign=diff>=0?'+':'';
-    var color=diff>0?'var(--grn)':diff<0?'var(--red)':'var(--t2)';
-    var bg=diff>0?'#f0fdf4':diff<0?'#fef2f2':'var(--s2)';
-    return '<span style="font-size:10px;font-weight:800;color:'+color+';background:'+bg+';border-radius:4px;padding:1px 5px">'+sign+diff+'</span>';
+  function _chip(strVal, start, end){
+    var display, isPos, isNeg;
+    if(strVal != null && strVal !== ''){
+      display = strVal; isPos = display.charAt(0)==='+'; isNeg = display.charAt(0)==='-';
+    } else {
+      var diff=((end||0)-(start||0)); display=(diff>=0?'+':'')+diff; isPos=diff>0; isNeg=diff<0;
+    }
+    var c=isPos?'var(--grn)':isNeg?'var(--red)':'var(--t2)';
+    var bg=isPos?'#f0fdf4':isNeg?'#fef2f2':'var(--s2)';
+    var bo=isPos?'#86efac':isNeg?'#fca5a5':'var(--b1)';
+    return '<span style="font-size:11px;font-weight:800;color:'+c+';background:'+bg+';border:1px solid '+bo+';border-radius:4px;padding:2px 7px">'+esc(display)+'</span>';
   }
 
-  function _fmtDate(iso){
-    if(!iso) return '—';
-    try{ var d=new Date(iso); return d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){return '—';}
-  }
-  function _fmtLocalDate(str){
-    if(!str) return '—';
-    var p=str.split('-'); return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:str;
-  }
+  var startStr = entry.startDate || '—';
+  var endStr   = entry.endDate   || (function(){
+    if(!entry.date) return '—';
+    try{
+      var d=new Date(entry.date);
+      return d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'})
+             +' '+d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+    }catch(e){return '—';}
+  })();
 
+  var parts = (entry.participants||[]).slice().sort(function(a,b){return b.tickets-a.tickets;});
+  var medals = ['🥇','🥈','🥉'];
   var listHtml = parts.length
     ? parts.map(function(p,i){
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-bottom:1px solid var(--b1)">'
-          +'<span style="font-size:12px;font-weight:700;color:var(--tx)">'+(i===0?'🥇 ':i===1?'🥈 ':i===2?'🥉 ':(i+1)+'. ')+esc(p.name)+'</span>'
-          +'<span style="font-family:monospace;font-weight:900;font-size:12px;color:var(--acc);background:var(--s2);padding:1px 8px;border-radius:5px">'+esc(String(p.tickets))+' 🎟️</span>'
+        var medal = i < 3 ? medals[i]+' ' : (i+1)+'. ';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid var(--b1)">'
+          +'<span style="font-size:12px;font-weight:700;color:var(--tx)">'+medal+esc(p.name)+'</span>'
+          +'<span style="font-family:monospace;font-weight:900;font-size:12px;color:var(--acc);background:var(--s2);padding:1px 8px;border-radius:5px">'+p.tickets+' 🎟️</span>'
           +'</div>';
       }).join('')
-    : '<div style="padding:20px;text-align:center;color:var(--t2);font-size:12px">אין רשומות משתתפים לתצוגה</div>';
+    : '<div style="padding:20px;text-align:center;color:var(--t2);font-size:12px">אין רשומות משתתפים</div>';
 
   var body =
-    // Meta summary
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px">'
-      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">תאריכים</div>'
-      +'<div style="font-size:11px;font-weight:700;color:var(--tx)">'+_fmtLocalDate(entry.startDate)+' — '+_fmtDate(entry.date)+'</div>'
+      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">תאריכים</div>'
+      +'<div style="font-size:11px;font-weight:700;color:var(--tx)">'+esc(startStr)+' — '+esc(endStr)+'</div>'
     +'</div>'
     +'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px">'
-      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">זוכה</div>'
+      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">זוכה</div>'
       +'<div style="font-size:14px;font-weight:900;color:var(--grn)">🏆 '+esc(entry.winner||'לא צוין')+'</div>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px">'
-      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">נתוני הגרלה</div>'
-      +'<div style="font-size:13px;font-weight:900;color:var(--tx)">'+esc(String(entry.uniqueCount||0))+'<span style="font-size:10px;font-weight:400;color:var(--t2)"> משתתפים</span>'
-      +' &nbsp; <span style="color:var(--acc)">'+esc(String(entry.totalTickets||0))+'</span><span style="font-size:10px;font-weight:400;color:var(--t2)"> כרטיסים</span></div>'
+      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">נתוני הגרלה</div>'
+      +'<div style="font-size:13px;font-weight:900;color:var(--tx)">'+esc(String(entry.uniqueCount||0))+'<span style="font-size:10px;color:var(--t2);font-weight:400"> משתתפים</span>'
+      +'&nbsp;&nbsp;<span style="color:var(--acc)">'+esc(String(entry.totalTickets||0))+'</span><span style="font-size:10px;color:var(--t2);font-weight:400"> כרטיסים</span></div>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px">'
-      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">צמיחת קהילה</div>'
-      +'<div style="display:flex;flex-direction:column;gap:3px">'
-      +'<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700"><span style="color:#1558c0">📘 '+fbEnd.toLocaleString()+'</span>'+_chip(fbStart,fbEnd)+'</div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700"><span style="color:#e1306c">📷 '+igEnd.toLocaleString()+'</span>'+_chip(igStart,igEnd)+'</div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700"><span style="color:#0369a1">✈️ '+tgEnd.toLocaleString()+'</span>'+_chip(tgStart,tgEnd)+'</div>'
+      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">צמיחת קהילה</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+        +'<span style="font-size:12px;color:#1558c0;font-weight:700">📘 '+fbEnd.toLocaleString()+'</span>'+_chip(fbGrowth,fbStart,fbEnd)
+      +'</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+        +'<span style="font-size:12px;color:#e1306c;font-weight:700">📷 '+igEnd.toLocaleString()+'</span>'+_chip(igGrowth,igStart,igEnd)
+      +'</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
+        +'<span style="font-size:12px;color:#0369a1;font-weight:700">✈️ '+tgEnd.toLocaleString()+'</span>'+_chip(tgGrowth,tgStart,tgEnd)
       +'</div>'
     +'</div>'
     +'</div>'
-    // Participants list
-    +'<div style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px">'
+    +'<div style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">'
       +'רשימת משתתפים ('+parts.length+')'
     +'</div>'
     +'<div style="max-height:320px;overflow-y:auto;border:1px solid var(--b1);border-radius:9px;padding:4px 10px">'+listHtml+'</div>';
