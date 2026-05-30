@@ -1045,6 +1045,19 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           </div>
         </div>
 
+        <!-- ── Raffle History Section ── -->
+        <div style="margin-top:20px">
+          <div class="tw">
+            <div class="ttbar" style="justify-content:space-between;align-items:center">
+              <span style="font-size:13px;font-weight:800;color:var(--tx)">📜 היסטוריית הגרלות קודמות</span>
+              <button class="btn sec sm" onclick="clearRaffleHistory()" style="font-size:10px;color:var(--red);border-color:var(--red)">🗑️ נקה היסטוריה</button>
+            </div>
+            <div id="raffle-history-wrap" style="padding:8px 0">
+              <div class="comm-empty" style="padding:24px"><div class="icon" style="font-size:28px">📭</div><div>אין הגרלות קודמות עדיין</div></div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
     </div>
@@ -4568,6 +4581,7 @@ async function loadRaffleData(){
   _raffleRefreshSnapshots();
   _updateRaffleDatalist();
   _renderRaffleTable();
+  renderRaffleHistory();
   if(fetched)toast('✅ הגרלה עודכנה','ok');
   else if(!RAFFLE.data.length&&!RAFFLE.raffles.length){
     if(wrap)wrap.innerHTML='<div class="comm-empty"><div class="icon">🎟️</div><div>אין נתונים — צור הגרלה חדשה כדי להתחיל</div></div>';
@@ -4739,16 +4753,126 @@ function _saveEditRaffle(){
 function confirmEndRaffle(){
   var ar=_getActiveRaffle();
   if(!ar){toast('אין הגרלה פעילה','inf');return;}
-  if(!confirm('לסיים את ההגרלה "'+ar.name+'"? לא ניתן לבטל פעולה זו.'))return;
+  if(!confirm('לסיים את ההגרלה "'+ar.name+'"?\nלא ניתן לבטל פעולה זו.'))return;
+
+  // ── Ask for winner name ──
+  var winner=(prompt('🏆 מי הזוכה בהגרלה "'+ar.name+'"?\nהזן את שם הזוכה:')||'').trim();
+  if(!winner){
+    if(!confirm('לא הוזן שם זוכה. האם לסיים את ההגרלה בכל זאת?'))return;
+    winner='לא צוין';
+  }
+
+  // ── Collect stats from current raffle ──
+  var participants=RAFFLE.data.filter(function(p){return p.raffleId===ar.id;});
+  var uniqueCount=participants.length;
+  var totalTickets=participants.reduce(function(s,p){return s+(p.tickets||0);},0);
+  var participantsList=participants.map(function(p){return {name:p.nameHe||p.nameEn||'—',tickets:p.tickets||0};});
+
+  // ── Build history entry ──
+  var histEntry={
+    id:ar.id,
+    name:ar.name||'הגרלה ללא שם',
+    endedAt:new Date().toISOString(),
+    winner:winner,
+    uniqueCount:uniqueCount,
+    totalTickets:totalTickets,
+    participants:participantsList
+  };
+
+  // ── Save to history (localStorage) ──
+  var log=_getRaffleLog();
+  log.unshift(histEntry);
+  _saveRaffleLog(log);
+
+  // ── Mark raffle as ended ──
   ar.active=false;
   ar.endedAt=new Date().toISOString();
+  ar.winner=winner;
+
+  // ── Reset participants list for this raffle ──
+  RAFFLE.data=RAFFLE.data.filter(function(p){return p.raffleId!==ar.id;});
+
   _saveRaffleStore({raffles:RAFFLE.raffles,participants:RAFFLE.data});
   _rafflePushToCloud();
   _renderRaffleBanner();
   _raffleRefreshSnapshots();
   _renderRaffleTable();
   _renderDashRaffleWidget();
-  toast('🏁 הגרלה הסתיימה','inf');
+  renderRaffleHistory();
+  toast('🏆 הגרלה הסתיימה! זוכה: '+winner,'ok');
+}
+
+// ── Raffle History Rendering ──────────────────────
+function renderRaffleHistory(){
+  var wrap=document.getElementById('raffle-history-wrap');
+  if(!wrap)return;
+  var log=_getRaffleLog();
+  if(!log||!log.length){
+    wrap.innerHTML='<div class="comm-empty" style="padding:24px"><div class="icon" style="font-size:28px">📭</div><div>אין הגרלות קודמות עדיין</div></div>';
+    return;
+  }
+
+  var rows=log.map(function(entry,idx){
+    var dateStr='—';
+    if(entry.endedAt){
+      try{
+        var d=new Date(entry.endedAt);
+        dateStr=d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+      }catch(e){}
+    }
+    var participantsJson=esc(JSON.stringify(entry.participants||[]));
+    return '<tr>'
+      +'<td style="font-weight:800;color:var(--tx)">'+esc(entry.name)+'</td>'
+      +'<td style="text-align:center">'+esc(String(entry.uniqueCount||0))+'</td>'
+      +'<td style="text-align:center">'+esc(String(entry.totalTickets||0))+'</td>'
+      +'<td><span style="font-weight:900;color:var(--grn);background:#f0fdf4;padding:2px 8px;border-radius:5px">🏆 '+esc(entry.winner||'לא צוין')+'</span></td>'
+      +'<td style="color:var(--t2);font-size:11px">'+dateStr+'</td>'
+      +'<td><button class="btn sec sm" style="font-size:10px" onclick="showRaffleParticipantsPopup('+idx+')">👥 הצג משתתפים</button></td>'
+      +'</tr>';
+  }).join('');
+
+  wrap.innerHTML='<div class="tscroll"><table>'
+    +'<thead><tr>'
+    +'<th>שם ההגרלה</th>'
+    +'<th style="text-align:center">משתתפים</th>'
+    +'<th style="text-align:center">כרטיסים</th>'
+    +'<th>זוכה</th>'
+    +'<th>תאריך סיום</th>'
+    +'<th></th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div>';
+}
+
+function showRaffleParticipantsPopup(idx){
+  var log=_getRaffleLog();
+  var entry=log[idx];
+  if(!entry)return;
+  var parts=entry.participants||[];
+  var list=parts.length
+    ? parts.map(function(p){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--b1)">'
+          +'<span style="font-weight:700;color:var(--tx)">'+esc(p.name)+'</span>'
+          +'<span style="font-family:monospace;font-weight:800;color:var(--acc);background:var(--s2);padding:1px 7px;border-radius:5px">'+esc(String(p.tickets))+'🎟️</span>'
+          +'</div>';
+      }).join('')
+    : '<div class="empty">אין משתתפים רשומים</div>';
+
+  var body='<div style="margin-bottom:10px">'
+    +'<div style="font-size:12px;color:var(--t2)">הגרלה: <strong style="color:var(--tx)">'+esc(entry.name)+'</strong></div>'
+    +'<div style="font-size:12px;color:var(--t2)">זוכה: <strong style="color:var(--grn)">🏆 '+esc(entry.winner||'לא צוין')+'</strong></div>'
+    +'</div>'
+    +'<div style="max-height:350px;overflow-y:auto">'+list+'</div>'
+    +'<div style="margin-top:10px;font-size:11px;color:var(--t3);text-align:center">סה"כ '+parts.length+' משתתפים · '+((entry.totalTickets)||0)+' כרטיסים</div>';
+
+  openModal('👥 משתתפי ההגרלה — '+esc(entry.name),body,'<button class="btn sec" onclick="closeModal()">סגור</button>');
+}
+
+function clearRaffleHistory(){
+  if(!confirm('למחוק את כל היסטוריית ההגרלות? לא ניתן לבטל.'))return;
+  _saveRaffleLog([]);
+  renderRaffleHistory();
+  toast('🗑️ ההיסטוריה נוקתה','inf');
 }
 
 // ── Add ticket panel ──────────────────────────────
