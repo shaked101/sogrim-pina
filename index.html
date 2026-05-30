@@ -1045,15 +1045,24 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           </div>
         </div>
 
-        <!-- ── Raffle History Section ── -->
-        <div style="margin-top:20px">
+        <!-- ══════════════════════════════════════════════
+             📜 היסטוריית הגרלות — RAFFLE HISTORY SECTION
+        ══════════════════════════════════════════════ -->
+        <div style="margin-top:18px">
           <div class="tw">
-            <div class="ttbar" style="justify-content:space-between;align-items:center">
-              <span style="font-size:13px;font-weight:800;color:var(--tx)">📜 היסטוריית הגרלות קודמות</span>
+            <div class="ttbar" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:15px">📜</span>
+                <span style="font-size:13px;font-weight:800;color:var(--tx)">היסטוריית הגרלות</span>
+                <span id="raffle-history-count-badge" style="display:none;background:var(--acc);color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:9px"></span>
+              </div>
               <button class="btn sec sm" onclick="clearRaffleHistory()" style="font-size:10px;color:var(--red);border-color:var(--red)">🗑️ נקה היסטוריה</button>
             </div>
-            <div id="raffle-history-wrap" style="padding:8px 0">
-              <div class="comm-empty" style="padding:24px"><div class="icon" style="font-size:28px">📭</div><div>אין הגרלות קודמות עדיין</div></div>
+            <div id="raffle-history-wrap">
+              <div class="comm-empty" style="padding:28px">
+                <div style="font-size:30px;margin-bottom:8px">📭</div>
+                <div style="font-size:12px;color:var(--t2)">אין הגרלות קודמות עדיין.<br>לאחר סיום הגרלה היא תופיע כאן.</div>
+              </div>
             </div>
           </div>
         </div>
@@ -4750,130 +4759,274 @@ function _saveEditRaffle(){
 }
 
 // ── End raffle ────────────────────────────────────
+// ═══════════════════════════════════════════════════
+// RAFFLE HISTORY — localStorage key: sogrim_pina_raffle_history
+// ═══════════════════════════════════════════════════
+var RAFFLE_HISTORY_KEY = 'sogrim_pina_raffle_history';
+
+function _getRaffleHistory(){
+  try{ return JSON.parse(localStorage.getItem(RAFFLE_HISTORY_KEY)||'[]'); }
+  catch(e){ return []; }
+}
+function _saveRaffleHistory(arr){
+  try{ localStorage.setItem(RAFFLE_HISTORY_KEY, JSON.stringify(arr)); }catch(e){}
+}
+
+// ── Open "End Raffle" modal ───────────────────────
 function confirmEndRaffle(){
-  var ar=_getActiveRaffle();
-  if(!ar){toast('אין הגרלה פעילה','inf');return;}
-  if(!confirm('לסיים את ההגרלה "'+ar.name+'"?\nלא ניתן לבטל פעולה זו.'))return;
+  var ar = _getActiveRaffle();
+  if(!ar){ toast('אין הגרלה פעילה','inf'); return; }
 
-  // ── Ask for winner name ──
-  var winner=(prompt('🏆 מי הזוכה בהגרלה "'+ar.name+'"?\nהזן את שם הזוכה:')||'').trim();
-  if(!winner){
-    if(!confirm('לא הוזן שם זוכה. האם לסיים את ההגרלה בכל זאת?'))return;
-    winner='לא צוין';
-  }
+  // Gather current stats to pre-fill modal
+  var participants = RAFFLE.data.filter(function(p){ return p.raffleId === ar.id; });
+  var uniqueCount  = participants.length;
+  var totalTickets = participants.reduce(function(s,p){ return s+(p.tickets||0); }, 0);
 
-  // ── Collect stats from current raffle ──
-  var participants=RAFFLE.data.filter(function(p){return p.raffleId===ar.id;});
-  var uniqueCount=participants.length;
-  var totalTickets=participants.reduce(function(s,p){return s+(p.tickets||0);},0);
-  var participantsList=participants.map(function(p){return {name:p.nameHe||p.nameEn||'—',tickets:p.tickets||0};});
+  // Read latest snapshot values from the DOM to pre-fill social fields
+  function _snapVal(id){ var el=document.getElementById(id); return el?(el.textContent||'').replace(/[^0-9]/g,'')||'':''; }
+  var fbNow = _snapVal('raffle-snap-fb-count');
+  var igNow = _snapVal('raffle-snap-ig-count');
+  var tgNow = _snapVal('raffle-snap-tg-count');
 
-  // ── Build history entry ──
-  var histEntry={
-    id:ar.id,
-    name:ar.name||'הגרלה ללא שם',
-    endedAt:new Date().toISOString(),
-    winner:winner,
-    uniqueCount:uniqueCount,
-    totalTickets:totalTickets,
-    participants:participantsList
+  var body =
+    '<div style="background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:12px 14px;margin-bottom:14px">'
+    +'<div style="font-size:11px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📊 נתוני ההגרלה</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
+    +'<div style="font-size:12px;color:var(--t2)">משתתפים ייחודיים: <strong style="color:var(--tx)">'+uniqueCount+'</strong></div>'
+    +'<div style="font-size:12px;color:var(--t2)">סך כרטיסי הגרלה: <strong style="color:var(--acc)">'+totalTickets+'</strong></div>'
+    +'</div></div>'
+
+    +'<div class="fg" style="margin-bottom:11px">'
+    +'<label style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.4px">🏆 שם הזוכה המאושר <span style="color:var(--red)">*</span></label>'
+    +'<input type="text" id="re-winner" class="ifield" placeholder="הזן את שם הזוכה..." autocomplete="off" style="margin-top:4px">'
+    +'</div>'
+
+    +'<div style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">📱 נתוני קהילה בסיום ההגרלה</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:4px">'
+
+    +'<div class="fg">'
+    +'<label style="font-size:10px;color:var(--t2);display:flex;align-items:center;gap:4px"><span style="color:#1558c0">📘</span>פייסבוק</label>'
+    +'<input type="number" id="re-fb" class="ifield" placeholder="חברים..." value="'+fbNow+'" min="0" style="margin-top:4px;text-align:center">'
+    +'</div>'
+
+    +'<div class="fg">'
+    +'<label style="font-size:10px;color:var(--t2);display:flex;align-items:center;gap:4px"><span style="color:#e1306c">📷</span>אינסטגרם</label>'
+    +'<input type="number" id="re-ig" class="ifield" placeholder="עוקבים..." value="'+igNow+'" min="0" style="margin-top:4px;text-align:center">'
+    +'</div>'
+
+    +'<div class="fg">'
+    +'<label style="font-size:10px;color:var(--t2);display:flex;align-items:center;gap:4px"><span style="color:#0369a1">✈️</span>טלגרם</label>'
+    +'<input type="number" id="re-tg" class="ifield" placeholder="מנויים..." value="'+tgNow+'" min="0" style="margin-top:4px;text-align:center">'
+    +'</div>'
+    +'</div>';
+
+  var foot =
+    '<button class="btn" onclick="_doEndRaffle()" style="background:var(--grn)">💾 שמור וסיים הגרלה</button>'
+    +'<button class="btn sec" onclick="closeModal()">ביטול</button>';
+
+  openModal('🏁 סיכום הגרלת סוגרים פינה — '+esc(ar.name), body, foot);
+
+  // Auto-focus winner field
+  setTimeout(function(){ var el=document.getElementById('re-winner'); if(el)el.focus(); }, 120);
+}
+
+// ── Execute end-raffle: save history + reset ─────
+function _doEndRaffle(){
+  var ar = _getActiveRaffle();
+  if(!ar){ closeModal(); toast('אין הגרלה פעילה','inf'); return; }
+
+  var winner = (document.getElementById('re-winner')?.value||'').trim();
+  if(!winner){ toast('יש להזין שם זוכה','err'); document.getElementById('re-winner')?.focus(); return; }
+
+  var fbVal  = parseInt(document.getElementById('re-fb')?.value)||0;
+  var igVal  = parseInt(document.getElementById('re-ig')?.value)||0;
+  var tgVal  = parseInt(document.getElementById('re-tg')?.value)||0;
+
+  // Collect full participants list snapshot
+  var participants = RAFFLE.data.filter(function(p){ return p.raffleId===ar.id; });
+  var uniqueCount  = participants.length;
+  var totalTickets = participants.reduce(function(s,p){ return s+(p.tickets||0); }, 0);
+  var participantsList = participants.map(function(p){
+    return { name: p.nameHe||p.nameEn||'—', tickets: p.tickets||0 };
+  });
+
+  // Build history entry
+  var entry = {
+    id:         ar.id,
+    raffleName: ar.name||'הגרלה',
+    date:       new Date().toISOString(),
+    winner:     winner,
+    uniqueCount: uniqueCount,
+    totalTickets: totalTickets,
+    social:     { fb: fbVal, ig: igVal, tg: tgVal },
+    participants: participantsList
   };
 
-  // ── Save to history (localStorage) ──
-  var log=_getRaffleLog();
-  log.unshift(histEntry);
-  _saveRaffleLog(log);
+  // Prepend to history array
+  var hist = _getRaffleHistory();
+  hist.unshift(entry);
+  _saveRaffleHistory(hist);
 
-  // ── Mark raffle as ended ──
-  ar.active=false;
-  ar.endedAt=new Date().toISOString();
-  ar.winner=winner;
+  // Mark raffle as ended
+  ar.active  = false;
+  ar.endedAt = entry.date;
+  ar.winner  = winner;
 
-  // ── Reset participants list for this raffle ──
-  RAFFLE.data=RAFFLE.data.filter(function(p){return p.raffleId!==ar.id;});
+  // ⚠️ RESET — remove all participants of this raffle
+  RAFFLE.data = RAFFLE.data.filter(function(p){ return p.raffleId !== ar.id; });
 
-  _saveRaffleStore({raffles:RAFFLE.raffles,participants:RAFFLE.data});
+  _saveRaffleStore({ raffles: RAFFLE.raffles, participants: RAFFLE.data });
   _rafflePushToCloud();
+  closeModal();
   _renderRaffleBanner();
   _raffleRefreshSnapshots();
   _renderRaffleTable();
   _renderDashRaffleWidget();
   renderRaffleHistory();
-  toast('🏆 הגרלה הסתיימה! זוכה: '+winner,'ok');
+  toast('🏆 הגרלה הסתיימה! זוכה: '+winner, 'ok');
 }
 
-// ── Raffle History Rendering ──────────────────────
+// ── Render history section ────────────────────────
 function renderRaffleHistory(){
-  var wrap=document.getElementById('raffle-history-wrap');
-  if(!wrap)return;
-  var log=_getRaffleLog();
-  if(!log||!log.length){
-    wrap.innerHTML='<div class="comm-empty" style="padding:24px"><div class="icon" style="font-size:28px">📭</div><div>אין הגרלות קודמות עדיין</div></div>';
+  var wrap  = document.getElementById('raffle-history-wrap');
+  var badge = document.getElementById('raffle-history-count-badge');
+  if(!wrap) return;
+
+  var hist = _getRaffleHistory();
+
+  if(badge){
+    if(hist.length){ badge.style.display='inline'; badge.textContent=hist.length; }
+    else { badge.style.display='none'; }
+  }
+
+  if(!hist.length){
+    wrap.innerHTML =
+      '<div class="comm-empty" style="padding:28px">'
+      +'<div style="font-size:30px;margin-bottom:8px">📭</div>'
+      +'<div style="font-size:12px;color:var(--t2)">אין הגרלות קודמות עדיין.<br>לאחר סיום הגרלה היא תופיע כאן.</div>'
+      +'</div>';
     return;
   }
 
-  var rows=log.map(function(entry,idx){
-    var dateStr='—';
-    if(entry.endedAt){
-      try{
-        var d=new Date(entry.endedAt);
-        dateStr=d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
-      }catch(e){}
-    }
-    var participantsJson=esc(JSON.stringify(entry.participants||[]));
+  var rows = hist.map(function(entry, idx){
+    var dateStr = '—';
+    try{
+      var d = new Date(entry.date);
+      dateStr = d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'})
+               +' '+d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+    }catch(e){}
+
+    var fb = (entry.social&&entry.social.fb)||0;
+    var ig = (entry.social&&entry.social.ig)||0;
+    var tg = (entry.social&&entry.social.tg)||0;
+
     return '<tr>'
-      +'<td style="font-weight:800;color:var(--tx)">'+esc(entry.name)+'</td>'
-      +'<td style="text-align:center">'+esc(String(entry.uniqueCount||0))+'</td>'
-      +'<td style="text-align:center">'+esc(String(entry.totalTickets||0))+'</td>'
-      +'<td><span style="font-weight:900;color:var(--grn);background:#f0fdf4;padding:2px 8px;border-radius:5px">🏆 '+esc(entry.winner||'לא צוין')+'</span></td>'
-      +'<td style="color:var(--t2);font-size:11px">'+dateStr+'</td>'
-      +'<td><button class="btn sec sm" style="font-size:10px" onclick="showRaffleParticipantsPopup('+idx+')">👥 הצג משתתפים</button></td>'
+      +'<td style="font-size:11px;color:var(--t3);white-space:nowrap">'+dateStr+'</td>'
+      +'<td style="font-weight:800;color:var(--tx)">'+esc(entry.raffleName||'—')+'</td>'
+      +'<td style="text-align:center">'
+        +'<span style="font-family:monospace;font-weight:900;color:var(--tx)">'+esc(String(entry.uniqueCount||0))+'</span>'
+        +'<span style="font-size:10px;color:var(--t3);display:block">משתתפים</span>'
+      +'</td>'
+      +'<td style="text-align:center">'
+        +'<span style="font-family:monospace;font-weight:900;color:var(--acc)">'+esc(String(entry.totalTickets||0))+'</span>'
+        +'<span style="font-size:10px;color:var(--t3);display:block">כרטיסים</span>'
+      +'</td>'
+      +'<td>'
+        +'<span style="font-weight:900;color:var(--grn);background:#f0fdf4;border:1px solid #86efac;padding:3px 9px;border-radius:6px;font-size:12px">🏆 '+esc(entry.winner||'לא צוין')+'</span>'
+      +'</td>'
+      +'<td>'
+        +'<div style="display:flex;gap:5px;flex-wrap:wrap;font-size:11px">'
+        +'<span style="background:rgba(21,88,192,.1);color:#1558c0;padding:1px 6px;border-radius:4px;font-weight:700">📘 '+fb.toLocaleString()+'</span>'
+        +'<span style="background:rgba(225,48,108,.1);color:#e1306c;padding:1px 6px;border-radius:4px;font-weight:700">📷 '+ig.toLocaleString()+'</span>'
+        +'<span style="background:rgba(3,105,161,.1);color:#0369a1;padding:1px 6px;border-radius:4px;font-weight:700">✈️ '+tg.toLocaleString()+'</span>'
+        +'</div>'
+      +'</td>'
+      +'<td>'
+        +'<button class="btn sec sm" style="font-size:10px;white-space:nowrap" onclick="openRaffleHistoryDetail('+idx+')">👥 משתתפים</button>'
+      +'</td>'
       +'</tr>';
   }).join('');
 
-  wrap.innerHTML='<div class="tscroll"><table>'
-    +'<thead><tr>'
-    +'<th>שם ההגרלה</th>'
-    +'<th style="text-align:center">משתתפים</th>'
-    +'<th style="text-align:center">כרטיסים</th>'
-    +'<th>זוכה</th>'
-    +'<th>תאריך סיום</th>'
-    +'<th></th>'
+  wrap.innerHTML =
+    '<div class="tscroll">'
+    +'<table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="background:var(--s2)">'
+    +'<th style="padding:7px 11px;text-align:right;font-size:9px;font-weight:800;color:var(--t3);letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid var(--b1)">תאריך</th>'
+    +'<th style="padding:7px 11px;text-align:right;font-size:9px;font-weight:800;color:var(--t3);letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid var(--b1)">שם הגרלה</th>'
+    +'<th style="padding:7px 11px;text-align:center;font-size:9px;font-weight:800;color:var(--t3);letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid var(--b1)">משתתפים</th>'
+    +'<th style="padding:7px 11px;text-align:center;font-size:9px;font-weight:800;color:var(--t3);letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid var(--b1)">כרטיסים</th>'
+    +'<th style="padding:7px 11px;text-align:right;font-size:9px;font-weight:800;color:var(--t3);letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid var(--b1)">זוכה</th>'
+    +'<th style="padding:7px 11px;text-align:right;font-size:9px;font-weight:800;color:var(--t3);letter-spacing:.6px;text-transform:uppercase;border-bottom:1px solid var(--b1)">קהילה בסיום</th>'
+    +'<th style="padding:7px 11px;border-bottom:1px solid var(--b1)"></th>'
     +'</tr></thead>'
     +'<tbody>'+rows+'</tbody>'
     +'</table></div>';
 }
 
-function showRaffleParticipantsPopup(idx){
-  var log=_getRaffleLog();
-  var entry=log[idx];
-  if(!entry)return;
-  var parts=entry.participants||[];
-  var list=parts.length
-    ? parts.map(function(p){
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--b1)">'
-          +'<span style="font-weight:700;color:var(--tx)">'+esc(p.name)+'</span>'
-          +'<span style="font-family:monospace;font-weight:800;color:var(--acc);background:var(--s2);padding:1px 7px;border-radius:5px">'+esc(String(p.tickets))+'🎟️</span>'
+// ── Detail popup: all participants of a past raffle ──
+function openRaffleHistoryDetail(idx){
+  var hist  = _getRaffleHistory();
+  var entry = hist[idx];
+  if(!entry) return;
+
+  var parts = entry.participants||[];
+  var listHtml = parts.length
+    ? parts.sort(function(a,b){return b.tickets-a.tickets;}).map(function(p,i){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 2px;border-bottom:1px solid var(--b1)">'
+          +'<span style="font-size:12px;font-weight:700;color:var(--tx)">'+(i+1)+'. '+esc(p.name)+'</span>'
+          +'<span style="font-family:monospace;font-weight:900;font-size:12px;color:var(--acc);background:var(--s2);padding:1px 8px;border-radius:5px">'+esc(String(p.tickets))+' 🎟️</span>'
           +'</div>';
       }).join('')
-    : '<div class="empty">אין משתתפים רשומים</div>';
+    : '<div class="empty">אין רשומות משתתפים</div>';
 
-  var body='<div style="margin-bottom:10px">'
-    +'<div style="font-size:12px;color:var(--t2)">הגרלה: <strong style="color:var(--tx)">'+esc(entry.name)+'</strong></div>'
-    +'<div style="font-size:12px;color:var(--t2)">זוכה: <strong style="color:var(--grn)">🏆 '+esc(entry.winner||'לא צוין')+'</strong></div>'
+  var fb = (entry.social&&entry.social.fb)||0;
+  var ig = (entry.social&&entry.social.ig)||0;
+  var tg = (entry.social&&entry.social.tg)||0;
+
+  var dateStr='—';
+  try{
+    var d=new Date(entry.date);
+    dateStr=d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'});
+  }catch(e){}
+
+  var body =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px">'
+      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">תאריך</div>'
+      +'<div style="font-size:12px;font-weight:700;color:var(--tx)">'+dateStr+'</div>'
     +'</div>'
-    +'<div style="max-height:350px;overflow-y:auto">'+list+'</div>'
-    +'<div style="margin-top:10px;font-size:11px;color:var(--t3);text-align:center">סה"כ '+parts.length+' משתתפים · '+((entry.totalTickets)||0)+' כרטיסים</div>';
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px">'
+      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">זוכה</div>'
+      +'<div style="font-size:13px;font-weight:900;color:var(--grn)">🏆 '+esc(entry.winner||'לא צוין')+'</div>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px">'
+      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">משתתפים / כרטיסים</div>'
+      +'<div style="font-size:13px;font-weight:900;color:var(--tx)">'+esc(String(entry.uniqueCount||0))+' / <span style="color:var(--acc)">'+esc(String(entry.totalTickets||0))+'</span></div>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px">'
+      +'<div style="font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">קהילה בסיום</div>'
+      +'<div style="display:flex;gap:5px;flex-wrap:wrap">'
+      +'<span style="background:rgba(21,88,192,.1);color:#1558c0;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700">📘 '+fb.toLocaleString()+'</span>'
+      +'<span style="background:rgba(225,48,108,.1);color:#e1306c;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700">📷 '+ig.toLocaleString()+'</span>'
+      +'<span style="background:rgba(3,105,161,.1);color:#0369a1;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700">✈️ '+tg.toLocaleString()+'</span>'
+      +'</div>'
+    +'</div>'
+    +'</div>'
+    +'<div style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">רשימת משתתפים ('+parts.length+')</div>'
+    +'<div style="max-height:300px;overflow-y:auto;border:1px solid var(--b1);border-radius:8px;padding:4px 10px">'+listHtml+'</div>';
 
-  openModal('👥 משתתפי ההגרלה — '+esc(entry.name),body,'<button class="btn sec" onclick="closeModal()">סגור</button>');
+  var foot = '<button class="btn sec" onclick="closeModal()">סגור</button>';
+  openModal('📋 פרטי הגרלה — '+esc(entry.raffleName||'—'), body, foot);
 }
 
+// ── Clear entire history ──────────────────────────
 function clearRaffleHistory(){
-  if(!confirm('למחוק את כל היסטוריית ההגרלות? לא ניתן לבטל.'))return;
-  _saveRaffleLog([]);
+  if(!confirm('למחוק את כל היסטוריית ההגרלות לצמיתות?\nלא ניתן לשחזר פעולה זו.')) return;
+  _saveRaffleHistory([]);
   renderRaffleHistory();
-  toast('🗑️ ההיסטוריה נוקתה','inf');
+  toast('🗑️ היסטוריית ההגרלות נוקתה','inf');
 }
+
 
 // ── Add ticket panel ──────────────────────────────
 function addRaffleTickets(){
