@@ -4590,6 +4590,7 @@ async function loadRaffleData(){
   _raffleRefreshSnapshots();
   _updateRaffleDatalist();
   _renderRaffleTable();
+  _seedRaffleHistoryIfEmpty();
   renderRaffleHistory();
   if(fetched)toast('✅ הגרלה עודכנה','ok');
   else if(!RAFFLE.data.length&&!RAFFLE.raffles.length){
@@ -4772,7 +4773,23 @@ function _saveRaffleHistory(arr){
   try{ localStorage.setItem(RAFFLE_HISTORY_KEY, JSON.stringify(arr)); }catch(e){}
 }
 
-// ── Open "End Raffle" modal ───────────────────────
+// ── Seed default history if empty ────────────────
+function _seedRaffleHistoryIfEmpty(){
+  var existing = _getRaffleHistory();
+  if(existing && existing.length > 0) return; // already has data — don't touch
+  var seed = [{
+    id:           'seed_001',
+    raffleName:   'הגרלת סוגרים פינה',
+    date:         '2026-05-28T12:00:00.000Z',
+    winner:       'אילן מגן',
+    uniqueCount:  30,
+    totalTickets: 81,
+    social: { fb: 211, ig: 516, tg: 200 },
+    participants: []
+  }];
+  _saveRaffleHistory(seed);
+}
+
 function confirmEndRaffle(){
   var ar = _getActiveRaffle();
   if(!ar){ toast('אין הגרלה פעילה','inf'); return; }
