@@ -1088,67 +1088,71 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           </div>
         </div>
 
-        <div style="max-width:620px;margin:0 auto;padding:0 4px">
+        <div style="max-width:640px;margin:0 auto;padding:0 4px">
 
-          <!-- לינק -->
-          <div class="tw" style="padding:18px 18px 14px;margin-bottom:14px">
-            <label style="display:block;font-size:11px;font-weight:800;color:var(--t2);margin-bottom:6px;letter-spacing:.4px">🔗 לינק מוצר</label>
-            <input id="np-link" type="text" class="sinput" style="width:100%;box-sizing:border-box" placeholder="https://...">
-          </div>
-
-          <!-- מחיר + currency toggle -->
-          <div class="tw" style="padding:18px 18px 14px;margin-bottom:14px">
-            <label style="display:block;font-size:11px;font-weight:800;color:var(--t2);margin-bottom:6px;letter-spacing:.4px">💰 מחיר</label>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input id="np-price" type="number" min="0" step="0.01" class="sinput" style="flex:1;min-width:0" placeholder="0.00">
-              <button id="np-currency-btn" onclick="_npToggleCurrency()"
-                style="flex-shrink:0;padding:0 16px;height:38px;border-radius:9px;border:2px solid var(--acc);background:var(--acc);color:#fff;font-size:16px;font-weight:900;cursor:pointer;transition:all .15s;white-space:nowrap">
-                $
-              </button>
+          <!-- שורה 1: לינק (70%) + מחיר (30%) -->
+          <div class="tw" style="padding:12px 14px 10px;margin-bottom:10px">
+            <div style="display:flex;gap:10px;align-items:flex-end">
+              <div style="flex:7;min-width:0">
+                <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">🔗 לינק מוצר</label>
+                <input id="np-link" type="text" class="sinput" style="width:100%;box-sizing:border-box" placeholder="https://...">
+              </div>
+              <div style="flex:3;min-width:0">
+                <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">💰 מחיר</label>
+                <div style="display:flex;gap:5px;align-items:center">
+                  <input id="np-price" type="number" min="0" step="0.01" class="sinput" style="flex:1;min-width:0" placeholder="0.00">
+                  <button id="np-currency-btn" onclick="_npToggleCurrency()"
+                    style="flex-shrink:0;padding:0 10px;height:36px;border-radius:8px;border:2px solid var(--acc);background:var(--acc);color:#fff;font-size:14px;font-weight:900;cursor:pointer;transition:all .15s;white-space:nowrap">
+                    $
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- דירוג + pills -->
-          <div class="tw" style="padding:18px 18px 14px;margin-bottom:14px">
-            <label style="display:block;font-size:11px;font-weight:800;color:var(--t2);margin-bottom:6px;letter-spacing:.4px">⭐ דירוג</label>
-            <input id="np-rating" type="number" min="0" max="5" step="0.1" class="sinput" style="width:100%;box-sizing:border-box;margin-bottom:10px" placeholder="4.5">
-            <div style="display:flex;flex-wrap:wrap;gap:6px">
-              <button class="np-pill" onclick="_npSetRating(4.3)">4.3</button>
-              <button class="np-pill" onclick="_npSetRating(4.4)">4.4</button>
-              <button class="np-pill" onclick="_npSetRating(4.5)">4.5</button>
-              <button class="np-pill" onclick="_npSetRating(4.6)">4.6</button>
-              <button class="np-pill" onclick="_npSetRating(4.7)">4.7</button>
-              <button class="np-pill" onclick="_npSetRating(4.8)">4.8</button>
-              <button class="np-pill" onclick="_npSetRating(4.9)">4.9</button>
-              <button class="np-pill" onclick="_npSetRating(5.0)">5.0</button>
+          <!-- שורה 2: דירוג (50%) + רכישות (50%) -->
+          <div class="tw" style="padding:12px 14px 10px;margin-bottom:10px">
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <div style="flex:1;min-width:0">
+                <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">⭐ דירוג</label>
+                <input id="np-rating" type="number" min="0" max="5" step="0.1" class="sinput" style="width:100%;box-sizing:border-box;margin-bottom:7px" placeholder="4.5">
+                <div style="display:flex;flex-wrap:wrap;gap:4px">
+                  <button class="np-pill" onclick="_npSetRating(4.3)">4.3</button>
+                  <button class="np-pill" onclick="_npSetRating(4.4)">4.4</button>
+                  <button class="np-pill" onclick="_npSetRating(4.5)">4.5</button>
+                  <button class="np-pill" onclick="_npSetRating(4.6)">4.6</button>
+                  <button class="np-pill" onclick="_npSetRating(4.7)">4.7</button>
+                  <button class="np-pill" onclick="_npSetRating(4.8)">4.8</button>
+                  <button class="np-pill" onclick="_npSetRating(4.9)">4.9</button>
+                  <button class="np-pill" onclick="_npSetRating(5.0)">5.0</button>
+                </div>
+              </div>
+              <div style="flex:1;min-width:0">
+                <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">🛒 רכישות</label>
+                <input id="np-bought" type="number" min="0" class="sinput" style="width:100%;box-sizing:border-box" placeholder="1000" oninput="_dynStep(this)">
+              </div>
             </div>
-          </div>
-
-          <!-- רכישות -->
-          <div class="tw" style="padding:18px 18px 14px;margin-bottom:14px">
-            <label style="display:block;font-size:11px;font-weight:800;color:var(--t2);margin-bottom:6px;letter-spacing:.4px">🛒 רכישות</label>
-            <input id="np-bought" type="number" min="0" class="sinput" style="width:100%;box-sizing:border-box" placeholder="1000">
           </div>
 
           <!-- תמונה -->
-          <div class="tw" style="padding:18px 18px 14px;margin-bottom:14px">
-            <label style="display:block;font-size:11px;font-weight:800;color:var(--t2);margin-bottom:6px;letter-spacing:.4px">🖼️ לינק תמונה</label>
+          <div class="tw" style="padding:12px 14px 10px;margin-bottom:10px">
+            <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">🖼️ לינק תמונה</label>
             <input id="np-img" type="text" class="sinput" style="width:100%;box-sizing:border-box" placeholder="https://...">
           </div>
 
           <!-- תיאור -->
-          <div class="tw" style="padding:18px 18px 14px;margin-bottom:20px">
-            <label style="display:block;font-size:11px;font-weight:800;color:var(--t2);margin-bottom:6px;letter-spacing:.4px">📝 תיאור</label>
+          <div class="tw" style="padding:12px 14px 10px;margin-bottom:12px">
+            <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">📝 תיאור</label>
             <textarea id="np-desc" class="sinput"
-              style="width:100%;box-sizing:border-box;min-height:160px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.6;padding:10px 12px"
-              placeholder="הדבק כאן תיאור מפורט של המוצר, כולל תכונות, יתרונות, ועוד..."></textarea>
+              style="width:100%;box-sizing:border-box;min-height:110px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.6;padding:8px 11px"
+              placeholder="הדבק כאן תיאור מפורט של המוצר..."></textarea>
           </div>
 
           <!-- CTA button -->
           <button onclick="_npSubmit()"
-            style="width:100%;padding:15px;border-radius:12px;border:none;background:var(--acc);color:#fff;font-size:16px;font-weight:900;cursor:pointer;letter-spacing:.3px;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:30px"
+            style="width:100%;padding:13px;border-radius:12px;border:none;background:var(--acc);color:#fff;font-size:15px;font-weight:900;cursor:pointer;letter-spacing:.3px;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:20px"
             onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
-            <span style="font-size:20px">🛩️</span> שגר מוצר לצייד
+            <span style="font-size:18px">🛩️</span> שגר מוצר לצייד
           </button>
 
         </div>
@@ -1546,6 +1550,22 @@ var parseDateILStrict=parseDateIL;
 function fmtDate(d){
   if(!d)return'—';
   return d.day+'/'+(d.month<10?'0'+d.month:d.month)+'/'+d.year;
+}
+
+// ── formatNumber: אלפים עם פסיק לתצוגה בלבד ─────────────────────
+function formatNumber(n){
+  var num=parseFloat(n);
+  if(isNaN(num))return n||'—';
+  return num.toLocaleString('he-IL');
+}
+
+// ── _dynStep: קפיצה דינמית לפי גודל מספר (שדות רכישות) ──────────
+function _dynStep(el){
+  var v=parseFloat(el.value)||0;
+  if(v>=10000)      el.step=10000;
+  else if(v>=1000)  el.step=1000;
+  else if(v>=100)   el.step=100;
+  else              el.step=1;
 }
 
 // ── v53: Dark mode ───────────────────────────────
@@ -2636,7 +2656,7 @@ function openViewModal(rowNum){
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:11px">
       <div style="background:var(--s2);border-radius:6px;padding:8px 11px;border:1px solid var(--b1)"><div style="font-size:9px;color:var(--t2);font-weight:800;text-transform:uppercase;margin-bottom:2px">מחיר</div><div style="font-size:13px;font-weight:800;color:var(--acc)">${gc(p,COL.PRICE)?gc(p,COL.PRICE)+'$':'—'}</div></div>
-      <div style="background:var(--s2);border-radius:6px;padding:8px 11px;border:1px solid var(--b1)"><div style="font-size:9px;color:var(--t2);font-weight:800;text-transform:uppercase;margin-bottom:2px">רכישות 🔥</div><div style="font-size:13px;font-weight:800;color:var(--grn)">${gc(p,COL.BOUGHT)||'—'}</div></div>
+      <div style="background:var(--s2);border-radius:6px;padding:8px 11px;border:1px solid var(--b1)"><div style="font-size:9px;color:var(--t2);font-weight:800;text-transform:uppercase;margin-bottom:2px">רכישות 🔥</div><div style="font-size:13px;font-weight:800;color:var(--grn)">${gc(p,COL.BOUGHT)?formatNumber(gc(p,COL.BOUGHT)):'—'}</div></div>
       <div style="background:var(--s2);border-radius:6px;padding:8px 11px;border:1px solid var(--b1)"><div style="font-size:9px;color:var(--t2);font-weight:800;text-transform:uppercase;margin-bottom:2px">דירוג</div><div style="font-size:13px;font-weight:800">⭐ ${gc(p,COL.RATING)||'—'}</div></div>
     </div>
     <div class="slbl2">תוכן הפוסט</div>
@@ -2666,7 +2686,7 @@ function openEditModal(rowNum){
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם באנגלית</span><input class="ifield" id="e-eng" value="${esc(gc(p,COL.ENG))}"></div>
       <div class="fg"><span class="slbl2">מחיר ($)</span><input class="ifield" id="e-price" type="number" value="${gc(p,COL.PRICE)}"></div>
       <div class="fg"><span class="slbl2">דירוג ⭐</span><input class="ifield" id="e-rating" type="number" step="0.1" value="${gc(p,COL.RATING)}"></div>
-      <div class="fg"><span class="slbl2">רכישות 🔥</span><input class="ifield" id="e-bought" type="number" value="${gc(p,COL.BOUGHT)}"></div>
+      <div class="fg"><span class="slbl2">רכישות 🔥</span><input class="ifield" id="e-bought" type="number" value="${gc(p,COL.BOUGHT)}" oninput="_dynStep(this)"></div>
       <div class="fg"><span class="slbl2">📂 קטגוריה</span>
         <select class="fsel" id="e-cat" style="width:100%">
           ${(()=>{
@@ -3275,7 +3295,7 @@ function renderIdeaPosts(){
         <div style="flex:1;min-width:0">
           <div style="font-size:11px;font-weight:800;color:var(--acc);margin-bottom:5px">${i+1}. ${link?`<a href="${esc(link)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;text-underline-offset:2px;cursor:pointer" title="פתח באלי אקספרס">${esc(name)}</a>`:esc(name)}</div>
           ${content?`<div style="font-size:12px;color:var(--tx);line-height:1.6;white-space:pre-wrap;max-height:100px;overflow-y:auto">${esc(content.slice(0,250))}${content.length>250?'...':''}</div>`:
-            `<div style="font-size:12px;color:var(--tx);line-height:1.6">${esc(name)}${price?' — '+price+'$':''}${rating?'<br>⭐ '+rating:''}${bought?'<br>🔥 '+Number(bought).toLocaleString()+' רכישות':''}</div>`}
+            `<div style="font-size:12px;color:var(--tx);line-height:1.6">${esc(name)}${price?' — '+price+'$':''}${rating?'<br>⭐ '+rating:''}${bought?'<br>🔥 '+formatNumber(bought)+' רכישות':''}</div>`}
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:7px">
             ${price?`<span style="font-family:monospace;font-weight:800;color:var(--acc);font-size:14px">${price}$</span>`:''}
           </div>
@@ -5956,7 +5976,7 @@ async function _npSubmit(){
     + '\nתיאור: '       + desc.trim();
 
   // ─── הכנס כאן את כתובת ה-Webhook של Make ───────────────────
-  var MAKE_WEBHOOK_URL = 'https://hook.eu1.make.com/2rfc1ivjqwu72pdmpv5x9cguzbwplhd9'; // ← הכנס URL
+  var MAKE_WEBHOOK_URL = 'YOUR_WEBHOOK_URL_HERE'; // ← הכנס URL
   // ─────────────────────────────────────────────────────────────
 
   var btn = document.querySelector('#pg-new-product button[onclick="_npSubmit()"]');
@@ -6154,7 +6174,7 @@ document.addEventListener('DOMContentLoaded',function(){
     // ג. סטטיסטיקה (COL.BOUGHT=7, COL.RATING=14)
     var bought = gc(p, COL.BOUGHT) || '0';
     var rating = gc(p, COL.RATING) || '0';
-    var stats = '🔥 מעל ' + bought + ' רכישות | ⭐ ' + rating + ' דירוג';
+    var stats = '🔥 מעל ' + formatNumber(bought) + ' רכישות | ⭐ ' + rating + ' דירוג';
 
     // ד. האשטגים (COL.TAGS=8)
     var tags = gc(p, COL.TAGS);
