@@ -2,9 +2,13 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="מערכת ניהול פוסטים ושיווק שותפים לאלי אקספרס">
 <title>סוגרים פינה 👊</title>
-<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;800;900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;800;900&display=swap" rel="stylesheet"></noscript>
 </head>
 <body>
 <style>
@@ -2853,9 +2857,9 @@ async function deleteProduct(rowNum){
       if(resp.ok)result={ok:true};
     }
     if(result.ok){
-      // הצלחה — הסר מה-UI רק לאחר אישור מהשרת
-      G.posts=G.posts.filter(x=>x.row!==rowNum);
-      G.filtered=G.filtered.filter(x=>x.row!==rowNum);
+      // הצלחה — הסר מה-UI לפי uid (מזהה קשיח מעמודה K), ללא תלות במספר שורה
+      G.posts=G.posts.filter(x=>x.uid!==uid);
+      G.filtered=G.filtered.filter(x=>x.uid!==uid);
 
       // בדוק אם מודל הטיוטות פתוח — אם כן, עדכן אותו במקום לסגור
       var draftsModal=document.querySelector('#modal-root h3');
