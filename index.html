@@ -654,6 +654,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           <div class="pacts">
             <button class="btn sec" id="export-btn">⬇️ CSV</button>
             <button class="btn" id="refresh-posts-btn">🔄 רענן</button>
+            <button class="btn" id="bulk-delete-btn" style="background:var(--red);display:none" onclick="bulkDeleteProducts()">🗑️ מחק מסומנים (<span id="bulk-count">0</span>)</button>
           </div>
         </div>
         <div class="tw">
@@ -678,10 +679,11 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           <div class="tscroll">
             <table>
               <thead><tr>
+                <th style="width:32px;text-align:center"><input type="checkbox" id="bulk-select-all" title="סמן הכל" style="cursor:pointer;width:15px;height:15px"></th>
                 <th>תמונה</th><th>שם</th><th>מחיר</th><th>קטגוריה</th>
                 <th>ערוצים</th><th>תאריך E</th><th>סטטוס</th><th>פעולות</th>
               </tr></thead>
-              <tbody id="ptbody"><tr><td colspan="8"><div class="loading"><div class="spin"></div></div></td></tr></tbody>
+              <tbody id="ptbody"><tr><td colspan="9"><div class="loading"><div class="spin"></div></div></td></tr></tbody>
             </table>
           </div>
           <!-- v24: load more rows on demand — prevents DOM thrash -->
@@ -2374,7 +2376,9 @@ function renderTableRows(rows){
     const anyPub=fb==='פורסם'||tg==='פורסם'||ig==='פורסם',anyAp=fb==='מאושר'||tg==='מאושר'||ig==='מאושר';
     const badge=anyPub?'<span class="badge bpub">✓ פורסם</span>':anyAp?'<span class="badge bap">✅ מאושר</span>':`<span class="badge bd">${esc(gs)||'—'}</span>`;
     const row=p.row;
+    const uid=p.uid||'';
     return`<tr>
+      <td style="text-align:center;padding:8px 6px"><input type="checkbox" class="bulk-cb" data-uid="${esc(uid)}" style="cursor:pointer;width:15px;height:15px" onchange="_onBulkCbChange()"></td>
       <td>${img?`<img class="timg" src="${img}" onerror="this.style.display='none'" style="cursor:zoom-in" onclick="openImageLightbox(this.src)" title="לחץ להגדלה">`:
         `<div class="timg-ph">📦</div>`}</td>
       <td class="cname">${gc(p,COL.LINK)?`<a href="${esc(gc(p,COL.LINK))}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;text-underline-offset:2px" title="פתח באלי אקספרס ↗">${esc(gc(p,COL.HEB))}</a>`:esc(gc(p,COL.HEB))}<small>${esc(gc(p,COL.ENG)).slice(0,44)}</small></td>
@@ -2399,6 +2403,10 @@ function renderTableRows(rows){
 function renderTable(){
   const ps=G.filtered;
   G_tableOffset=0;
+  // reset bulk selection whenever table re-renders
+  var btn=document.getElementById('bulk-delete-btn');if(btn)btn.style.display='none';
+  var sa=document.getElementById('bulk-select-all');if(sa){sa.checked=false;sa.indeterminate=false;}
+  var cnt=document.getElementById('bulk-count');if(cnt)cnt.textContent='0';
   document.getElementById('pcnt').textContent=ps.length+' פוסטים';
   const tbody=document.getElementById('ptbody');
   if(!ps.length){tbody.innerHTML=`<tr><td colspan="8"><div class="empty">🔍 אין תוצאות</div></td></tr>`;
@@ -2911,6 +2919,60 @@ async function deleteProduct(rowNum){
     toast('שגיאת תקשורת: '+e.message,'err');
   }
 }
+
+// ── Bulk Delete helpers ─────────────────────────────────────────────────────
+function _getCheckedUids(){
+  return Array.from(document.querySelectorAll('.bulk-cb:checked')).map(function(cb){return cb.dataset.uid;}).filter(Boolean);
+}
+function _onBulkCbChange(){
+  var uids=_getCheckedUids();
+  var btn=document.getElementById('bulk-delete-btn');
+  var cnt=document.getElementById('bulk-count');
+  if(btn){btn.style.display=uids.length?'inline-flex':'none';}
+  if(cnt){cnt.textContent=uids.length;}
+  // sync select-all checkbox visual state
+  var all=document.querySelectorAll('.bulk-cb');
+  var sa=document.getElementById('bulk-select-all');
+  if(sa){sa.indeterminate=uids.length>0&&uids.length<all.length;sa.checked=all.length>0&&uids.length===all.length;}
+}
+function _clearBulkSelection(){
+  document.querySelectorAll('.bulk-cb').forEach(function(cb){cb.checked=false;});
+  var sa=document.getElementById('bulk-select-all');if(sa){sa.checked=false;sa.indeterminate=false;}
+  _onBulkCbChange();
+}
+
+async function bulkDeleteProducts(){
+  var uids=_getCheckedUids();
+  if(!uids.length){toast('לא סומנו מוצרים','err');return;}
+  if(!confirm('האם אתה בטוח שברצונך למחוק לצמיתות '+uids.length+' מוצרים מסומנים?\n\n⚠️ פעולה זו אינה הפיכה!'))return;
+  var url=getPostsUrl();
+  if(!url){toast('Apps Script לא מוגדר','err');return;}
+  toast('מוחק '+uids.length+' מוצרים...','inf');
+  try{
+    var resp=await fetch(url,{
+      method:'POST',
+      mode:'cors',
+      redirect:'follow',
+      headers:{'Content-Type':'text/plain;charset=utf-8','Accept':'application/json'},
+      body:JSON.stringify({action:'deleteMultiple',uids:uids})
+    });
+    var result={ok:false,error:'תשובה לא תקינה מהשרת'};
+    try{result=await resp.json();}catch(e){if(resp.ok)result={ok:true};}
+    if(result.ok){
+      var uidSet=new Set(uids);
+      G.posts=G.posts.filter(function(x){return!uidSet.has(x.uid);});
+      G.filtered=G.filtered.filter(function(x){return!uidSet.has(x.uid);});
+      _clearBulkSelection();
+      filterPosts();renderDash();
+      toast('🗑️ נמחקו '+uids.length+' מוצרים בהצלחה','ok');
+    }else{
+      toast('שגיאת מחיקה: '+(result.error||'תשובה שלילית מהשרת'),'err');
+    }
+  }catch(e){
+    toast('שגיאת תקשורת: '+e.message,'err');
+  }
+}
+// ───────────────────────────────────────────────────────────────────────────
 
 
 // The edited text is sent once and NOT saved back to Google Sheets
@@ -5799,6 +5861,11 @@ document.addEventListener('DOMContentLoaded',function(){
   // ── Posts page ─────────────────────────────────
   on('refresh-posts-btn','click',loadData);
   on('sort-date-btn','click',sortByDateE);
+  // select-all checkbox for bulk delete
+  on('bulk-select-all','change',function(e){
+    document.querySelectorAll('.bulk-cb').forEach(function(cb){cb.checked=e.target.checked;});
+    _onBulkCbChange();
+  });
   ['psearch','fstatus','fcat','fch'].forEach(function(id){
     const el=document.getElementById(id);
     if(el)el.addEventListener(id==='psearch'?'input':'change',filterPosts);
