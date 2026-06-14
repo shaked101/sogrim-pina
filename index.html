@@ -440,7 +440,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
     <div class="login-logo">👊</div>
     <div class="login-title">סוגרים <span>פינה</span></div>
     <div class="login-sub">גישה מורשית בלבד</div>
-    <input class="login-field" id="pw-in" type="password" placeholder="סיסמה...">
+    <input class="login-field" id="pw-in" type="password">
     <button class="login-btn" id="login-btn">כניסה ←</button>
     <div id="login-loading" style="display:none;margin-top:12px;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--t2);font-size:12px">
       <div style="display:flex;align-items:center;gap:8px">
@@ -477,6 +477,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
       <div class="ni" data-page="creator"><span class="ic">🚀</span>יוצר התוכן<span class="nbadge" id="nbcart" style="display:none">0</span></div>
       <div class="ni" data-page="stats"><span class="ic">📈</span>סטטיסטיקה</div>
       <div class="ni" data-page="new-product"><span class="ic">➕</span>הוספת מוצר</div>
+      <div class="ni" data-page="weekly-summary"><span class="ic">📋</span>סיכום שבועי</div>
       <div class="nl">קהילה</div>
       <div class="ni" data-page="community"><span class="ic">🏆</span>תחרויות<span class="nbadge" id="nb-community" style="display:none">0</span></div>
       <div class="ni" data-page="raffles"><span class="ic">🎟️</span>הגרלות</div>
@@ -560,7 +561,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
         <div id="cat-cards-wrap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:9px;margin-bottom:14px"></div>
         <div id="custom-search-row" style="display:none;margin-bottom:14px">
           <div style="display:flex;gap:8px;align-items:center">
-            <input class="ifield" id="custom-kw" placeholder="הקלד מילת חיפוש..." style="flex:1;max-width:340px">
+            <input class="ifield" id="custom-kw" style="flex:1;max-width:340px">
             <button class="btn" id="do-custom-search">🔍 חפש</button>
           </div>
         </div>
@@ -582,7 +583,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
               <!-- Cart quick-add table -->
               <div class="tw" style="margin-bottom:12px">
                 <div class="ttbar">
-                  <input class="sinput" id="cart-search" placeholder="🔍 סנן מוצרים...">
+                  <input class="sinput" id="cart-search">
                   <select class="fsel" id="cart-cat-filter"><option value="">כל הקטגוריות</option></select>
                   <span class="tcnt" id="cart-cnt">—</span>
                 </div>
@@ -619,7 +620,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
                   </div>
                   <div class="fg" style="margin-bottom:6px">
                     <label style="display:flex;align-items:center;justify-content:space-between">כותרת פוסט <button class="btn sec sm" style="font-size:10px;padding:2px 7px" onclick="shuffleCartTitle()">🎲 רענן</button></label>
-                    <input class="ifield" id="cart-title-input" placeholder='קבלו כמה מוצרים שיסגרו לכם פינה 👊' value='קבלו כמה מוצרים שיסגרו לכם פינה 👊'>
+                    <input class="ifield" id="cart-title-input" value='קבלו כמה מוצרים שיסגרו לכם פינה 👊'>
                   </div>
                   <!-- Hashtags -->
                   <div style="margin-bottom:9px">
@@ -663,7 +664,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
         </div>
         <div class="tw">
           <div class="ttbar">
-            <input class="sinput" id="psearch" placeholder="🔍 חיפוש...">
+            <input class="sinput" id="psearch">
             <select class="fsel" id="fstatus">
               <option value="">כל הסטטוסים</option>
               <option value="draft">טיוטה</option>
@@ -865,7 +866,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
               <datalist id="bonus-names-list"></datalist>
               <div class="fg" style="margin-bottom:7px">
                 <label style="font-size:10px">שם המשתתף</label>
-                <input type="text" id="bonus-name" class="ifield" placeholder="התחל להקליד..." list="bonus-names-list">
+                <input type="text" id="bonus-name" class="ifield" list="bonus-names-list">
               </div>
               <div style="display:flex;gap:7px;align-items:flex-end">
                 <div class="fg" style="flex:0 0 65px;margin-bottom:0">
@@ -874,7 +875,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
                 </div>
                 <div class="fg" style="flex:1;margin-bottom:0">
                   <label style="font-size:10px">סיבה <span style="color:var(--red)">*</span></label>
-                  <input type="text" id="bonus-reason" class="ifield" placeholder="חובה: סטורי / תגובה...">
+                  <input type="text" id="bonus-reason" class="ifield">
                 </div>
                 <button class="btn grn sm" onclick="grantBonus()" style="white-space:nowrap;align-self:flex-end">➕ הענק</button>
               </div>
@@ -895,7 +896,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
               </div>
             </div>
             <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
-              <input class="sinput" id="comm-search" placeholder="🔍 חפש..." style="width:120px">
+              <input class="sinput" id="comm-search" style="width:120px">
               <select class="fsel" id="comm-filter" style="font-size:11px">
                 <option value="all">כולם</option>
                 <option value="winners">זכאים</option>
@@ -917,8 +918,8 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
           <div class="cfcard">
             <h3>🔗 Apps Script</h3>
-            <div class="fg" style="margin-bottom:9px"><label>Web App URL</label><input class="ifield" id="s-url" type="text" placeholder="https://script.google.com/..."></div>
-            <div class="fg" style="margin-bottom:13px"><label>Sheet Name</label><input class="ifield" id="s-sname" type="text" placeholder="אישור לטלגרם"></div>
+            <div class="fg" style="margin-bottom:9px"><label>Web App URL</label><input class="ifield" id="s-url" type="text"></div>
+            <div class="fg" style="margin-bottom:13px"><label>Sheet Name</label><input class="ifield" id="s-sname" type="text"></div>
             <button class="btn full" id="save-conf-btn">💾 שמור</button>
           </div>
           <div class="cfcard">
@@ -932,20 +933,20 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
             <div class="ibox" style="font-size:11px">payload שיגור: <code style="font-size:10px;background:#dbeafe;padding:1px 4px;border-radius:3px">{"target":"FB","link":"...","row":N}</code></div>
             <div class="fg" style="margin-bottom:9px">
               <label>🤖 Make Webhook - משגר לפלטפורמות השונות</label>
-              <input class="ifield" id="s-make-wh" type="text" placeholder="https://hook.eu2.make.com/...">
+              <input class="ifield" id="s-make-wh" type="text">
             </div>
             <div class="fg" style="margin-bottom:13px">
               <label>🪄 Make Webhook - סנריו ראשי לעריכה ומחיקה</label>
-              <input class="ifield" id="s-rewrite-wh" type="text" placeholder="https://hook.eu1.make.com/YOUR_WEBHOOK_HERE">
+              <input class="ifield" id="s-rewrite-wh" type="text">
             </div>
             <button class="btn full" id="save-make-btn">💾 שמור</button>
           </div>
           <div class="cfcard" style="grid-column:1/-1">
             <h3>🔗 קישורי פלטפורמות</h3>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px">
-              <div class="fg"><label>📘 פייסבוק/קבוצה</label><input class="ifield" id="s-fb-url" type="text" placeholder="https://facebook.com/..."></div>
-              <div class="fg"><label>✈️ טלגרם</label><input class="ifield" id="s-tg-url" type="text" placeholder="https://t.me/..."></div>
-              <div class="fg"><label>📸 אינסטגרם</label><input class="ifield" id="s-ig-url" type="text" placeholder="https://instagram.com/..."></div>
+              <div class="fg"><label>📘 פייסבוק/קבוצה</label><input class="ifield" id="s-fb-url" type="text"></div>
+              <div class="fg"><label>✈️ טלגרם</label><input class="ifield" id="s-tg-url" type="text"></div>
+              <div class="fg"><label>📸 אינסטגרם</label><input class="ifield" id="s-ig-url" type="text"></div>
             </div>
             <button class="btn" style="margin-top:11px" id="save-links-btn">💾 שמור קישורים</button>
           </div>
@@ -1021,11 +1022,11 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
               <datalist id="raffle-names-list"></datalist>
               <div class="fg" style="margin-bottom:7px">
                 <label style="font-size:10px">שם המשתתף</label>
-                <input type="text" id="raffle-ticket-name" class="ifield" placeholder="התחל להקליד..." list="raffle-names-list">
+                <input type="text" id="raffle-ticket-name" class="ifield" list="raffle-names-list">
               </div>
               <div class="fg" style="margin-bottom:7px">
                 <label style="font-size:10px">סיבה <span style="color:var(--t3)">(לדוגמה: עמד במשימת בונוס)</span></label>
-                <input type="text" id="raffle-ticket-reason" class="ifield" placeholder="סיבה לכרטיס...">
+                <input type="text" id="raffle-ticket-reason" class="ifield">
               </div>
               <div style="display:flex;gap:7px;align-items:flex-end">
                 <div class="fg" style="flex:0 0 75px;margin-bottom:0">
@@ -1046,7 +1047,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
               <button class="btn sec sm" onclick="openAddRaffleParticipantModal()">➕ הוסף משתתף</button>
             </div>
             <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
-              <input class="sinput" id="raffle-search" placeholder="🔍 חפש..." style="width:120px">
+              <input class="sinput" id="raffle-search" style="width:120px">
               <button class="btn sm" onclick="openRaffleDrawModal()" style="background:var(--gold);border-color:var(--gold)">🎲 הגרל!</button>
             </div>
           </div>
@@ -1158,6 +1159,78 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
         </div>
       </div>
       <!-- /הוספת מוצר -->
+
+      <!-- סיכום שבועי -->
+      <div class="pg" id="pg-weekly-summary">
+        <div class="ph">
+          <div>
+            <div class="pt">סיכום שבועי</div>
+            <div class="ps">בחר שבוע ופלטפורמה לסינון הפוסטים וייצור קולאז'</div>
+          </div>
+        </div>
+
+        <!-- בקרי סינון -->
+        <div class="tw" style="padding:12px 14px;margin-bottom:12px">
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:7px">
+              <label style="font-size:11px;font-weight:800;color:var(--t2);white-space:nowrap">📅 שבוע:</label>
+              <input type="week" id="ws-week" class="sinput" style="width:170px" oninput="_wsFilter()">
+            </div>
+            <div style="display:flex;align-items:center;gap:7px">
+              <label style="font-size:11px;font-weight:800;color:var(--t2);white-space:nowrap">📡 פלטפורמה:</label>
+              <select id="ws-platform" class="fsel" onchange="_wsFilter()">
+                <option value="all">הכל</option>
+                <option value="fb">📘 פייסבוק</option>
+                <option value="ig">📸 אינסטגרם</option>
+                <option value="tg">✈️ טלגרם</option>
+              </select>
+            </div>
+            <span id="ws-count" style="font-size:11px;color:var(--t2);margin-right:auto">—</span>
+          </div>
+        </div>
+
+        <!-- גוף דו-עמודי -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">
+
+          <!-- עמודה שמאלית: קולאז' -->
+          <div class="tw" style="padding:14px">
+            <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">🖼️ קולאז' תמונות</div>
+            <button id="ws-collage-btn" onclick="_wsGenerateCollage()"
+              style="width:100%;padding:11px;border-radius:9px;border:none;background:var(--acc);color:#fff;font-size:13px;font-weight:900;cursor:pointer;transition:opacity .15s;margin-bottom:12px"
+              onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+              ✨ ייצר קולאז'
+            </button>
+            <!-- loader -->
+            <div id="ws-collage-loader" style="display:none;justify-content:center;padding:20px">
+              <div class="spin"></div>
+            </div>
+            <!-- תמונה חוזרת -->
+            <div id="ws-collage-result" style="display:none">
+              <img id="ws-collage-img" src="" alt="קולאז'" style="width:100%;border-radius:8px;border:1px solid var(--b1);display:block">
+              <a id="ws-collage-link" href="" target="_blank" rel="noopener"
+                style="display:block;text-align:center;margin-top:8px;font-size:11px;color:var(--acc);font-weight:700">
+                פתח בטאב חדש ↗
+              </a>
+            </div>
+          </div>
+
+          <!-- עמודה ימנית: טקסט סיכום -->
+          <div class="tw" style="padding:14px">
+            <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">📝 טקסט סיכום</div>
+            <textarea id="ws-summary-text" class="sinput" readonly
+              style="width:100%;box-sizing:border-box;min-height:220px;resize:vertical;font-family:inherit;font-size:12px;line-height:1.7;padding:9px 11px;direction:rtl"
+            ></textarea>
+            <button onclick="_wsCopy()"
+              style="width:100%;margin-top:9px;padding:10px;border-radius:9px;border:1.5px solid var(--acc);background:transparent;color:var(--acc);font-size:13px;font-weight:800;cursor:pointer;transition:all .15s"
+              onmouseover="this.style.background='var(--acc)';this.style.color='#fff'"
+              onmouseout="this.style.background='transparent';this.style.color='var(--acc)'">
+              📋 העתק סיכום
+            </button>
+          </div>
+
+        </div>
+      </div>
+      <!-- /סיכום שבועי -->
 
     </div>
   </div>
@@ -1585,19 +1658,17 @@ function _numRaw(id){
   return el.value.replace(/,/g,'').trim();
 }
 
-// ── _dynStep: קפיצה חלקה ל-ArrowUp/Down בשדות רכישות ────────────
-// שנה לטקסט חכם: el הוא input type=text עם _numInput
+// ── _dynStep: קפיצה מעוגלת ל-ArrowUp/Down בשדות רכישות ──────────
 function _dynStep(el,e){
-  if(!e||( e.key!=='ArrowUp'&&e.key!=='ArrowDown'))return;
+  if(!e||(e.key!=='ArrowUp'&&e.key!=='ArrowDown'))return;
   e.preventDefault();
-  var raw=parseFloat(el.value.replace(/,/g,''))||0;
+  var raw=parseFloat((el.value||'').replace(/,/g,''))||0;
   var step;
-  if(raw>=10000)      step=10000;
-  else if(raw>=1000)  step=1000;
-  else if(raw>=100)   step=100;
-  else                step=10;
-  // עגל תחילה לרצף נקי של ה-step הנוכחי, ואז קפוץ
-  var base=Math.round(raw/step)*step;
+  if(raw>=10000)     step=10000;
+  else if(raw>=1000) step=1000;
+  else if(raw>=100)  step=100;
+  else               step=10;
+  var base=Math.floor(raw/step)*step;
   var next=e.key==='ArrowUp'?base+step:base-step;
   if(next<0)next=0;
   el.value=next.toLocaleString('he-IL');
@@ -3367,7 +3438,7 @@ function openManageCatsModal(){
           <input class="ifield" value="${esc(cat.emoji)}" style="width:48px;text-align:center;font-size:16px;cursor:pointer" id="ce-e-${i}" onclick="this.select()" title="לחץ לשינוי" readonly>
         </div>
         <input class="ifield" value="${esc(cat.name)}" style="flex:1;min-width:80px" id="ce-n-${i}">
-        <input class="ifield" value="${esc(reToKw(cat.re))}" style="flex:2;font-size:11px" id="ce-r-${i}" placeholder="מילים בפסיקים (ריק = אוטומטי משם)">
+        <input class="ifield" value="${esc(reToKw(cat.re))}" style="flex:2;font-size:11px" id="ce-r-${i}">
         <button class="btn sec sm" onclick="deleteCat(${i})">🗑️</button>
       </div>`).join('')}
   </div>
@@ -3377,9 +3448,9 @@ function openManageCatsModal(){
   </div>
   <div class="slbl2">הוסף קטגוריה חדשה</div>
   <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
-    <input class="ifield" id="new-ce-emoji" placeholder="🏖️" style="width:52px;text-align:center;font-size:16px">
-    <input class="ifield" id="new-ce-name" placeholder="שם קטגוריה" style="flex:1;min-width:100px">
-    <input class="ifield" id="new-ce-re" placeholder="מילים בפסיקים (ריק = אוטומטי)" style="flex:2;font-size:11px">
+    <input class="ifield" id="new-ce-emoji" style="width:52px;text-align:center;font-size:16px">
+    <input class="ifield" id="new-ce-name" style="flex:1;min-width:100px">
+    <input class="ifield" id="new-ce-re" style="flex:2;font-size:11px">
     <button class="btn sm" onclick="addNewCat()">+ הוסף</button>
   </div>`;
   openModal('⚙️ ניהול קטגוריות',body,`
@@ -4878,12 +4949,12 @@ function _renderRaffleTable(){
 function openNewRaffleModal(){
   var today=new Date().toISOString().slice(0,10);
   openModal('➕ הגרלה חדשה',
-    '<div class="fg" style="margin-bottom:8px"><label>שם ההגרלה</label><input class="ifield" id="rn-name" placeholder="לדוגמה: הגרלת מאי 2026"></div>'
+    '<div class="fg" style="margin-bottom:8px"><label>שם ההגרלה</label><input class="ifield" id="rn-name"></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
       +'<div class="fg"><label>תאריך התחלה</label><input type="date" class="ifield" id="rn-start" value="'+today+'"></div>'
       +'<div class="fg"><label>תאריך סיום</label><input type="date" class="ifield" id="rn-end"></div>'
     +'</div>'
-    +'<div class="fg" style="margin-bottom:8px"><label>מספר כרטיסים מקסימלי</label><input type="number" class="ifield" id="rn-max" value="2" min="1" placeholder="מספר מרבי של כרטיסים למשתתף"></div>'
+    +'<div class="fg" style="margin-bottom:8px"><label>מספר כרטיסים מקסימלי</label><input type="number" class="ifield" id="rn-max" value="2" min="1"></div>'
     +'<div class="ibox" style="font-size:11px">⚡ שמירת ההגרלה תיצור אוטומטית צילום מצב של כמות העוקבים הנוכחית בכל הפלטפורמות.</div>',
     '<button class="btn sec" onclick="closeModal()">ביטול</button>'
     +'<button class="btn grn" onclick="_saveNewRaffle()">💾 שמור והפעל</button>'
@@ -5061,7 +5132,7 @@ function confirmEndRaffle(){
     // ── Raffle name ──
     +'<div class="fg" style="margin-bottom:10px">'
     +'<label style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.4px">📌 שם ההגרלה <span style="color:var(--red)">*</span></label>'
-    +'<input type="text" id="re-name" class="ifield" value="'+esc(ar.name||'')+'" placeholder="שם ההגרלה..." autocomplete="off" style="margin-top:4px">'
+    +'<input type="text" id="re-name" class="ifield" value="'+esc(ar.name||'')+'" autocomplete="off" style="margin-top:4px">'
     +'</div>'
 
     // ── Date range ──
@@ -5075,7 +5146,7 @@ function confirmEndRaffle(){
     // ── Winner ──
     +'<div class="fg" style="margin-bottom:12px">'
     +'<label style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.4px">🏆 שם הזוכה <span style="color:var(--red)">*</span></label>'
-    +'<input type="text" id="re-winner" class="ifield" placeholder="הזן את שם הזוכה..." autocomplete="off" style="margin-top:4px">'
+    +'<input type="text" id="re-winner" class="ifield" autocomplete="off" style="margin-top:4px">'
     +'</div>'
 
     // ── Social — header ──
@@ -5086,27 +5157,27 @@ function confirmEndRaffle(){
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:9px">'
     +'<div style="font-size:10px;font-weight:800;color:#1558c0;margin-bottom:6px;display:flex;align-items:center;gap:4px">📘 פייסבוק</div>'
     +'<div class="fg" style="margin-bottom:5px"><label style="font-size:9px;color:var(--t3)">בהתחלה</label>'
-    +'<input type="number" id="re-fb-start" class="ifield" value="'+fbStart+'" min="0" placeholder="174" style="margin-top:2px;text-align:center;font-size:12px"></div>'
+    +'<input type="number" id="re-fb-start" class="ifield" value="'+fbStart+'" min="0" style="margin-top:2px;text-align:center;font-size:12px"></div>'
     +'<div class="fg"><label style="font-size:9px;color:var(--t3)">בסיום</label>'
-    +'<input type="number" id="re-fb-end" class="ifield" value="'+fbNow+'" min="0" placeholder="211" style="margin-top:2px;text-align:center;font-size:12px"></div>'
+    +'<input type="number" id="re-fb-end" class="ifield" value="'+fbNow+'" min="0" style="margin-top:2px;text-align:center;font-size:12px"></div>'
     +'</div>'
 
     // IG
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:9px">'
     +'<div style="font-size:10px;font-weight:800;color:#e1306c;margin-bottom:6px;display:flex;align-items:center;gap:4px">📷 אינסטגרם</div>'
     +'<div class="fg" style="margin-bottom:5px"><label style="font-size:9px;color:var(--t3)">בהתחלה</label>'
-    +'<input type="number" id="re-ig-start" class="ifield" value="'+igStart+'" min="0" placeholder="504" style="margin-top:2px;text-align:center;font-size:12px"></div>'
+    +'<input type="number" id="re-ig-start" class="ifield" value="'+igStart+'" min="0" style="margin-top:2px;text-align:center;font-size:12px"></div>'
     +'<div class="fg"><label style="font-size:9px;color:var(--t3)">בסיום</label>'
-    +'<input type="number" id="re-ig-end" class="ifield" value="'+igNow+'" min="0" placeholder="516" style="margin-top:2px;text-align:center;font-size:12px"></div>'
+    +'<input type="number" id="re-ig-end" class="ifield" value="'+igNow+'" min="0" style="margin-top:2px;text-align:center;font-size:12px"></div>'
     +'</div>'
 
     // TG
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:9px">'
     +'<div style="font-size:10px;font-weight:800;color:#0369a1;margin-bottom:6px;display:flex;align-items:center;gap:4px">✈️ טלגרם</div>'
     +'<div class="fg" style="margin-bottom:5px"><label style="font-size:9px;color:var(--t3)">בהתחלה</label>'
-    +'<input type="number" id="re-tg-start" class="ifield" value="'+tgStart+'" min="0" placeholder="205" style="margin-top:2px;text-align:center;font-size:12px"></div>'
+    +'<input type="number" id="re-tg-start" class="ifield" value="'+tgStart+'" min="0" style="margin-top:2px;text-align:center;font-size:12px"></div>'
     +'<div class="fg"><label style="font-size:9px;color:var(--t3)">בסיום</label>'
-    +'<input type="number" id="re-tg-end" class="ifield" value="'+tgNow+'" min="0" placeholder="200" style="margin-top:2px;text-align:center;font-size:12px"></div>'
+    +'<input type="number" id="re-tg-end" class="ifield" value="'+tgNow+'" min="0" style="margin-top:2px;text-align:center;font-size:12px"></div>'
     +'</div>'
     +'</div>';
 
@@ -5475,8 +5546,8 @@ function openAddRaffleParticipantModal(){
   var ar=_getActiveRaffle();
   if(!ar){toast('פתח הגרלה חדשה תחילה','warn');return;}
   openModal('➕ הוסף משתתף — '+esc(ar.name),
-    '<div class="fg" style="margin-bottom:8px"><label>שם בעברית</label><input class="ifield" id="rnew-namehe" placeholder="שם בעברית"></div>'
-    +'<div class="fg" style="margin-bottom:8px"><label>שם באנגלית (אופציונלי)</label><input class="ifield" id="rnew-nameen" placeholder="English name"></div>'
+    '<div class="fg" style="margin-bottom:8px"><label>שם בעברית</label><input class="ifield" id="rnew-namehe"></div>'
+    +'<div class="fg" style="margin-bottom:8px"><label>שם באנגלית (אופציונלי)</label><input class="ifield" id="rnew-nameen"></div>'
     +'<div class="fg" style="margin-bottom:8px"><label>כרטיסים</label><input type="number" class="ifield" id="rnew-tickets" value="0" min="0"></div>'
     +'<div class="fg" style="margin-bottom:8px"><label>משימות שהושלמו (X) — ברירת מחדל: 1 (משימת חובה)</label><input type="number" class="ifield" id="rnew-tasksdone" value="1" min="0"></div>',
     '<button class="btn sec" onclick="closeModal()">ביטול</button>'
@@ -6040,6 +6111,124 @@ async function _npSubmit(){
   } finally {
     if(btn){ btn.disabled = false; btn.style.opacity = '1'; }
   }
+}
+
+// ════════════════════════════════════════════════
+// סיכום שבועי — weekly-summary tab logic
+// ════════════════════════════════════════════════
+var MAKE_COLLAGE_WEBHOOK = 'https://hook.eu1.make.com/ga5g3izykkvvhi185wy2qtglmpuily12'; // ← הכנס URL
+
+// מחזיר את טווח ה-Date (start, end) של שבוע בפורמט "2025-W22"
+function _wsWeekRange(weekVal){
+  if(!weekVal)return null;
+  var parts=weekVal.split('-W');
+  if(parts.length!==2)return null;
+  var year=parseInt(parts[0]),week=parseInt(parts[1]);
+  // ISO week: שבוע 1 = השבוע שמכיל את ה-4 בינואר
+  var jan4=new Date(year,0,4);
+  var day1=new Date(jan4);
+  day1.setDate(jan4.getDate()-((jan4.getDay()+6)%7)); // שני הראשון של שבוע 1
+  var start=new Date(day1);
+  start.setDate(day1.getDate()+(week-1)*7);
+  var end=new Date(start);
+  end.setDate(start.getDate()+6);
+  return{start:start,end:end};
+}
+
+// בודק אם dateObj (ממבנה parseDateIL) נופל בטווח
+function _wsInRange(dateObj,range){
+  if(!dateObj||!range)return false;
+  var d=new Date(dateObj.year,dateObj.month-1,dateObj.day);
+  return d>=range.start&&d<=range.end;
+}
+
+var _wsFiltered=[];
+
+function _wsFilter(){
+  var weekVal=(document.getElementById('ws-week')||{}).value||'';
+  var platform=(document.getElementById('ws-platform')||{}).value||'all';
+  var range=_wsWeekRange(weekVal);
+
+  if(!range){
+    _wsFiltered=[];
+    var ta=document.getElementById('ws-summary-text');
+    if(ta)ta.value='';
+    var cnt=document.getElementById('ws-count');
+    if(cnt)cnt.textContent='בחר שבוע';
+    return;
+  }
+
+  _wsFiltered=G.posts.filter(function(p){
+    if(platform==='fb')  return _wsInRange(p._dateE,range);
+    if(platform==='tg')  return _wsInRange(p._dateTG,range);
+    if(platform==='ig')  return _wsInRange(p._dateIG,range);
+    // all — כל פלטפורמה
+    return _wsInRange(p._dateE,range)||_wsInRange(p._dateTG,range)||_wsInRange(p._dateIG,range);
+  });
+
+  // עדכן textarea
+  var lines=_wsFiltered.map(function(p){
+    var name=gc(p,COL.HEB)||gc(p,COL.ENG)||'מוצר ללא שם';
+    var link=gc(p,COL.LINK)||'';
+    return name+(link?' - '+link:'');
+  });
+  var ta=document.getElementById('ws-summary-text');
+  if(ta)ta.value=lines.join('\n')||'לא נמצאו פוסטים בשבוע ובפלטפורמה שנבחרו.';
+
+  var cnt=document.getElementById('ws-count');
+  if(cnt)cnt.textContent=_wsFiltered.length+' פוסטים';
+
+  // אפס קולאז' ישן
+  var res=document.getElementById('ws-collage-result');
+  if(res)res.style.display='none';
+}
+
+async function _wsGenerateCollage(){
+  if(!_wsFiltered.length){toast('אין פוסטים לייצר מהם קולאז׳ — סנן שבוע ופלטפורמה תחילה','err');return;}
+  var images=_wsFiltered.map(function(p){return gc(p,COL.IMG);}).filter(Boolean);
+  if(!images.length){toast('לא נמצאו תמונות לפוסטים המסוננים','err');return;}
+
+  var loader=document.getElementById('ws-collage-loader');
+  var result=document.getElementById('ws-collage-result');
+  var btn=document.getElementById('ws-collage-btn');
+  if(loader)loader.style.display='flex';
+  if(result)result.style.display='none';
+  if(btn){btn.disabled=true;btn.style.opacity='.6';}
+
+  try{
+    var resp=await fetch(MAKE_COLLAGE_WEBHOOK,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({images:images})
+    });
+    var data=await resp.json();
+    if(data&&data.collageUrl){
+      var img=document.getElementById('ws-collage-img');
+      var lnk=document.getElementById('ws-collage-link');
+      if(img){img.src=data.collageUrl;}
+      if(lnk){lnk.href=data.collageUrl;}
+      if(result)result.style.display='block';
+      toast('✅ הקולאז׳ מוכן!','ok');
+    }else{
+      toast('המערכת לא קיבלה collageUrl תקין מ-Make','err');
+    }
+  }catch(e){
+    toast('שגיאת תקשורת עם Make: '+e.message,'err');
+  }finally{
+    if(loader)loader.style.display='none';
+    if(btn){btn.disabled=false;btn.style.opacity='1';}
+  }
+}
+
+function _wsCopy(){
+  var ta=document.getElementById('ws-summary-text');
+  if(!ta||!ta.value){toast('אין טקסט להעתקה','err');return;}
+  navigator.clipboard.writeText(ta.value).then(function(){
+    toast('✅ הסיכום הועתק ללוח','ok');
+  }).catch(function(){
+    ta.select();document.execCommand('copy');
+    toast('✅ הסיכום הועתק','ok');
+  });
 }
 
 // ════════════════════════════════════════════════
