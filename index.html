@@ -1095,12 +1095,12 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
             <div style="display:flex;gap:10px;align-items:flex-end">
               <div style="flex:7;min-width:0">
                 <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">🔗 לינק מוצר</label>
-                <input id="np-link" type="text" class="sinput" style="width:100%;box-sizing:border-box" placeholder="https://...">
+                <input id="np-link" type="text" class="sinput" style="width:100%;box-sizing:border-box">
               </div>
               <div style="flex:3;min-width:0">
                 <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">💰 מחיר</label>
                 <div style="display:flex;gap:5px;align-items:center">
-                  <input id="np-price" type="number" min="0" step="0.01" class="sinput" style="flex:1;min-width:0" placeholder="0.00">
+                  <input id="np-price" type="text" inputmode="decimal" class="sinput" style="flex:1;min-width:0" oninput="_numInput(this)">
                   <button id="np-currency-btn" onclick="_npToggleCurrency()"
                     style="flex-shrink:0;padding:0 10px;height:36px;border-radius:8px;border:2px solid var(--acc);background:var(--acc);color:#fff;font-size:14px;font-weight:900;cursor:pointer;transition:all .15s;white-space:nowrap">
                     $
@@ -1115,8 +1115,8 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
             <div style="display:flex;gap:10px;align-items:flex-start">
               <div style="flex:1;min-width:0">
                 <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">⭐ דירוג</label>
-                <input id="np-rating" type="number" min="0" max="5" step="0.1" class="sinput" style="width:100%;box-sizing:border-box;margin-bottom:7px" placeholder="4.5">
-                <div style="display:flex;flex-wrap:wrap;gap:4px">
+                <input id="np-rating" type="text" inputmode="decimal" class="sinput" style="width:100%;box-sizing:border-box;margin-bottom:7px" oninput="_numInput(this)">
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
                   <button class="np-pill" onclick="_npSetRating(4.3)">4.3</button>
                   <button class="np-pill" onclick="_npSetRating(4.4)">4.4</button>
                   <button class="np-pill" onclick="_npSetRating(4.5)">4.5</button>
@@ -1129,7 +1129,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
               </div>
               <div style="flex:1;min-width:0">
                 <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">🛒 רכישות</label>
-                <input id="np-bought" type="number" min="0" class="sinput" style="width:100%;box-sizing:border-box" placeholder="1000" oninput="_dynStep(this)">
+                <input id="np-bought" type="text" inputmode="numeric" class="sinput" style="width:100%;box-sizing:border-box" oninput="_numInput(this)" onkeydown="_dynStep(this,event)">
               </div>
             </div>
           </div>
@@ -1137,7 +1137,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           <!-- תמונה -->
           <div class="tw" style="padding:12px 14px 10px;margin-bottom:10px">
             <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">🖼️ לינק תמונה</label>
-            <input id="np-img" type="text" class="sinput" style="width:100%;box-sizing:border-box" placeholder="https://...">
+            <input id="np-img" type="text" class="sinput" style="width:100%;box-sizing:border-box">
           </div>
 
           <!-- תיאור -->
@@ -1145,7 +1145,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
             <label style="display:block;font-size:10px;font-weight:800;color:var(--t2);margin-bottom:5px;letter-spacing:.4px">📝 תיאור</label>
             <textarea id="np-desc" class="sinput"
               style="width:100%;box-sizing:border-box;min-height:110px;resize:vertical;font-family:inherit;font-size:13px;line-height:1.6;padding:8px 11px"
-              placeholder="הדבק כאן תיאור מפורט של המוצר..."></textarea>
+             ></textarea>
           </div>
 
           <!-- CTA button -->
@@ -1450,7 +1450,8 @@ function saveCats(){localStorage.setItem('sp_cats',JSON.stringify(G.cats));}
 // ════════════════════════════════════════════════
 const gc=(p,c)=>(p.data[c]||'').toString().trim();
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const gv=id=>{const e=document.getElementById(id);return e?e.value.trim():'';};
+const gv=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
+const gvRaw=id=>{const e=document.getElementById(id);return e?e.value.replace(/,/g,'').trim():''};
 const getCfg=()=>JSON.parse(localStorage.getItem('sp_cfg')||'{}');
 const saveCfg=obj=>{const c=getCfg();localStorage.setItem('sp_cfg',JSON.stringify({...c,...obj}));};
 
@@ -1554,18 +1555,52 @@ function fmtDate(d){
 
 // ── formatNumber: אלפים עם פסיק לתצוגה בלבד ─────────────────────
 function formatNumber(n){
-  var num=parseFloat(n);
+  var num=parseFloat(String(n).replace(/,/g,''));
   if(isNaN(num))return n||'—';
   return num.toLocaleString('he-IL');
 }
 
-// ── _dynStep: קפיצה דינמית לפי גודל מספר (שדות רכישות) ──────────
-function _dynStep(el){
-  var v=parseFloat(el.value)||0;
-  if(v>=10000)      el.step=10000;
-  else if(v>=1000)  el.step=1000;
-  else if(v>=100)   el.step=100;
-  else              el.step=1;
+// ── _numInput: מעצב שדה טקסט כמספר עם פסיקים בזמן אמת ──────────
+// קרא עם oninput="‎_numInput(this)"
+function _numInput(el){
+  var cur=el.value.replace(/[^\d.]/g,'');
+  var pos=el.selectionStart;
+  var prevLen=el.value.length;
+  if(cur===''){el.value='';return;}
+  // מאפשר נקודה עשרונית בסוף בזמן הקלדה
+  var trailingDot=cur.slice(-1)==='.';
+  var num=parseFloat(cur);
+  if(isNaN(num)){el.value='';return;}
+  var formatted=num.toLocaleString('he-IL')+(trailingDot?'.':'');
+  el.value=formatted;
+  // שמור על מיקום הסמן
+  var diff=formatted.length-prevLen;
+  try{el.setSelectionRange(pos+diff,pos+diff);}catch(e){}
+}
+
+// ── _numRaw: מחזיר ערך נקי (ללא פסיקים) לשליחה לשרת ─────────────
+function _numRaw(id){
+  var el=document.getElementById(id);
+  if(!el)return'';
+  return el.value.replace(/,/g,'').trim();
+}
+
+// ── _dynStep: קפיצה חלקה ל-ArrowUp/Down בשדות רכישות ────────────
+// שנה לטקסט חכם: el הוא input type=text עם _numInput
+function _dynStep(el,e){
+  if(!e||( e.key!=='ArrowUp'&&e.key!=='ArrowDown'))return;
+  e.preventDefault();
+  var raw=parseFloat(el.value.replace(/,/g,''))||0;
+  var step;
+  if(raw>=10000)      step=10000;
+  else if(raw>=1000)  step=1000;
+  else if(raw>=100)   step=100;
+  else                step=10;
+  // עגל תחילה לרצף נקי של ה-step הנוכחי, ואז קפוץ
+  var base=Math.round(raw/step)*step;
+  var next=e.key==='ArrowUp'?base+step:base-step;
+  if(next<0)next=0;
+  el.value=next.toLocaleString('he-IL');
 }
 
 // ── v53: Dark mode ───────────────────────────────
@@ -2324,7 +2359,7 @@ function openFollowerModal(key,name){
     `<div class="ibox" style="font-size:11px">כל ערך נשמר עם חותמת זמן להשוואה.</div>
     ${growthHtml}
     ${customRangeHtml}
-    <div class="fg" style="margin-bottom:12px"><label>כמות עוקבים נוכחית</label><input class="ifield" id="f-val" type="number" placeholder="לדוג׳ 5400" ${cur?'value="'+cur.val+'"':''}></div>
+    <div class="fg" style="margin-bottom:12px"><label>כמות עוקבים נוכחית</label><input class="ifield" id="f-val" type="number" ${cur?'value="'+cur.val+'"':''}></div>
     ${histHtml?`<div class="slbl2" style="margin-bottom:8px">היסטוריה (8 אחרונים)</div>${histHtml}`:''}`,
     `<button class="btn sec" onclick="closeModal()">סגור</button>
     <button class="btn grn" onclick="addFollowerPoint('${key}')">💾 שמור</button>`);
@@ -2684,9 +2719,9 @@ function openEditModal(rowNum){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px">
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם בעברית</span><input class="ifield" id="e-heb" value="${esc(gc(p,COL.HEB))}"></div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם באנגלית</span><input class="ifield" id="e-eng" value="${esc(gc(p,COL.ENG))}"></div>
-      <div class="fg"><span class="slbl2">מחיר ($)</span><input class="ifield" id="e-price" type="number" value="${gc(p,COL.PRICE)}"></div>
-      <div class="fg"><span class="slbl2">דירוג ⭐</span><input class="ifield" id="e-rating" type="number" step="0.1" value="${gc(p,COL.RATING)}"></div>
-      <div class="fg"><span class="slbl2">רכישות 🔥</span><input class="ifield" id="e-bought" type="number" value="${gc(p,COL.BOUGHT)}" oninput="_dynStep(this)"></div>
+      <div class="fg"><span class="slbl2">מחיר ($)</span><input class="ifield" id="e-price" type="text" inputmode="decimal" value="${gc(p,COL.PRICE)?formatNumber(gc(p,COL.PRICE)):''}" oninput="_numInput(this)"></div>
+      <div class="fg"><span class="slbl2">דירוג ⭐</span><input class="ifield" id="e-rating" type="text" inputmode="decimal" value="${gc(p,COL.RATING)?formatNumber(gc(p,COL.RATING)):''}" oninput="_numInput(this)"></div>
+      <div class="fg"><span class="slbl2">רכישות 🔥</span><input class="ifield" id="e-bought" type="text" inputmode="numeric" value="${gc(p,COL.BOUGHT)?formatNumber(gc(p,COL.BOUGHT)):''}" oninput="_numInput(this)" onkeydown="_dynStep(this,event)"></div>
       <div class="fg"><span class="slbl2">📂 קטגוריה</span>
         <select class="fsel" id="e-cat" style="width:100%">
           ${(()=>{
@@ -2773,8 +2808,8 @@ async function saveEdit(rowNum){
   // v38: בנה updates ללא עמודה E כברירת מחדל
   const updates={
     [COL.HEB+1]:gv('e-heb'),[COL.ENG+1]:gv('e-eng'),
-    [COL.PRICE+1]:gv('e-price'),[COL.RATING+1]:gv('e-rating'),
-    [COL.BOUGHT+1]:gv('e-bought'),[COL.CAT+1]:gv('e-cat'),
+    [COL.PRICE+1]:gvRaw('e-price'),[COL.RATING+1]:gvRaw('e-rating'),
+    [COL.BOUGHT+1]:gvRaw('e-bought'),[COL.CAT+1]:gv('e-cat'),
     [COL.LINK+1]:gv('e-link'),[COL.IMG+1]:gv('e-img'),
     [COL.CONTENT+1]:contentEl.value,[COL.TAGS+1]:gv('e-tags'),
     [COL.STATUS+1]:gv('e-status'),
@@ -2849,8 +2884,8 @@ async function saveEditReturnToDash(rowNum){
 
   const updates={
     [COL.HEB+1]:gv('e-heb'),[COL.ENG+1]:gv('e-eng'),
-    [COL.PRICE+1]:gv('e-price'),[COL.RATING+1]:gv('e-rating'),
-    [COL.BOUGHT+1]:gv('e-bought'),[COL.CAT+1]:gv('e-cat'),
+    [COL.PRICE+1]:gvRaw('e-price'),[COL.RATING+1]:gvRaw('e-rating'),
+    [COL.BOUGHT+1]:gvRaw('e-bought'),[COL.CAT+1]:gv('e-cat'),
     [COL.LINK+1]:gv('e-link'),[COL.IMG+1]:gv('e-img'),
     [COL.CONTENT+1]:contentEl.value,[COL.TAGS+1]:gv('e-tags'),
     [COL.STATUS+1]:gv('e-status'),
@@ -5959,9 +5994,9 @@ function _npSetRating(val){
 
 async function _npSubmit(){
   var link    = (document.getElementById('np-link')   || {}).value || '';
-  var price   = (document.getElementById('np-price')  || {}).value || '';
-  var rating  = (document.getElementById('np-rating') || {}).value || '';
-  var bought  = (document.getElementById('np-bought') || {}).value || '';
+  var price   = ((document.getElementById('np-price')  || {}).value || '').replace(/,/g,'');
+  var rating  = ((document.getElementById('np-rating') || {}).value || '').replace(/,/g,'');
+  var bought  = ((document.getElementById('np-bought') || {}).value || '').replace(/,/g,'');
   var img     = (document.getElementById('np-img')    || {}).value || '';
   var desc    = (document.getElementById('np-desc')   || {}).value || '';
 
