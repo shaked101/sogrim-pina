@@ -6645,20 +6645,11 @@ function _wsOnPageShow(){
 function _wsInitCatSelect(){
   var sel = document.getElementById('ws-cat');
   if(!sel) return;
-  // שמור ערך קיים
   var prev = sel.value;
-  sel.innerHTML = '<option value="">כל הקטגוריות</option>';
-  // משיכה מ-G.cats בלבד — בדיוק כמו לשונית הפוסטים
-  if(Array.isArray(G.cats)){
-    G.cats.filter(function(c){ return c.id !== 'all' && c.id !== 'custom'; })
-      .forEach(function(c){
-        var opt = document.createElement('option');
-        opt.value = c.name;
-        opt.textContent = (c.emoji ? c.emoji + ' ' : '') + c.name;
-        sel.appendChild(opt);
-      });
-  }
-  // שחזר ערך קודם אם עדיין קיים
+  // לוגיקה זהה 1:1 לפונקציית populateCats של לשונית הפוסטים:
+  // ערכים ייחודיים מעמודת CAT ב-G.posts, ממוינים אלפביתית, ללא אימוג'ים
+  var cats = [...new Set(G.posts.map(function(p){ return gc(p, COL.CAT).trim(); }).filter(Boolean))].sort(function(a,b){ return a.localeCompare(b,'he'); });
+  sel.innerHTML = '<option value="">כל הקטגוריות</option>' + cats.map(function(c){ return '<option value="'+esc(c)+'">'+esc(c)+'</option>'; }).join('');
   if(prev) sel.value = prev;
 }
 
