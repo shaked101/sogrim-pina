@@ -1194,14 +1194,23 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
         <!-- ═══ גוף 3 אזורים ═══ -->
         <div style="display:grid;grid-template-columns:220px 1fr 260px;gap:12px;align-items:start">
 
-          <!-- ── אזור שמאלי: גריד קולאז' 2×3 (LTR: שמאל=1, ימין=2) ── -->
+          <!-- ── אזור שמאלי: גריד קולאז' 8 משבצות ── -->
           <div class="tw" style="padding:14px">
-            <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">🖼️ גריד קולאז' (6 משבצות)</div>
+            <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">🖼️ גריד קולאז' (8 משבצות)</div>
 
-            <!-- 6 slots — dir:ltr so slot 1=top-left, 2=top-right, 3=mid-left … -->
-            <div id="ws-slots-grid" dir="ltr"
-              style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
-              <!-- slots נוצרים ב-JS ע"י _wsInitSlots() -->
+            <!-- שורה 1: 3 משבצות עליונות (slots 0,1,2) -->
+            <div id="ws-slots-row-top" dir="ltr"
+              style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:5px">
+            </div>
+
+            <!-- שורה 2: slot 6 | לוגו | slot 7 -->
+            <div id="ws-slots-row-mid" dir="ltr"
+              style="display:grid;grid-template-columns:1fr auto 1fr;gap:5px;align-items:center;margin-bottom:5px">
+            </div>
+
+            <!-- שורה 3: 3 משבצות תחתונות (slots 3,4,5) -->
+            <div id="ws-slots-row-bot" dir="ltr"
+              style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:12px">
             </div>
 
             <!-- כפתור ייצר קולאז' -->
@@ -6143,16 +6152,19 @@ async function _npSubmit(){
 var MAKE_COLLAGE_WEBHOOK = 'https://hook.eu1.make.com/ga5g3izykkvvhi185wy2qtglmpuily12';
 
 // ── מצב ה-slots (מערך 6 איברים, null = ריק) ─────────────────────
-var _wsSlots = [null,null,null,null,null,null]; // indices 0-5
+var _wsSlots = [null,null,null,null,null,null,null,null]; // indices 0-7
 
 // ── כל פוסטי השבוע המסוננים (מאגר) ─────────────────────────────
 var _wsFiltered = [];
 
-// ── כיתובי מיקום לכל slot (LTR: 1=שמאל עליון, 2=ימין עליון …) ──
+// ── כיתובי מיקום לכל slot ──────────────────────────────────────
+// 0-2: שורה עליונה (שמאל/מרכז/ימין)
+// 3-5: שורה תחתונה (שמאל/מרכז/ימין)
+// 6:   מרכז שמאל | 7: מרכז ימין
 var _WS_POS_LABELS = [
-  'שמאל עליון','ימין עליון',
-  'שמאל אמצע', 'ימין אמצע',
-  'שמאל תחתון','ימין תחתון'
+  'שמאל עליון','מרכז עליון','ימין עליון',
+  'שמאל תחתון','מרכז תחתון','ימין תחתון',
+  'מרכז שמאל','מרכז ימין'
 ];
 
 // ── משתנה DnD פנימי: מה נגרר כרגע ──────────────────────────────
@@ -6240,7 +6252,7 @@ function _wsFilter(){
 
   if(cnt) cnt.textContent = _wsFiltered.length+' פוסטים';
 
-  _wsSlots = [null,null,null,null,null,null];
+  _wsSlots = [null,null,null,null,null,null,null,null];
   _wsRenderSlots();
   _wsRenderPool();
   _wsRebuildSummary();
@@ -6300,7 +6312,7 @@ function _wsAddToSlot(poolIdx){
     toast('המוצר כבר בגריד','inf'); return;
   }
   var freeIdx = _wsSlots.indexOf(null);
-  if(freeIdx===-1){ toast('הגריד מלא — הסר מוצר תחילה','warn'); return; }
+  if(freeIdx===-1){ toast('הגריד מלא (8 מוצרים) — הסר מוצר תחילה','warn'); return; }
   _wsSlots[freeIdx] = p;
   _wsRenderSlots();
   _wsRenderPool();
@@ -6318,59 +6330,68 @@ function _wsRemoveSlot(slotIdx){
 }
 
 // ────────────────────────────────────────────────
-// ציור 6 משבצות הגריד — עם כיתוב מיקום + DnD
+// ציור 8 משבצות הגריד — שורה עליונה (0,1,2), אמצעית (6,לוגו,7), תחתונה (3,4,5)
 // ────────────────────────────────────────────────
 function _wsRenderSlots(){
-  var grid = document.getElementById('ws-slots-grid');
-  if(!grid) return;
+  var rowTop = document.getElementById('ws-slots-row-top');
+  var rowMid = document.getElementById('ws-slots-row-mid');
+  var rowBot = document.getElementById('ws-slots-row-bot');
+  if(!rowTop || !rowMid || !rowBot) return;
 
-  // בנה את ה-HTML ואז הוסף את listeners ב-JS (לא inline, כדי לתמוך ב-ondrop)
-  grid.innerHTML = _wsSlots.map(function(p, i){
+  // סדר ציור: שורה עליונה=0,1,2 | שורה תחתונה=3,4,5 | אמצע שמאל=6, אמצע ימין=7
+  var topIndices = [0,1,2];
+  var botIndices = [3,4,5];
+  var midLeft    = 6;
+  var midRight   = 7;
+
+  function buildSlot(i){
+    var p = _wsSlots[i];
     var posLabel = (i+1)+' · '+_WS_POS_LABELS[i];
     if(!p){
-      // משבצת ריקה — drop target
       return '<div id="ws-slot-'+i+'" data-slot="'+i+'"'
-        +' style="border:2px dashed var(--b2);border-radius:7px;height:90px;display:flex;'
-        +'flex-direction:column;align-items:center;justify-content:center;gap:3px;'
+        +' style="border:2px dashed var(--b2);border-radius:7px;height:76px;display:flex;'
+        +'flex-direction:column;align-items:center;justify-content:center;gap:2px;'
         +'background:var(--s2);transition:border-color .15s,background .15s;cursor:default">'
-        +'<span style="font-size:18px;opacity:.35">📷</span>'
-        +'<span style="font-size:9px;font-weight:800;color:var(--t3);text-align:center;line-height:1.3;padding:0 4px">'+esc(posLabel)+'</span>'
+        +'<span style="font-size:16px;opacity:.35">📷</span>'
+        +'<span style="font-size:8px;font-weight:800;color:var(--t3);text-align:center;line-height:1.3;padding:0 3px">'+esc(posLabel)+'</span>'
       +'</div>';
     }
-    // משבצת ממולאת — draggable + drop target (swap)
     var img  = gc(p, COL.IMG);
     var name = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
     return '<div id="ws-slot-'+i+'" data-slot="'+i+'" draggable="true"'
-      +' style="position:relative;border-radius:7px;overflow:hidden;height:90px;'
+      +' style="position:relative;border-radius:7px;overflow:hidden;height:76px;'
       +'border:2px solid var(--acc);cursor:grab;transition:border-color .15s,opacity .15s">'
-      // תמונה
       +(img
         ?'<img src="'+esc(img)+'" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none" onerror="this.style.display=\'none\'">'
-        :'<div style="width:100%;height:100%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:24px;pointer-events:none">📦</div>')
-      // overlay
+        :'<div style="width:100%;height:100%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:20px;pointer-events:none">📦</div>')
       +'<div style="position:absolute;inset:0;background:rgba(0,0,0,.42);display:flex;flex-direction:column;justify-content:space-between;padding:3px;pointer-events:none">'
-        // שורה עליונה: מספר + מיקום
         +'<div style="display:flex;align-items:center;justify-content:space-between">'
-          +'<span style="font-size:8px;font-weight:900;color:#fff;background:var(--acc);border-radius:3px;padding:1px 4px">'+esc(posLabel)+'</span>'
+          +'<span style="font-size:7px;font-weight:900;color:#fff;background:var(--acc);border-radius:3px;padding:1px 3px">'+esc(posLabel)+'</span>'
         +'</div>'
-        // שורה תחתונה: שם + הסר
-        +'<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:2px">'
-          +'<span style="font-size:8px;color:#fff;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+esc(name.slice(0,20))+'</span>'
-          // כפתור הסרה — pointer-events:auto כדי לא להיחסם על-ידי overlay ה-pointer-events:none
-          +'<button data-remove="'+i+'" style="pointer-events:auto;background:var(--red);border:none;color:#fff;border-radius:3px;font-size:9px;padding:1px 4px;cursor:pointer;flex-shrink:0;font-family:inherit;line-height:1.2" title="הסר">✕</button>'
-        +'</div>'
+        +'<div style="font-size:9px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 1px">'+esc(name)+'</div>'
       +'</div>'
+      +'<button id="ws-rm-'+i+'" style="position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;border:none;background:rgba(185,28,28,.85);color:#fff;font-size:9px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2">✕</button>'
     +'</div>';
-  }).join('');
+  }
 
-  // ── צרף event listeners לאחר render ──────────────────────────
-  for(var i = 0; i < 6; i++){
+  rowTop.innerHTML = topIndices.map(buildSlot).join('');
+  rowBot.innerHTML = botIndices.map(buildSlot).join('');
+
+  // שורה אמצעית: slot 6 | לוגו | slot 7
+  rowMid.innerHTML =
+    buildSlot(midLeft)
+    +'<div style="text-align:center;padding:4px 6px;font-size:10px;font-weight:900;color:var(--acc);white-space:nowrap;line-height:1.4;background:#fef3ee;border-radius:7px;border:1px solid #fed7aa">'
+      +'סוגרים<br>פינה 👊'
+    +'</div>'
+    +buildSlot(midRight);
+
+  // הוסף event listeners לכל ה-8 slots
+  for(var ii=0; ii<8; ii++){
     (function(idx){
       var el = document.getElementById('ws-slot-'+idx);
       if(!el) return;
 
-      // כפתור הסרה (pointer-events:auto על הכפתור עצמו)
-      var removeBtn = el.querySelector('[data-remove]');
+      var removeBtn = document.getElementById('ws-rm-'+idx);
       if(removeBtn){
         removeBtn.addEventListener('click', function(e){
           e.stopPropagation();
@@ -6378,7 +6399,6 @@ function _wsRenderSlots(){
         });
       }
 
-      // DnD — slot כ-drag source (כשממולא)
       el.addEventListener('dragstart', function(e){
         _wsDrag = { source:'slot', idx: idx };
         e.dataTransfer.effectAllowed = 'move';
@@ -6386,7 +6406,6 @@ function _wsRenderSlots(){
       });
       el.addEventListener('dragend', _wsDragEnd);
 
-      // DnD — slot כ-drop target
       el.addEventListener('dragover', function(e){
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
@@ -6403,7 +6422,7 @@ function _wsRenderSlots(){
         el.style.borderColor = _wsSlots[idx] ? 'var(--acc)' : 'var(--b2)';
         el.style.background  = _wsSlots[idx] ? '' : 'var(--s2)';
       });
-    })(i);
+    })(ii);
   }
 }
 
@@ -6419,8 +6438,7 @@ function _wsDragStartPool(e, poolIdx){
 
 // סיום גרירה (ניקוי visual)
 function _wsDragEnd(e){
-  // החזר opacity לכל slots
-  for(var i=0; i<6; i++){
+  for(var i=0; i<8; i++){
     var el = document.getElementById('ws-slot-'+i);
     if(el) el.style.opacity = '1';
   }
@@ -6576,7 +6594,7 @@ function _wsOnPageShow(){
 }
 
 function _wsInitSlots(){
-  _wsSlots = [null,null,null,null,null,null];
+  _wsSlots = [null,null,null,null,null,null,null,null];
   _wsRenderSlots();
 }
 
