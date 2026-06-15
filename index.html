@@ -1228,7 +1228,8 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
 
           <!-- ── אזור מרכזי: מאגר פוסטי השבוע ── -->
           <div class="tw" style="padding:14px">
-            <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">📦 פוסטי השבוע — לחץ "+ הוסף" לשיבוץ בגריד</div>
+            <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:3px">📦 פוסטי השבוע</div>
+            <div style="font-size:10px;color:var(--t3);margin-bottom:10px">גרור לגריד 🖱️ או לחץ "+ הוסף"</div>
             <div id="ws-pool" style="max-height:500px;overflow-y:auto">
               <div class="empty" style="padding:28px;font-size:12px">בחר שבוע ופלטפורמה כדי לראות פוסטים</div>
             </div>
@@ -6135,10 +6136,9 @@ async function _npSubmit(){
 }
 
 // ════════════════════════════════════════════════
-// ════════════════════════════════════════════════
-// סיכום שבועי — weekly-summary tab logic (v2)
-// תיקונים: בורר שבועות ישראלי (א׳–ש׳), סטודיו עריכה 3 אזורים,
-//           6 slots קולאז' ידניים, fetch חסין-שגיאות.
+// סיכום שבועי — weekly-summary tab logic (v3)
+// v3: כיתובי מיקום בגריד, HTML5 Drag & Drop (pool→slot + slot↔slot swap),
+//     חילוץ URL עם Regex חסין.
 // ════════════════════════════════════════════════
 var MAKE_COLLAGE_WEBHOOK = 'https://hook.eu1.make.com/ga5g3izykkvvhi185wy2qtglmpuily12';
 
@@ -6148,53 +6148,64 @@ var _wsSlots = [null,null,null,null,null,null]; // indices 0-5
 // ── כל פוסטי השבוע המסוננים (מאגר) ─────────────────────────────
 var _wsFiltered = [];
 
-// ── עזר: מחזיר את ה-num ישראלי (YYYYMMDD) של ראשון הקודם ────────
-// בדיוק כמו שלוח השנה עושה: getDay()===0 = ראשון
+// ── כיתובי מיקום לכל slot (LTR: 1=שמאל עליון, 2=ימין עליון …) ──
+var _WS_POS_LABELS = [
+  'שמאל עליון','ימין עליון',
+  'שמאל אמצע', 'ימין אמצע',
+  'שמאל תחתון','ימין תחתון'
+];
+
+// ── משתנה DnD פנימי: מה נגרר כרגע ──────────────────────────────
+// { source: 'pool'|'slot', idx: number }
+var _wsDrag = null;
+
+// ────────────────────────────────────────────────
+// עזרים כלליים
+// ────────────────────────────────────────────────
+
+// מחזיר Date של ראשון השבוע (שבוע א׳–ש׳, כמו לוח השנה)
 function _wsGetSunday(d){
-  // d הוא Date. מחזיר Date של ראשון השבוע שלו (שבוע א׳-ש׳)
   var dow = d.getDay(); // 0=Sun
-  var sun = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow, 12, 0, 0);
-  return sun;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()-dow, 12, 0, 0);
 }
 
-// ── עזר: מחזיר label "DD/MM/YYYY - DD/MM/YYYY" מתוך Date ───────
+// label "DD/MM/YYYY - DD/MM/YYYY"
 function _wsFmtRange(sun){
-  var sat = new Date(sun.getFullYear(), sun.getMonth(), sun.getDate() + 6, 12, 0, 0);
+  var sat = new Date(sun.getFullYear(), sun.getMonth(), sun.getDate()+6, 12, 0, 0);
   function f(dt){ return String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear(); }
   return f(sun)+' - '+f(sat);
 }
 
-// ── עזר: value של option = "YYYYMMDD" (num של ראשון השבוע) ──────
+// Date → YYYYMMDD integer
 function _wsDateToNum(d){
   return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
 }
 
-// ── אתחול ה-<select> עם 12 שבועות אחרונים ──────────────────────
+// ────────────────────────────────────────────────
+// אתחול ה-<select> עם 12 שבועות אחרונים
+// ────────────────────────────────────────────────
 function _wsInitWeekSelect(){
   var sel = document.getElementById('ws-week');
   if(!sel) return;
   var today = new Date();
   today.setHours(12,0,0,0);
-  var sun = _wsGetSunday(today); // ראשון השבוע הנוכחי
+  var sun = _wsGetSunday(today);
   sel.innerHTML = '<option value="">— בחר שבוע —</option>';
   for(var i = 0; i < 12; i++){
-    var weekSun = new Date(sun.getFullYear(), sun.getMonth(), sun.getDate() - i*7, 12, 0, 0);
-    var val = String(_wsDateToNum(weekSun));
-    var lbl = _wsFmtRange(weekSun);
+    var weekSun = new Date(sun.getFullYear(), sun.getMonth(), sun.getDate()-i*7, 12, 0, 0);
     var opt = document.createElement('option');
-    opt.value = val;
-    opt.textContent = lbl;
-    if(i === 0) opt.selected = true; // השבוע הנוכחי כברירת מחדל
+    opt.value = String(_wsDateToNum(weekSun));
+    opt.textContent = _wsFmtRange(weekSun);
+    if(i === 0) opt.selected = true;
     sel.appendChild(opt);
   }
 }
 
-// ── בודק אם dateObj (ממבנה parseDateIL) נופל בשבוע ───────────────
-// val = "YYYYMMDD" num של ראשון השבוע
+// ────────────────────────────────────────────────
+// בודק אם dateObj נופל בשבוע שמתחיל ב-sunNum
+// ────────────────────────────────────────────────
 function _wsInRange(dateObj, sunNum){
   if(!dateObj || !sunNum) return false;
-  var satNum = sunNum + 6; // ראשון+6 = שבת (פשוט בגלל YYYYMMDD continuous? לא תמיד)
-  // חשב num של שבת נכון: sunNum = YYYYMMDD, +6 ימים
   var sunDate = new Date(
     Math.floor(sunNum/10000),
     Math.floor((sunNum%10000)/100)-1,
@@ -6205,11 +6216,13 @@ function _wsInRange(dateObj, sunNum){
   return dateObj.num >= sunNum && dateObj.num <= satNumReal;
 }
 
-// ── סינון פוסטים ומילוי מאגר ─────────────────────────────────────
+// ────────────────────────────────────────────────
+// סינון + איפוס
+// ────────────────────────────────────────────────
 function _wsFilter(){
-  var sunNum = parseInt((document.getElementById('ws-week')||{}).value||'0')||0;
+  var sunNum   = parseInt((document.getElementById('ws-week')||{}).value||'0')||0;
   var platform = (document.getElementById('ws-platform')||{}).value||'all';
-  var cnt = document.getElementById('ws-count');
+  var cnt      = document.getElementById('ws-count');
 
   if(!sunNum){
     _wsFiltered = [];
@@ -6219,15 +6232,14 @@ function _wsFilter(){
   }
 
   _wsFiltered = G.posts.filter(function(p){
-    if(platform==='fb') return _wsInRange(p._dateE,   sunNum);
-    if(platform==='tg') return _wsInRange(p._dateTG,  sunNum);
-    if(platform==='ig') return _wsInRange(p._dateIG,  sunNum);
-    return _wsInRange(p._dateE, sunNum)||_wsInRange(p._dateTG, sunNum)||_wsInRange(p._dateIG, sunNum);
+    if(platform==='fb') return _wsInRange(p._dateE,  sunNum);
+    if(platform==='tg') return _wsInRange(p._dateTG, sunNum);
+    if(platform==='ig') return _wsInRange(p._dateIG, sunNum);
+    return _wsInRange(p._dateE,sunNum)||_wsInRange(p._dateTG,sunNum)||_wsInRange(p._dateIG,sunNum);
   });
 
-  if(cnt) cnt.textContent = _wsFiltered.length + ' פוסטים';
+  if(cnt) cnt.textContent = _wsFiltered.length+' פוסטים';
 
-  // אפס slots וקולאז' ישנים בעת שינוי שבוע/פלטפורמה
   _wsSlots = [null,null,null,null,null,null];
   _wsRenderSlots();
   _wsRenderPool();
@@ -6237,7 +6249,9 @@ function _wsFilter(){
   if(res) res.style.display = 'none';
 }
 
-// ── בניית מאגר הפוסטים (אזור מרכזי) ───────────────────────────
+// ────────────────────────────────────────────────
+// מאגר הפוסטים (אזור מרכזי) — עם draggable
+// ────────────────────────────────────────────────
 function _wsRenderPool(){
   var wrap = document.getElementById('ws-pool');
   if(!wrap) return;
@@ -6246,19 +6260,27 @@ function _wsRenderPool(){
     return;
   }
   wrap.innerHTML = _wsFiltered.map(function(p, idx){
-    var img = gc(p, COL.IMG);
-    var name = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
-    var price = gc(p, COL.PRICE);
-    // בדוק אם כבר בslot
-    var inSlot = _wsSlots.some(function(s){ return s && s.row === p.row; });
-    return '<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--b1)">'
+    var img    = gc(p, COL.IMG);
+    var name   = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
+    var price  = gc(p, COL.PRICE);
+    var inSlot = _wsSlots.some(function(s){ return s && s.row===p.row; });
+    // כל שורה היא draggable כשאינה כבר בגריד
+    return '<div'
+      +(!inSlot ? ' draggable="true" ondragstart="_wsDragStartPool(event,'+idx+')" ondragend="_wsDragEnd(event)"' : '')
+      +' style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--b1);'
+      +(!inSlot ? 'cursor:grab;' : '')
+      +(inSlot  ? 'opacity:.5;' : '')
+      +'">'
+      // תמונה / placeholder
       +(img
-        ?'<img src="'+esc(img)+'" style="width:36px;height:36px;border-radius:5px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onerror="this.style.display=\'none\'" onclick="openImageLightbox(\''+img.replace(/'/g,"\\'")+'\')">'
+        ?'<img src="'+esc(img)+'" style="width:36px;height:36px;border-radius:5px;object-fit:cover;flex-shrink:0" onerror="this.style.display=\'none\'">'
         :'<div style="width:36px;height:36px;border-radius:5px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">📦</div>')
+      // טקסט
       +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:11px;font-weight:800;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(name)+'</div>'
         +(price?'<div style="font-size:10px;color:var(--acc);font-family:monospace;font-weight:700">'+esc(price)+'$</div>':'')
       +'</div>'
+      // כפתור
       +'<button class="btn'+(inSlot?' sec':'')+' sm" '
         +(inSlot?'disabled title="כבר בגריד"':'onclick="_wsAddToSlot('+idx+')" title="הוסף לגריד"')
         +' style="flex-shrink:0;min-width:54px">'
@@ -6268,23 +6290,26 @@ function _wsRenderPool(){
   }).join('');
 }
 
-// ── הוסף פוסט למשבצת הפנויה הראשונה ───────────────────────────
+// ────────────────────────────────────────────────
+// הוסף לפי כפתור (משבצת פנויה ראשונה)
+// ────────────────────────────────────────────────
 function _wsAddToSlot(poolIdx){
   var p = _wsFiltered[poolIdx];
   if(!p){ toast('פוסט לא נמצא','err'); return; }
-  // בדוק כפילות
   if(_wsSlots.some(function(s){ return s && s.row===p.row; })){
     toast('המוצר כבר בגריד','inf'); return;
   }
   var freeIdx = _wsSlots.indexOf(null);
-  if(freeIdx === -1){ toast('הגריד מלא — הסר מוצר תחילה','warn'); return; }
+  if(freeIdx===-1){ toast('הגריד מלא — הסר מוצר תחילה','warn'); return; }
   _wsSlots[freeIdx] = p;
   _wsRenderSlots();
   _wsRenderPool();
   _wsRebuildSummary();
 }
 
-// ── הסר מוצר מ-slot ─────────────────────────────────────────────
+// ────────────────────────────────────────────────
+// הסרה מ-slot
+// ────────────────────────────────────────────────
 function _wsRemoveSlot(slotIdx){
   _wsSlots[slotIdx] = null;
   _wsRenderSlots();
@@ -6292,52 +6317,173 @@ function _wsRemoveSlot(slotIdx){
   _wsRebuildSummary();
 }
 
-// ── ציור 6 משבצות הגריד ────────────────────────────────────────
+// ────────────────────────────────────────────────
+// ציור 6 משבצות הגריד — עם כיתוב מיקום + DnD
+// ────────────────────────────────────────────────
 function _wsRenderSlots(){
   var grid = document.getElementById('ws-slots-grid');
   if(!grid) return;
+
+  // בנה את ה-HTML ואז הוסף את listeners ב-JS (לא inline, כדי לתמוך ב-ondrop)
   grid.innerHTML = _wsSlots.map(function(p, i){
-    var label = i+1; // 1-6
+    var posLabel = (i+1)+' · '+_WS_POS_LABELS[i];
     if(!p){
-      return '<div style="'
-        +'border:2px dashed var(--b2);border-radius:7px;height:80px;display:flex;'
-        +'align-items:center;justify-content:center;font-size:10px;color:var(--t3);font-weight:700;'
-        +'background:var(--s2)">'
-        +label+'. ריק'
+      // משבצת ריקה — drop target
+      return '<div id="ws-slot-'+i+'" data-slot="'+i+'"'
+        +' style="border:2px dashed var(--b2);border-radius:7px;height:90px;display:flex;'
+        +'flex-direction:column;align-items:center;justify-content:center;gap:3px;'
+        +'background:var(--s2);transition:border-color .15s,background .15s;cursor:default">'
+        +'<span style="font-size:18px;opacity:.35">📷</span>'
+        +'<span style="font-size:9px;font-weight:800;color:var(--t3);text-align:center;line-height:1.3;padding:0 4px">'+esc(posLabel)+'</span>'
       +'</div>';
     }
-    var img = gc(p, COL.IMG);
+    // משבצת ממולאת — draggable + drop target (swap)
+    var img  = gc(p, COL.IMG);
     var name = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
-    return '<div style="position:relative;border-radius:7px;overflow:hidden;height:80px;border:2px solid var(--acc)">'
+    return '<div id="ws-slot-'+i+'" data-slot="'+i+'" draggable="true"'
+      +' style="position:relative;border-radius:7px;overflow:hidden;height:90px;'
+      +'border:2px solid var(--acc);cursor:grab;transition:border-color .15s,opacity .15s">'
+      // תמונה
       +(img
-        ?'<img src="'+esc(img)+'" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display=\'none\'">'
-        :'<div style="width:100%;height:100%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:20px">📦</div>')
-      +'<div style="position:absolute;inset:0;background:rgba(0,0,0,.38);display:flex;flex-direction:column;justify-content:space-between;padding:3px">'
-        +'<span style="font-size:8px;font-weight:900;color:#fff;background:var(--acc);border-radius:3px;padding:1px 4px;align-self:flex-start">'+label+'</span>'
+        ?'<img src="'+esc(img)+'" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none" onerror="this.style.display=\'none\'">'
+        :'<div style="width:100%;height:100%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:24px;pointer-events:none">📦</div>')
+      // overlay
+      +'<div style="position:absolute;inset:0;background:rgba(0,0,0,.42);display:flex;flex-direction:column;justify-content:space-between;padding:3px;pointer-events:none">'
+        // שורה עליונה: מספר + מיקום
+        +'<div style="display:flex;align-items:center;justify-content:space-between">'
+          +'<span style="font-size:8px;font-weight:900;color:#fff;background:var(--acc);border-radius:3px;padding:1px 4px">'+esc(posLabel)+'</span>'
+        +'</div>'
+        // שורה תחתונה: שם + הסר
         +'<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:2px">'
-          +'<span style="font-size:8px;color:#fff;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+esc(name.slice(0,18))+'</span>'
-          +'<button onclick="_wsRemoveSlot('+i+')" title="הסר" style="background:var(--red);border:none;color:#fff;border-radius:3px;font-size:9px;padding:1px 4px;cursor:pointer;flex-shrink:0;font-family:inherit;line-height:1.2">✕</button>'
+          +'<span style="font-size:8px;color:#fff;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+esc(name.slice(0,20))+'</span>'
+          // כפתור הסרה — pointer-events:auto כדי לא להיחסם על-ידי overlay ה-pointer-events:none
+          +'<button data-remove="'+i+'" style="pointer-events:auto;background:var(--red);border:none;color:#fff;border-radius:3px;font-size:9px;padding:1px 4px;cursor:pointer;flex-shrink:0;font-family:inherit;line-height:1.2" title="הסר">✕</button>'
         +'</div>'
       +'</div>'
     +'</div>';
   }).join('');
+
+  // ── צרף event listeners לאחר render ──────────────────────────
+  for(var i = 0; i < 6; i++){
+    (function(idx){
+      var el = document.getElementById('ws-slot-'+idx);
+      if(!el) return;
+
+      // כפתור הסרה (pointer-events:auto על הכפתור עצמו)
+      var removeBtn = el.querySelector('[data-remove]');
+      if(removeBtn){
+        removeBtn.addEventListener('click', function(e){
+          e.stopPropagation();
+          _wsRemoveSlot(idx);
+        });
+      }
+
+      // DnD — slot כ-drag source (כשממולא)
+      el.addEventListener('dragstart', function(e){
+        _wsDrag = { source:'slot', idx: idx };
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(function(){ el.style.opacity='.45'; }, 0);
+      });
+      el.addEventListener('dragend', _wsDragEnd);
+
+      // DnD — slot כ-drop target
+      el.addEventListener('dragover', function(e){
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        el.style.borderColor = 'var(--a2)';
+        el.style.background  = 'rgba(212,84,26,.08)';
+      });
+      el.addEventListener('dragleave', function(){
+        el.style.borderColor = _wsSlots[idx] ? 'var(--acc)' : 'var(--b2)';
+        el.style.background  = _wsSlots[idx] ? '' : 'var(--s2)';
+      });
+      el.addEventListener('drop', function(e){
+        e.preventDefault();
+        _wsDropOnSlot(idx);
+        el.style.borderColor = _wsSlots[idx] ? 'var(--acc)' : 'var(--b2)';
+        el.style.background  = _wsSlots[idx] ? '' : 'var(--s2)';
+      });
+    })(i);
+  }
 }
 
-// ── בנייה מחדש של textarea הסיכום לפי slots ──────────────────
+// ────────────────────────────────────────────────
+// DnD handlers
+// ────────────────────────────────────────────────
+
+// גרירה מהמאגר
+function _wsDragStartPool(e, poolIdx){
+  _wsDrag = { source:'pool', idx: poolIdx };
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+// סיום גרירה (ניקוי visual)
+function _wsDragEnd(e){
+  // החזר opacity לכל slots
+  for(var i=0; i<6; i++){
+    var el = document.getElementById('ws-slot-'+i);
+    if(el) el.style.opacity = '1';
+  }
+  // ניקוי pool rows
+  var wrap = document.getElementById('ws-pool');
+  if(wrap){
+    wrap.querySelectorAll('[draggable]').forEach(function(r){ r.style.opacity='1'; });
+  }
+  _wsDrag = null;
+}
+
+// הפלה על slot מסוים
+function _wsDropOnSlot(targetSlotIdx){
+  if(!_wsDrag) return;
+
+  if(_wsDrag.source === 'pool'){
+    // pool → slot
+    var p = _wsFiltered[_wsDrag.idx];
+    if(!p) return;
+    // כבר בגריד? swap עם target
+    var existingIdx = _wsSlots.findIndex(function(s){ return s && s.row===p.row; });
+    if(existingIdx !== -1){
+      // swap: existingIdx ↔ targetSlotIdx
+      var tmp = _wsSlots[targetSlotIdx];
+      _wsSlots[targetSlotIdx] = _wsSlots[existingIdx];
+      _wsSlots[existingIdx]   = tmp;
+    } else {
+      // target פנוי — שים שם
+      // target תפוס — החלף (הוצא ישן, שים חדש)
+      _wsSlots[targetSlotIdx] = p;
+    }
+  } else if(_wsDrag.source === 'slot'){
+    // slot → slot (swap)
+    var srcIdx = _wsDrag.idx;
+    if(srcIdx === targetSlotIdx) return;
+    var tmp2 = _wsSlots[targetSlotIdx];
+    _wsSlots[targetSlotIdx] = _wsSlots[srcIdx];
+    _wsSlots[srcIdx]        = tmp2;
+  }
+
+  _wsRenderSlots();
+  _wsRenderPool();
+  _wsRebuildSummary();
+  _wsDrag = null;
+}
+
+// ────────────────────────────────────────────────
+// בנייה מחדש של textarea לפי slots
+// ────────────────────────────────────────────────
 function _wsRebuildSummary(){
   var filled = _wsSlots.filter(Boolean);
   var ta = document.getElementById('ws-summary-text');
   if(!ta) return;
-  if(!filled.length){ ta.value = ''; return; }
+  if(!filled.length){ ta.value=''; return; }
   var lines = filled.map(function(p, i){
-    var name = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
-    var link = gc(p, COL.LINK)||'';
-    var price = gc(p, COL.PRICE);
+    var name   = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
+    var link   = gc(p, COL.LINK)||'';
+    var price  = gc(p, COL.PRICE);
     var rating = gc(p, COL.RATING);
     var bought = gc(p, COL.BOUGHT);
     var line = (i+1)+'. '+name;
     if(price) line += ' — '+price+'$';
-    if(link) line += '\n🔗 '+link;
+    if(link)  line += '\n🔗 '+link;
     if(rating||bought){
       var sub='';
       if(rating) sub += '⭐ '+rating;
@@ -6349,7 +6495,9 @@ function _wsRebuildSummary(){
   ta.value = lines.join('\n\n');
 }
 
-// ── ייצור קולאז' — שולח את תמונות ה-slots לפי סדר ─────────────
+// ────────────────────────────────────────────────
+// ייצור קולאז' — slots לפי סדר, fetch חסין + Regex URL
+// ────────────────────────────────────────────────
 async function _wsGenerateCollage(){
   var images = _wsSlots
     .filter(Boolean)
@@ -6366,7 +6514,7 @@ async function _wsGenerateCollage(){
   var btn    = document.getElementById('ws-collage-btn');
   if(loader) loader.style.display = 'flex';
   if(result) result.style.display = 'none';
-  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
+  if(btn){ btn.disabled=true; btn.style.opacity='.6'; }
 
   try{
     var resp = await fetch(MAKE_COLLAGE_WEBHOOK,{
@@ -6375,21 +6523,22 @@ async function _wsGenerateCollage(){
       body: JSON.stringify({images: images})
     });
 
-    // חילוץ URL חסין-שגיאות (תיקון 3)
     var text = await resp.text();
     var finalUrl = '';
     try{
       var j = JSON.parse(text);
       finalUrl = j.collageUrl || j.url || j.imageUrl || text;
     }catch(e){
-      finalUrl = text.replace(/["'{}]/g,'').trim();
+      // חילוץ הלינק נטו — מתעלם מקידומות טקסט שגויות שחזרו מ-Make
+      var match = text.match(/https:\/\/[^\s"']+/);
+      finalUrl = match ? match[0] : text;
     }
 
     if(finalUrl && finalUrl.indexOf('http') !== -1){
       var imgEl = document.getElementById('ws-collage-img');
       var lnk   = document.getElementById('ws-collage-link');
-      if(imgEl){ imgEl.src = finalUrl; }
-      if(lnk){   lnk.href = finalUrl; }
+      if(imgEl) imgEl.src  = finalUrl;
+      if(lnk)   lnk.href   = finalUrl;
       if(result) result.style.display = 'block';
       toast('✅ הקולאז׳ מוכן!','ok');
     }else{
@@ -6399,11 +6548,13 @@ async function _wsGenerateCollage(){
     toast('שגיאת תקשורת עם Make: '+e.message,'err');
   }finally{
     if(loader) loader.style.display = 'none';
-    if(btn){ btn.disabled = false; btn.style.opacity = '1'; }
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; }
   }
 }
 
-// ── העתקת הסיכום ────────────────────────────────────────────────
+// ────────────────────────────────────────────────
+// העתקת הסיכום
+// ────────────────────────────────────────────────
 function _wsCopy(){
   var ta = document.getElementById('ws-summary-text');
   if(!ta || !ta.value){ toast('אין טקסט להעתקה','err'); return; }
@@ -6415,12 +6566,13 @@ function _wsCopy(){
   });
 }
 
-// ── אתחול הלשונית בטעינה ראשונה ────────────────────────────────
-// קרא על-ידי bootApp לאחר טעינת G.posts
+// ────────────────────────────────────────────────
+// אתחול בכניסה ללשונית
+// ────────────────────────────────────────────────
 function _wsOnPageShow(){
   _wsInitWeekSelect();
   _wsInitSlots();
-  _wsFilter(); // הפעל פילטר על השבוע הנוכחי שנבחר כברירת מחדל
+  _wsFilter();
 }
 
 function _wsInitSlots(){
