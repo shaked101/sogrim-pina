@@ -6251,6 +6251,12 @@ function _wsFilter(){
   // אם "כלל המוצרים" מסומן — מתעלמים משבוע, מסננים רק לפי פלטפורמה + קטגוריה
   if(showAll){
     _wsFiltered = G.posts.filter(function(p){
+      // סינון טיוטות — אותה לוגיקה כמו לשונית הפוסטים
+      var fb = gc(p, COL.FB_S), tg = gc(p, COL.TG_S), ig = gc(p, COL.IG_S), gs = gc(p, COL.STATUS);
+      var anyPub = fb==='פורסם' || tg==='פורסם' || ig==='פורסם';
+      var anyAp  = fb==='מאושר' || tg==='מאושר' || ig==='מאושר' || gs==='מאושר' || gs==='Approved';
+      // אם טיוטה בלי פרסום/אישור — דלג
+      if(!anyPub && !anyAp) return false;
       // סינון פלטפורמה
       var platOk = true;
       if(platform==='fb') platOk = !!(p._dateE);
@@ -6325,10 +6331,10 @@ function _wsRenderPool(){
       +(!inSlot ? 'cursor:grab;' : '')
       +(inSlot  ? 'opacity:.5;' : '')
       +'">'
-      // תמונה / placeholder
+      // תמונה / placeholder — קליקאבילת לפתיחת פרטי מוצר
       +(img
-        ?'<img src="'+esc(img)+'" style="width:36px;height:36px;border-radius:5px;object-fit:cover;flex-shrink:0" onerror="this.style.display=\'none\'">'
-        :'<div style="width:36px;height:36px;border-radius:5px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">📦</div>')
+        ?'<img src="'+esc(img)+'" style="width:36px;height:36px;border-radius:5px;object-fit:cover;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();openViewModal('+p.row+')" title="צפה בפרטים" onerror="this.style.display=\'none\'">'
+        :'<div style="width:36px;height:36px;border-radius:5px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();openViewModal('+p.row+')" title="צפה בפרטים">📦</div>')
       // טקסט
       +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:11px;font-weight:800;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(name)+'</div>'
@@ -6642,26 +6648,16 @@ function _wsInitCatSelect(){
   // שמור ערך קיים
   var prev = sel.value;
   sel.innerHTML = '<option value="">כל הקטגוריות</option>';
-  // אסוף קטגוריות ייחודיות מ-G.posts
-  var seen = {};
-  G.posts.forEach(function(p){
-    var cat = gc(p, COL.CAT).trim();
-    if(cat && !seen[cat]){ seen[cat]=true; }
-  });
-  // הוסף גם קטגוריות מ-G.cats אם קיים
+  // משיכה מ-G.cats בלבד — בדיוק כמו לשונית הפוסטים
   if(Array.isArray(G.cats)){
-    G.cats.forEach(function(c){
-      if(c.name && c.id !== 'all' && c.id !== 'custom' && !seen[c.name]){
-        seen[c.name]=true;
-      }
-    });
+    G.cats.filter(function(c){ return c.id !== 'all' && c.id !== 'custom'; })
+      .forEach(function(c){
+        var opt = document.createElement('option');
+        opt.value = c.name;
+        opt.textContent = (c.emoji ? c.emoji + ' ' : '') + c.name;
+        sel.appendChild(opt);
+      });
   }
-  Object.keys(seen).sort().forEach(function(cat){
-    var opt = document.createElement('option');
-    opt.value = cat;
-    opt.textContent = cat;
-    sel.appendChild(opt);
-  });
   // שחזר ערך קודם אם עדיין קיים
   if(prev) sel.value = prev;
 }
