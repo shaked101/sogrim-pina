@@ -1187,6 +1187,16 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
                 <option value="tg">✈️ טלגרם</option>
               </select>
             </div>
+            <div style="display:flex;align-items:center;gap:7px">
+              <label style="font-size:11px;font-weight:800;color:var(--t2);white-space:nowrap">📂 קטגוריה:</label>
+              <select id="ws-cat" class="fsel" onchange="_wsFilter()">
+                <option value="">כל הקטגוריות</option>
+              </select>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;font-weight:800;color:var(--t2);white-space:nowrap;user-select:none;padding:5px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:6px">
+              <input type="checkbox" id="ws-all-products" onchange="_wsFilter()" style="width:14px;height:14px;cursor:pointer;accent-color:var(--acc)">
+              הצג את כלל המוצרים
+            </label>
             <span id="ws-count" style="font-size:11px;color:var(--t2);margin-right:auto">—</span>
           </div>
         </div>
@@ -6232,9 +6242,32 @@ function _wsInRange(dateObj, sunNum){
 // סינון + איפוס
 // ────────────────────────────────────────────────
 function _wsFilter(){
-  var sunNum   = parseInt((document.getElementById('ws-week')||{}).value||'0')||0;
-  var platform = (document.getElementById('ws-platform')||{}).value||'all';
-  var cnt      = document.getElementById('ws-count');
+  var sunNum     = parseInt((document.getElementById('ws-week')||{}).value||'0')||0;
+  var platform   = (document.getElementById('ws-platform')||{}).value||'all';
+  var catVal     = (document.getElementById('ws-cat')||{}).value||'';
+  var showAll    = !!(document.getElementById('ws-all-products')||{}).checked;
+  var cnt        = document.getElementById('ws-count');
+
+  // אם "כלל המוצרים" מסומן — מתעלמים משבוע, מסננים רק לפי פלטפורמה + קטגוריה
+  if(showAll){
+    _wsFiltered = G.posts.filter(function(p){
+      // סינון פלטפורמה
+      var platOk = true;
+      if(platform==='fb') platOk = !!(p._dateE);
+      else if(platform==='tg') platOk = !!(p._dateTG);
+      else if(platform==='ig') platOk = !!(p._dateIG);
+      if(!platOk) return false;
+      // סינון קטגוריה
+      if(catVal){
+        var pCat = gc(p, COL.CAT).trim().toLowerCase();
+        if(pCat !== catVal.toLowerCase()) return false;
+      }
+      return true;
+    });
+    if(cnt) cnt.textContent = _wsFiltered.length+' פוסטים (כלל המוצרים)';
+    _wsRenderPool();
+    return;
+  }
 
   if(!sunNum){
     _wsFiltered = [];
@@ -6244,10 +6277,19 @@ function _wsFilter(){
   }
 
   _wsFiltered = G.posts.filter(function(p){
-    if(platform==='fb') return _wsInRange(p._dateE,  sunNum);
-    if(platform==='tg') return _wsInRange(p._dateTG, sunNum);
-    if(platform==='ig') return _wsInRange(p._dateIG, sunNum);
-    return _wsInRange(p._dateE,sunNum)||_wsInRange(p._dateTG,sunNum)||_wsInRange(p._dateIG,sunNum);
+    // סינון שבוע לפי פלטפורמה
+    var inWeek = false;
+    if(platform==='fb') inWeek = _wsInRange(p._dateE,  sunNum);
+    else if(platform==='tg') inWeek = _wsInRange(p._dateTG, sunNum);
+    else if(platform==='ig') inWeek = _wsInRange(p._dateIG, sunNum);
+    else inWeek = _wsInRange(p._dateE,sunNum)||_wsInRange(p._dateTG,sunNum)||_wsInRange(p._dateIG,sunNum);
+    if(!inWeek) return false;
+    // סינון קטגוריה
+    if(catVal){
+      var pCat = gc(p, COL.CAT).trim().toLowerCase();
+      if(pCat !== catVal.toLowerCase()) return false;
+    }
+    return true;
   });
 
   if(cnt) cnt.textContent = _wsFiltered.length+' פוסטים';
@@ -6589,8 +6631,39 @@ function _wsCopy(){
 // ────────────────────────────────────────────────
 function _wsOnPageShow(){
   _wsInitWeekSelect();
+  _wsInitCatSelect();
   _wsInitSlots();
   _wsFilter();
+}
+
+function _wsInitCatSelect(){
+  var sel = document.getElementById('ws-cat');
+  if(!sel) return;
+  // שמור ערך קיים
+  var prev = sel.value;
+  sel.innerHTML = '<option value="">כל הקטגוריות</option>';
+  // אסוף קטגוריות ייחודיות מ-G.posts
+  var seen = {};
+  G.posts.forEach(function(p){
+    var cat = gc(p, COL.CAT).trim();
+    if(cat && !seen[cat]){ seen[cat]=true; }
+  });
+  // הוסף גם קטגוריות מ-G.cats אם קיים
+  if(Array.isArray(G.cats)){
+    G.cats.forEach(function(c){
+      if(c.name && c.id !== 'all' && c.id !== 'custom' && !seen[c.name]){
+        seen[c.name]=true;
+      }
+    });
+  }
+  Object.keys(seen).sort().forEach(function(cat){
+    var opt = document.createElement('option');
+    opt.value = cat;
+    opt.textContent = cat;
+    sel.appendChild(opt);
+  });
+  // שחזר ערך קודם אם עדיין קיים
+  if(prev) sel.value = prev;
 }
 
 function _wsInitSlots(){
