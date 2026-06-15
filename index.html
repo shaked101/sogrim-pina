@@ -1165,7 +1165,7 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
         <div class="ph">
           <div>
             <div class="pt">סיכום שבועי</div>
-            <div class="ps">בחר שבוע ופלטפורמה לסינון הפוסטים וייצור קולאז'</div>
+            <div class="ps">בחר שבוע ופלטפורמה, שבץ מוצרים בגריד וייצר קולאז'</div>
           </div>
         </div>
 
@@ -1174,7 +1174,9 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <div style="display:flex;align-items:center;gap:7px">
               <label style="font-size:11px;font-weight:800;color:var(--t2);white-space:nowrap">📅 שבוע:</label>
-              <input type="week" id="ws-week" class="sinput" style="width:170px" oninput="_wsFilter()">
+              <select id="ws-week" class="fsel" onchange="_wsFilter()" style="min-width:200px">
+                <option value="">— בחר שבוע —</option>
+              </select>
             </div>
             <div style="display:flex;align-items:center;gap:7px">
               <label style="font-size:11px;font-weight:800;color:var(--t2);white-space:nowrap">📡 פלטפורמה:</label>
@@ -1189,39 +1191,57 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
           </div>
         </div>
 
-        <!-- גוף דו-עמודי -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start">
+        <!-- ═══ גוף 3 אזורים ═══ -->
+        <div style="display:grid;grid-template-columns:220px 1fr 260px;gap:12px;align-items:start">
 
-          <!-- עמודה שמאלית: קולאז' -->
+          <!-- ── אזור שמאלי: גריד קולאז' 2×3 (LTR: שמאל=1, ימין=2) ── -->
           <div class="tw" style="padding:14px">
-            <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">🖼️ קולאז' תמונות</div>
+            <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">🖼️ גריד קולאז' (6 משבצות)</div>
+
+            <!-- 6 slots — dir:ltr so slot 1=top-left, 2=top-right, 3=mid-left … -->
+            <div id="ws-slots-grid" dir="ltr"
+              style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
+              <!-- slots נוצרים ב-JS ע"י _wsInitSlots() -->
+            </div>
+
+            <!-- כפתור ייצר קולאז' -->
             <button id="ws-collage-btn" onclick="_wsGenerateCollage()"
-              style="width:100%;padding:11px;border-radius:9px;border:none;background:var(--acc);color:#fff;font-size:13px;font-weight:900;cursor:pointer;transition:opacity .15s;margin-bottom:12px"
+              style="width:100%;padding:10px;border-radius:9px;border:none;background:var(--acc);color:#fff;font-size:12px;font-weight:900;cursor:pointer;transition:opacity .15s;margin-bottom:8px"
               onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
               ✨ ייצר קולאז'
             </button>
+
             <!-- loader -->
-            <div id="ws-collage-loader" style="display:none;justify-content:center;padding:20px">
+            <div id="ws-collage-loader" style="display:none;justify-content:center;padding:12px">
               <div class="spin"></div>
             </div>
-            <!-- תמונה חוזרת -->
+
+            <!-- תוצאת קולאז' -->
             <div id="ws-collage-result" style="display:none">
               <img id="ws-collage-img" src="" alt="קולאז'" style="width:100%;border-radius:8px;border:1px solid var(--b1);display:block">
               <a id="ws-collage-link" href="" target="_blank" rel="noopener"
-                style="display:block;text-align:center;margin-top:8px;font-size:11px;color:var(--acc);font-weight:700">
+                style="display:block;text-align:center;margin-top:7px;font-size:11px;color:var(--acc);font-weight:700">
                 פתח בטאב חדש ↗
               </a>
             </div>
           </div>
 
-          <!-- עמודה ימנית: טקסט סיכום -->
+          <!-- ── אזור מרכזי: מאגר פוסטי השבוע ── -->
+          <div class="tw" style="padding:14px">
+            <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">📦 פוסטי השבוע — לחץ "+ הוסף" לשיבוץ בגריד</div>
+            <div id="ws-pool" style="max-height:500px;overflow-y:auto">
+              <div class="empty" style="padding:28px;font-size:12px">בחר שבוע ופלטפורמה כדי לראות פוסטים</div>
+            </div>
+          </div>
+
+          <!-- ── אזור ימני: טקסט סיכום ── -->
           <div class="tw" style="padding:14px">
             <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">📝 טקסט סיכום</div>
-            <textarea id="ws-summary-text" class="sinput" readonly
-              style="width:100%;box-sizing:border-box;min-height:220px;resize:vertical;font-family:inherit;font-size:12px;line-height:1.7;padding:9px 11px;direction:rtl"
+            <textarea id="ws-summary-text"
+              style="width:100%;box-sizing:border-box;min-height:320px;resize:vertical;font-family:inherit;font-size:12px;line-height:1.7;padding:9px 11px;direction:rtl;background:var(--s2);border:1px solid var(--b1);border-radius:6px;color:var(--tx)"
             ></textarea>
             <button onclick="_wsCopy()"
-              style="width:100%;margin-top:9px;padding:10px;border-radius:9px;border:1.5px solid var(--acc);background:transparent;color:var(--acc);font-size:13px;font-weight:800;cursor:pointer;transition:all .15s"
+              style="width:100%;margin-top:9px;padding:10px;border-radius:9px;border:1.5px solid var(--acc);background:transparent;color:var(--acc);font-size:12px;font-weight:800;cursor:pointer;transition:all .15s"
               onmouseover="this.style.background='var(--acc)';this.style.color='#fff'"
               onmouseout="this.style.background='transparent';this.style.color='var(--acc)'">
               📋 העתק סיכום
@@ -5843,6 +5863,7 @@ function showPage(name){
     loadRaffleData().then(function(){_renderDashRaffleWidget();});
     _raffleRefreshSnapshots();
   }
+  if(name==='weekly-summary') _wsOnPageShow();
 }
 
 // ════════════════════════════════════════════════
@@ -6114,121 +6135,297 @@ async function _npSubmit(){
 }
 
 // ════════════════════════════════════════════════
-// סיכום שבועי — weekly-summary tab logic
 // ════════════════════════════════════════════════
-var MAKE_COLLAGE_WEBHOOK = 'https://hook.eu1.make.com/ga5g3izykkvvhi185wy2qtglmpuily12'; // ← הכנס URL
+// סיכום שבועי — weekly-summary tab logic (v2)
+// תיקונים: בורר שבועות ישראלי (א׳–ש׳), סטודיו עריכה 3 אזורים,
+//           6 slots קולאז' ידניים, fetch חסין-שגיאות.
+// ════════════════════════════════════════════════
+var MAKE_COLLAGE_WEBHOOK = 'https://hook.eu1.make.com/ga5g3izykkvvhi185wy2qtglmpuily12';
 
-// מחזיר את טווח ה-Date (start, end) של שבוע בפורמט "2025-W22"
-function _wsWeekRange(weekVal){
-  if(!weekVal)return null;
-  var parts=weekVal.split('-W');
-  if(parts.length!==2)return null;
-  var year=parseInt(parts[0]),week=parseInt(parts[1]);
-  // ISO week: שבוע 1 = השבוע שמכיל את ה-4 בינואר
-  var jan4=new Date(year,0,4);
-  var day1=new Date(jan4);
-  day1.setDate(jan4.getDate()-((jan4.getDay()+6)%7)); // שני הראשון של שבוע 1
-  var start=new Date(day1);
-  start.setDate(day1.getDate()+(week-1)*7);
-  var end=new Date(start);
-  end.setDate(start.getDate()+6);
-  return{start:start,end:end};
+// ── מצב ה-slots (מערך 6 איברים, null = ריק) ─────────────────────
+var _wsSlots = [null,null,null,null,null,null]; // indices 0-5
+
+// ── כל פוסטי השבוע המסוננים (מאגר) ─────────────────────────────
+var _wsFiltered = [];
+
+// ── עזר: מחזיר את ה-num ישראלי (YYYYMMDD) של ראשון הקודם ────────
+// בדיוק כמו שלוח השנה עושה: getDay()===0 = ראשון
+function _wsGetSunday(d){
+  // d הוא Date. מחזיר Date של ראשון השבוע שלו (שבוע א׳-ש׳)
+  var dow = d.getDay(); // 0=Sun
+  var sun = new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow, 12, 0, 0);
+  return sun;
 }
 
-// בודק אם dateObj (ממבנה parseDateIL) נופל בטווח
-function _wsInRange(dateObj,range){
-  if(!dateObj||!range)return false;
-  var d=new Date(dateObj.year,dateObj.month-1,dateObj.day);
-  return d>=range.start&&d<=range.end;
+// ── עזר: מחזיר label "DD/MM/YYYY - DD/MM/YYYY" מתוך Date ───────
+function _wsFmtRange(sun){
+  var sat = new Date(sun.getFullYear(), sun.getMonth(), sun.getDate() + 6, 12, 0, 0);
+  function f(dt){ return String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear(); }
+  return f(sun)+' - '+f(sat);
 }
 
-var _wsFiltered=[];
+// ── עזר: value של option = "YYYYMMDD" (num של ראשון השבוע) ──────
+function _wsDateToNum(d){
+  return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
+}
 
+// ── אתחול ה-<select> עם 12 שבועות אחרונים ──────────────────────
+function _wsInitWeekSelect(){
+  var sel = document.getElementById('ws-week');
+  if(!sel) return;
+  var today = new Date();
+  today.setHours(12,0,0,0);
+  var sun = _wsGetSunday(today); // ראשון השבוע הנוכחי
+  sel.innerHTML = '<option value="">— בחר שבוע —</option>';
+  for(var i = 0; i < 12; i++){
+    var weekSun = new Date(sun.getFullYear(), sun.getMonth(), sun.getDate() - i*7, 12, 0, 0);
+    var val = String(_wsDateToNum(weekSun));
+    var lbl = _wsFmtRange(weekSun);
+    var opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = lbl;
+    if(i === 0) opt.selected = true; // השבוע הנוכחי כברירת מחדל
+    sel.appendChild(opt);
+  }
+}
+
+// ── בודק אם dateObj (ממבנה parseDateIL) נופל בשבוע ───────────────
+// val = "YYYYMMDD" num של ראשון השבוע
+function _wsInRange(dateObj, sunNum){
+  if(!dateObj || !sunNum) return false;
+  var satNum = sunNum + 6; // ראשון+6 = שבת (פשוט בגלל YYYYMMDD continuous? לא תמיד)
+  // חשב num של שבת נכון: sunNum = YYYYMMDD, +6 ימים
+  var sunDate = new Date(
+    Math.floor(sunNum/10000),
+    Math.floor((sunNum%10000)/100)-1,
+    sunNum%100, 12, 0, 0
+  );
+  var satDate = new Date(sunDate.getFullYear(), sunDate.getMonth(), sunDate.getDate()+6, 12, 0, 0);
+  var satNumReal = satDate.getFullYear()*10000+(satDate.getMonth()+1)*100+satDate.getDate();
+  return dateObj.num >= sunNum && dateObj.num <= satNumReal;
+}
+
+// ── סינון פוסטים ומילוי מאגר ─────────────────────────────────────
 function _wsFilter(){
-  var weekVal=(document.getElementById('ws-week')||{}).value||'';
-  var platform=(document.getElementById('ws-platform')||{}).value||'all';
-  var range=_wsWeekRange(weekVal);
+  var sunNum = parseInt((document.getElementById('ws-week')||{}).value||'0')||0;
+  var platform = (document.getElementById('ws-platform')||{}).value||'all';
+  var cnt = document.getElementById('ws-count');
 
-  if(!range){
-    _wsFiltered=[];
-    var ta=document.getElementById('ws-summary-text');
-    if(ta)ta.value='';
-    var cnt=document.getElementById('ws-count');
-    if(cnt)cnt.textContent='בחר שבוע';
+  if(!sunNum){
+    _wsFiltered = [];
+    if(cnt) cnt.textContent = 'בחר שבוע';
+    _wsRenderPool();
     return;
   }
 
-  _wsFiltered=G.posts.filter(function(p){
-    if(platform==='fb')  return _wsInRange(p._dateE,range);
-    if(platform==='tg')  return _wsInRange(p._dateTG,range);
-    if(platform==='ig')  return _wsInRange(p._dateIG,range);
-    // all — כל פלטפורמה
-    return _wsInRange(p._dateE,range)||_wsInRange(p._dateTG,range)||_wsInRange(p._dateIG,range);
+  _wsFiltered = G.posts.filter(function(p){
+    if(platform==='fb') return _wsInRange(p._dateE,   sunNum);
+    if(platform==='tg') return _wsInRange(p._dateTG,  sunNum);
+    if(platform==='ig') return _wsInRange(p._dateIG,  sunNum);
+    return _wsInRange(p._dateE, sunNum)||_wsInRange(p._dateTG, sunNum)||_wsInRange(p._dateIG, sunNum);
   });
 
-  // עדכן textarea
-  var lines=_wsFiltered.map(function(p){
-    var name=gc(p,COL.HEB)||gc(p,COL.ENG)||'מוצר ללא שם';
-    var link=gc(p,COL.LINK)||'';
-    return name+(link?' - '+link:'');
-  });
-  var ta=document.getElementById('ws-summary-text');
-  if(ta)ta.value=lines.join('\n')||'לא נמצאו פוסטים בשבוע ובפלטפורמה שנבחרו.';
+  if(cnt) cnt.textContent = _wsFiltered.length + ' פוסטים';
 
-  var cnt=document.getElementById('ws-count');
-  if(cnt)cnt.textContent=_wsFiltered.length+' פוסטים';
+  // אפס slots וקולאז' ישנים בעת שינוי שבוע/פלטפורמה
+  _wsSlots = [null,null,null,null,null,null];
+  _wsRenderSlots();
+  _wsRenderPool();
+  _wsRebuildSummary();
 
-  // אפס קולאז' ישן
-  var res=document.getElementById('ws-collage-result');
-  if(res)res.style.display='none';
+  var res = document.getElementById('ws-collage-result');
+  if(res) res.style.display = 'none';
 }
 
-async function _wsGenerateCollage(){
-  if(!_wsFiltered.length){toast('אין פוסטים לייצר מהם קולאז׳ — סנן שבוע ופלטפורמה תחילה','err');return;}
-  var images=_wsFiltered.map(function(p){return gc(p,COL.IMG);}).filter(Boolean);
-  if(!images.length){toast('לא נמצאו תמונות לפוסטים המסוננים','err');return;}
+// ── בניית מאגר הפוסטים (אזור מרכזי) ───────────────────────────
+function _wsRenderPool(){
+  var wrap = document.getElementById('ws-pool');
+  if(!wrap) return;
+  if(!_wsFiltered.length){
+    wrap.innerHTML = '<div class="empty" style="padding:28px;font-size:12px">לא נמצאו פוסטים בשבוע ובפלטפורמה שנבחרו.</div>';
+    return;
+  }
+  wrap.innerHTML = _wsFiltered.map(function(p, idx){
+    var img = gc(p, COL.IMG);
+    var name = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
+    var price = gc(p, COL.PRICE);
+    // בדוק אם כבר בslot
+    var inSlot = _wsSlots.some(function(s){ return s && s.row === p.row; });
+    return '<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--b1)">'
+      +(img
+        ?'<img src="'+esc(img)+'" style="width:36px;height:36px;border-radius:5px;object-fit:cover;flex-shrink:0;cursor:zoom-in" onerror="this.style.display=\'none\'" onclick="openImageLightbox(\''+img.replace(/'/g,"\\'")+'\')">'
+        :'<div style="width:36px;height:36px;border-radius:5px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">📦</div>')
+      +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:11px;font-weight:800;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(name)+'</div>'
+        +(price?'<div style="font-size:10px;color:var(--acc);font-family:monospace;font-weight:700">'+esc(price)+'$</div>':'')
+      +'</div>'
+      +'<button class="btn'+(inSlot?' sec':'')+' sm" '
+        +(inSlot?'disabled title="כבר בגריד"':'onclick="_wsAddToSlot('+idx+')" title="הוסף לגריד"')
+        +' style="flex-shrink:0;min-width:54px">'
+        +(inSlot?'✅':'+ הוסף')
+      +'</button>'
+    +'</div>';
+  }).join('');
+}
 
-  var loader=document.getElementById('ws-collage-loader');
-  var result=document.getElementById('ws-collage-result');
-  var btn=document.getElementById('ws-collage-btn');
-  if(loader)loader.style.display='flex';
-  if(result)result.style.display='none';
-  if(btn){btn.disabled=true;btn.style.opacity='.6';}
+// ── הוסף פוסט למשבצת הפנויה הראשונה ───────────────────────────
+function _wsAddToSlot(poolIdx){
+  var p = _wsFiltered[poolIdx];
+  if(!p){ toast('פוסט לא נמצא','err'); return; }
+  // בדוק כפילות
+  if(_wsSlots.some(function(s){ return s && s.row===p.row; })){
+    toast('המוצר כבר בגריד','inf'); return;
+  }
+  var freeIdx = _wsSlots.indexOf(null);
+  if(freeIdx === -1){ toast('הגריד מלא — הסר מוצר תחילה','warn'); return; }
+  _wsSlots[freeIdx] = p;
+  _wsRenderSlots();
+  _wsRenderPool();
+  _wsRebuildSummary();
+}
+
+// ── הסר מוצר מ-slot ─────────────────────────────────────────────
+function _wsRemoveSlot(slotIdx){
+  _wsSlots[slotIdx] = null;
+  _wsRenderSlots();
+  _wsRenderPool();
+  _wsRebuildSummary();
+}
+
+// ── ציור 6 משבצות הגריד ────────────────────────────────────────
+function _wsRenderSlots(){
+  var grid = document.getElementById('ws-slots-grid');
+  if(!grid) return;
+  grid.innerHTML = _wsSlots.map(function(p, i){
+    var label = i+1; // 1-6
+    if(!p){
+      return '<div style="'
+        +'border:2px dashed var(--b2);border-radius:7px;height:80px;display:flex;'
+        +'align-items:center;justify-content:center;font-size:10px;color:var(--t3);font-weight:700;'
+        +'background:var(--s2)">'
+        +label+'. ריק'
+      +'</div>';
+    }
+    var img = gc(p, COL.IMG);
+    var name = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
+    return '<div style="position:relative;border-radius:7px;overflow:hidden;height:80px;border:2px solid var(--acc)">'
+      +(img
+        ?'<img src="'+esc(img)+'" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display=\'none\'">'
+        :'<div style="width:100%;height:100%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:20px">📦</div>')
+      +'<div style="position:absolute;inset:0;background:rgba(0,0,0,.38);display:flex;flex-direction:column;justify-content:space-between;padding:3px">'
+        +'<span style="font-size:8px;font-weight:900;color:#fff;background:var(--acc);border-radius:3px;padding:1px 4px;align-self:flex-start">'+label+'</span>'
+        +'<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:2px">'
+          +'<span style="font-size:8px;color:#fff;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+esc(name.slice(0,18))+'</span>'
+          +'<button onclick="_wsRemoveSlot('+i+')" title="הסר" style="background:var(--red);border:none;color:#fff;border-radius:3px;font-size:9px;padding:1px 4px;cursor:pointer;flex-shrink:0;font-family:inherit;line-height:1.2">✕</button>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+}
+
+// ── בנייה מחדש של textarea הסיכום לפי slots ──────────────────
+function _wsRebuildSummary(){
+  var filled = _wsSlots.filter(Boolean);
+  var ta = document.getElementById('ws-summary-text');
+  if(!ta) return;
+  if(!filled.length){ ta.value = ''; return; }
+  var lines = filled.map(function(p, i){
+    var name = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
+    var link = gc(p, COL.LINK)||'';
+    var price = gc(p, COL.PRICE);
+    var rating = gc(p, COL.RATING);
+    var bought = gc(p, COL.BOUGHT);
+    var line = (i+1)+'. '+name;
+    if(price) line += ' — '+price+'$';
+    if(link) line += '\n🔗 '+link;
+    if(rating||bought){
+      var sub='';
+      if(rating) sub += '⭐ '+rating;
+      if(bought) sub += (sub?' | ':'')+'🔥 '+formatNumber(bought)+' רכישות';
+      line += '\n'+sub;
+    }
+    return line;
+  });
+  ta.value = lines.join('\n\n');
+}
+
+// ── ייצור קולאז' — שולח את תמונות ה-slots לפי סדר ─────────────
+async function _wsGenerateCollage(){
+  var images = _wsSlots
+    .filter(Boolean)
+    .map(function(p){ return gc(p, COL.IMG); })
+    .filter(Boolean);
+
+  if(!images.length){
+    toast('שבץ לפחות מוצר אחד בגריד תחילה','err');
+    return;
+  }
+
+  var loader = document.getElementById('ws-collage-loader');
+  var result = document.getElementById('ws-collage-result');
+  var btn    = document.getElementById('ws-collage-btn');
+  if(loader) loader.style.display = 'flex';
+  if(result) result.style.display = 'none';
+  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
 
   try{
-    var resp=await fetch(MAKE_COLLAGE_WEBHOOK,{
+    var resp = await fetch(MAKE_COLLAGE_WEBHOOK,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({images:images})
+      body: JSON.stringify({images: images})
     });
-    var data=await resp.json();
-    if(data&&data.collageUrl){
-      var img=document.getElementById('ws-collage-img');
-      var lnk=document.getElementById('ws-collage-link');
-      if(img){img.src=data.collageUrl;}
-      if(lnk){lnk.href=data.collageUrl;}
-      if(result)result.style.display='block';
+
+    // חילוץ URL חסין-שגיאות (תיקון 3)
+    var text = await resp.text();
+    var finalUrl = '';
+    try{
+      var j = JSON.parse(text);
+      finalUrl = j.collageUrl || j.url || j.imageUrl || text;
+    }catch(e){
+      finalUrl = text.replace(/["'{}]/g,'').trim();
+    }
+
+    if(finalUrl && finalUrl.indexOf('http') !== -1){
+      var imgEl = document.getElementById('ws-collage-img');
+      var lnk   = document.getElementById('ws-collage-link');
+      if(imgEl){ imgEl.src = finalUrl; }
+      if(lnk){   lnk.href = finalUrl; }
+      if(result) result.style.display = 'block';
       toast('✅ הקולאז׳ מוכן!','ok');
     }else{
-      toast('המערכת לא קיבלה collageUrl תקין מ-Make','err');
+      toast('Make לא החזיר URL תקין: '+text.slice(0,80),'err');
     }
   }catch(e){
     toast('שגיאת תקשורת עם Make: '+e.message,'err');
   }finally{
-    if(loader)loader.style.display='none';
-    if(btn){btn.disabled=false;btn.style.opacity='1';}
+    if(loader) loader.style.display = 'none';
+    if(btn){ btn.disabled = false; btn.style.opacity = '1'; }
   }
 }
 
+// ── העתקת הסיכום ────────────────────────────────────────────────
 function _wsCopy(){
-  var ta=document.getElementById('ws-summary-text');
-  if(!ta||!ta.value){toast('אין טקסט להעתקה','err');return;}
+  var ta = document.getElementById('ws-summary-text');
+  if(!ta || !ta.value){ toast('אין טקסט להעתקה','err'); return; }
   navigator.clipboard.writeText(ta.value).then(function(){
     toast('✅ הסיכום הועתק ללוח','ok');
   }).catch(function(){
-    ta.select();document.execCommand('copy');
+    ta.select(); document.execCommand('copy');
     toast('✅ הסיכום הועתק','ok');
   });
+}
+
+// ── אתחול הלשונית בטעינה ראשונה ────────────────────────────────
+// קרא על-ידי bootApp לאחר טעינת G.posts
+function _wsOnPageShow(){
+  _wsInitWeekSelect();
+  _wsInitSlots();
+  _wsFilter(); // הפעל פילטר על השבוע הנוכחי שנבחר כברירת מחדל
+}
+
+function _wsInitSlots(){
+  _wsSlots = [null,null,null,null,null,null];
+  _wsRenderSlots();
 }
 
 // ════════════════════════════════════════════════
