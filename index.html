@@ -433,6 +433,31 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
   /* Tap highlight */
   .ni,.btn,.tbtn,.lb-table tbody tr{-webkit-tap-highlight-color:rgba(212,84,26,.12)}
 }
+
+/* ── Global Search ───────────────────────────── */
+.gsearch-wrap{position:relative;display:flex;align-items:center}
+.gsearch-input{background:var(--s2);border:1px solid var(--b1);border-radius:20px;padding:4px 30px 4px 12px;font-size:12px;font-family:inherit;color:var(--tx);width:170px;transition:all .2s;outline:none}
+.gsearch-input:focus{border-color:var(--acc);width:210px;background:var(--s1)}
+.gsearch-input::placeholder{color:var(--t3)}
+.gsearch-icon{position:absolute;right:9px;font-size:12px;color:var(--t3);pointer-events:none;line-height:1}
+.gsearch-clear{position:absolute;right:8px;font-size:11px;color:var(--t3);cursor:pointer;display:none;line-height:1;padding:2px;background:none;border:none;font-family:inherit}
+.gsearch-clear:hover{color:var(--tx)}
+.gsearch-drop{position:absolute;top:calc(100% + 6px);right:0;min-width:280px;max-width:360px;background:var(--s1);border:1px solid var(--b1);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:9999;overflow:hidden;display:none}
+.gsearch-drop.open{display:block}
+.gsearch-drop-item{display:flex;align-items:center;gap:9px;padding:8px 11px;cursor:pointer;transition:background .12s;border-bottom:1px solid rgba(226,232,240,.5)}
+.gsearch-drop-item:last-child{border-bottom:none}
+.gsearch-drop-item:hover{background:var(--s2)}
+.gsearch-drop-img{width:34px;height:34px;border-radius:5px;object-fit:cover;background:var(--s2);flex-shrink:0}
+.gsearch-drop-name{font-size:12px;font-weight:700;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.gsearch-drop-price{font-size:11px;font-family:monospace;color:var(--acc);font-weight:800;white-space:nowrap}
+.gsearch-empty{padding:14px;text-align:center;font-size:12px;color:var(--t3)}
+body.dark-mode .gsearch-input{background:var(--s2);border-color:var(--b1);color:var(--tx)}
+body.dark-mode .gsearch-input:focus{background:var(--s1)}
+body.dark-mode .gsearch-drop{background:#2c2c2e;border-color:#3a3a3c;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+body.dark-mode .gsearch-drop-item:hover{background:#3a3a3c}
+body.dark-mode .gsearch-drop-img{background:#3a3a3c}
+@media(max-width:768px){.gsearch-input{width:120px}.gsearch-input:focus{width:150px}}
+@media(max-width:480px){.gsearch-wrap{display:none}}
 </style>
 
 <div id="login-wrap" class="login-wrap">
@@ -459,6 +484,13 @@ body.dark-mode .lb-progress-wrap{background:#3a3a3c}
       <button class="mob-menu-btn tbtn" id="mob-menu-btn" style="display:none;font-size:16px;padding:5px 9px" onclick="document.querySelector('.sidebar').classList.toggle('mob-open')">☰</button>
       <div class="logo">סוגרים <span>פינה</span> 👊</div>
       <div class="syncpill"><div class="sdot" id="sdot"></div><span id="stext">מחבר...</span></div>
+    </div>
+    <!-- Global Search -->
+    <div class="gsearch-wrap" id="gsearch-wrap">
+      <span class="gsearch-icon" id="gsearch-icon">🔍</span>
+      <input class="gsearch-input" id="gsearch-input" type="text" placeholder="חיפוש מוצר..." autocomplete="off">
+      <button class="gsearch-clear" id="gsearch-clear" type="button">✕</button>
+      <div class="gsearch-drop" id="gsearch-drop"></div>
     </div>
     <div style="display:flex;align-items:center;gap:6px">
       <button class="tbtn" id="refresh-btn">🔄</button>
@@ -2811,8 +2843,8 @@ function openViewModal(rowNum){
     <div style="font-size:11px;color:var(--blue);margin-bottom:11px;word-break:break-all">${esc(gc(p,COL.TAGS))||'—'}</div>
     <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:2px">
       ${link?`<a href="${esc(link)}" target="_blank" rel="noopener" style="font-size:12px;font-weight:800;color:var(--acc);text-decoration:none;background:#fef9f7;padding:5px 11px;border-radius:5px;border:1px solid #fed7aa;display:inline-flex;align-items:center;gap:4px">🔗 פתח באלי אקספרס</a>`:''}
-      ${link?`<button class="btn sec sm" onclick="viewModalCopyLink(${row})" title="העתק קישור">📋 העתק קישור</button>`:''}
-      <button class="btn sec sm" onclick="viewModalCopyPost(${row})" title="העתק פוסט מלא עם האשטגים">📄 העתק פוסט</button>
+      ${link?`<button class="btn sec sm" onclick="viewModalCopyLink(${row})">📋 העתק קישור</button>`:''}
+      <button class="btn sec sm" onclick="viewModalCopyPost(${row})">📄 העתק פוסט</button>
     </div>
   `;
   openModal(esc(gc(p,COL.HEB))||'פרטי פוסט',body,`
@@ -2858,10 +2890,10 @@ function viewModalCopyPost(rowNum){
   var hasDollar=/\$|דולר/.test(content);
   if(!hasDollar&&price)content=content.replace(/( ב-)/,'$1'+price+'$');
   var stats='🔥 מעל '+formatNumber(bought)+' רכישות | ⭐ '+rating+' דירוג';
-  var body=[content,link,stats].join('\n').split('\n')
+  var bodyLines=[content,link,stats].join('\n').split('\n')
     .map(function(l){return l.trim();}).filter(function(l){return l!=='';}).join('\n');
   var cleanTags=tags.split('\n').map(function(l){return l.trim();}).filter(function(l){return l!=='';}).join('\n');
-  var finalPost=body+(cleanTags?'\n\n'+cleanTags:'');
+  var finalPost=bodyLines+(cleanTags?'\n\n'+cleanTags:'');
   if(!finalPost.trim()){toast('אין תוכן לפוסט זה','err');return;}
   function doFallback(){
     var ta=document.createElement('textarea');ta.value=finalPost;ta.style.cssText='position:fixed;opacity:0';
@@ -6922,6 +6954,98 @@ document.addEventListener('DOMContentLoaded',function(){
       doFallbackCopy();
     }
   };
+
+  // ── Global Search ───────────────────────────────
+  (function(){
+    var inp  = document.getElementById('gsearch-input');
+    var drop = document.getElementById('gsearch-drop');
+    var icon = document.getElementById('gsearch-icon');
+    var clr  = document.getElementById('gsearch-clear');
+    if(!inp) return;
+
+    function getPostName(p){
+      // מחפש בשם עברי ואנגלי כאחד
+      return [(gc(p,COL.HEB)||''),(gc(p,COL.ENG)||'')].join(' ');
+    }
+    function getPostImg(p){
+      return gc(p,COL.IMG)||'';
+    }
+    function getPostPrice(p){
+      return gc(p,COL.PRICE)||'';
+    }
+
+    function renderDrop(q){
+      q = (q||'').trim();
+      if(!q){ drop.classList.remove('open'); drop.innerHTML=''; return; }
+      var posts = G.posts||[];
+      var ql = q.toLowerCase();
+      // שימוש ב-includes בלבד — תומך עברית, אנגלית, ומספרים
+      var results = posts.filter(function(p){
+        return getPostName(p).toLowerCase().includes(ql);
+      }).slice(0,8);
+
+      if(!results.length){
+        drop.innerHTML='<div class="gsearch-empty">אין תוצאות עבור "'+q+'"</div>';
+        drop.classList.add('open');
+        return;
+      }
+      drop.innerHTML = results.map(function(p){
+        var heb   = esc(gc(p,COL.HEB)||'');
+        var price = getPostPrice(p);
+        var img   = getPostImg(p);
+        var imgEl = img
+          ? '<img class="gsearch-drop-img" src="'+img+'" loading="lazy" onerror="this.style.display=\'none\'">'
+          : '<div class="gsearch-drop-img" style="display:flex;align-items:center;justify-content:center;font-size:14px">📦</div>';
+        var priceEl = price ? '<span class="gsearch-drop-price">$'+price+'</span>' : '';
+        // מעביר row (מספר) — לא אובייקט — כדי למנוע [object Object]
+        return '<div class="gsearch-drop-item" data-row="'+p.row+'">'
+          + imgEl
+          + '<span class="gsearch-drop-name">'+heb+'</span>'
+          + priceEl
+          + '</div>';
+      }).join('');
+      drop.classList.add('open');
+    }
+
+    function clearSearch(){
+      inp.value='';
+      clr.style.display='none';
+      icon.style.display='';
+      drop.classList.remove('open');
+      drop.innerHTML='';
+    }
+
+    inp.addEventListener('input', function(){
+      var q = this.value;
+      if(q){ icon.style.display='none'; clr.style.display=''; }
+      else { icon.style.display=''; clr.style.display='none'; }
+      renderDrop(q);
+    });
+
+    clr.addEventListener('click', function(){ clearSearch(); inp.focus(); });
+
+    // לחיצה על תוצאה — שולף את הפוסט לפי row ומפעיל openViewModal
+    drop.addEventListener('click', function(e){
+      var item = e.target.closest('.gsearch-drop-item');
+      if(!item) return;
+      var row = parseInt(item.dataset.row, 10);
+      var post = (G.posts||[]).find(function(p){ return p.row===row; });
+      if(!post){ toast('מוצר לא נמצא','err'); return; }
+      clearSearch();
+      openViewModal(post.row);   // מעביר row — לא האובייקט עצמו
+    });
+
+    // סגירה בלחיצה מחוץ לחיפוש
+    document.addEventListener('click', function(e){
+      var wrap = document.getElementById('gsearch-wrap');
+      if(wrap && !wrap.contains(e.target)) drop.classList.remove('open');
+    });
+
+    // סגירה ב-Escape
+    inp.addEventListener('keydown', function(e){
+      if(e.key==='Escape') clearSearch();
+    });
+  })();
 
   // ── INIT ───────────────────────────────────────
   if(sessionStorage.getItem('sp_auth')){
