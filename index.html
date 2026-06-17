@@ -1735,11 +1735,7 @@ function _dynStep(el,e){
   if(!e||(e.key!=='ArrowUp'&&e.key!=='ArrowDown'))return;
   e.preventDefault();
   var raw=parseFloat((el.value||'').replace(/,/g,''))||0;
-  var step;
-  if(raw>=10000)     step=10000;
-  else if(raw>=1000) step=1000;
-  else if(raw>=100)  step=100;
-  else               step=10;
+  var step=_boughtStep(raw);
   var base=Math.floor(raw/step)*step;
   var next=e.key==='ArrowUp'?base+step:base-step;
   if(next<0)next=0;
@@ -2914,14 +2910,52 @@ function openEditModal(rowNum){
   const fromDash = dashNavigationState.active;
   // Check if we arrived from the full radar modal
   const fromRadar = radarNavigationState.active;
+
+  // הגדרת editNavState — אם לא מגיע מדשבורד/רדאר, נווט על G.filtered
+  if(!fromDash && !fromRadar){
+    const list = G.filtered && G.filtered.length ? G.filtered : G.posts;
+    const idx  = list.findIndex(x=>x.row===rowNum);
+    editNavState = { list, idx };
+  }
+  const navTotal = editNavState.list.length;
+  const navIdx   = editNavState.idx;
+  const navStr   = (navTotal>1&&!fromDash&&!fromRadar) ? ` (${navIdx+1}/${navTotal})` : '';
+  const hasPrev  = navIdx>0 && !fromDash && !fromRadar;
+  const hasNext  = navIdx<navTotal-1 && !fromDash && !fromRadar;
+  const prevRow  = hasPrev ? editNavState.list[navIdx-1].row : 0;
+  const nextRow  = hasNext ? editNavState.list[navIdx+1].row : 0;
+
   const body=`
-    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.row||rowNum}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':""}${fromRadar?'<br>📡 <strong>הגעת מרשימת הרענון</strong> — לחץ "🔙 חזור לרשימת הרענון" לחזרה.':""}</div>
+    <div id="edit-ibox" class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.row||rowNum}${navTotal>1&&!fromDash&&!fromRadar?' | מוצר '+(navIdx+1)+' מתוך '+navTotal:'.'}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':""}${fromRadar?'<br>📡 <strong>הגעת מרשימת הרענון</strong> — לחץ "🔙 חזור לרשימת הרענון" לחזרה.':""}</div>
+    ${navTotal>1&&!fromDash&&!fromRadar?`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;background:var(--s2);border-radius:8px;padding:6px 10px;border:1px solid var(--b1)">
+      <button id="edit-nav-prev" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasPrev?`onclick="_reloadEditForm(${prevRow})"`:' disabled'}>→ הקודם</button>
+      <span style="font-size:11px;font-weight:800;color:var(--t2)">${navIdx+1} / ${navTotal}</span>
+      <button id="edit-nav-next" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasNext?`onclick="_reloadEditForm(${nextRow})"`:' disabled'}>הבא ←</button>
+    </div>`:''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px">
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם בעברית</span><input class="ifield" id="e-heb" value="${esc(gc(p,COL.HEB))}"></div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם באנגלית</span><input class="ifield" id="e-eng" value="${esc(gc(p,COL.ENG))}"></div>
-      <div class="fg"><span class="slbl2">מחיר ($)</span><input class="ifield" id="e-price" type="text" inputmode="decimal" value="${gc(p,COL.PRICE)?formatNumber(gc(p,COL.PRICE)):''}" oninput="_numInput(this)"></div>
-      <div class="fg"><span class="slbl2">דירוג ⭐</span><input class="ifield" id="e-rating" type="text" inputmode="decimal" value="${gc(p,COL.RATING)?formatNumber(gc(p,COL.RATING)):''}" oninput="_numInput(this)"></div>
-      <div class="fg"><span class="slbl2">רכישות 🔥</span><input class="ifield" id="e-bought" type="text" inputmode="numeric" value="${gc(p,COL.BOUGHT)?formatNumber(gc(p,COL.BOUGHT)):''}" oninput="_numInput(this)" onkeydown="_dynStep(this,event)"></div>
+      <div class="fg"><span class="slbl2">מחיר ($)</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-price');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var n=Math.round((v-1)*100)/100;if(n<0)n=0;el.value=n%1===0?n.toLocaleString('he-IL'):n.toFixed(2);})()">−</button>
+          <input class="ifield" id="e-price" type="text" inputmode="decimal" value="${gc(p,COL.PRICE)?formatNumber(gc(p,COL.PRICE)):''}" oninput="_numInput(this)" style="flex:1;text-align:center">
+          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-price');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var n=Math.round((v+1)*100)/100;el.value=n%1===0?n.toLocaleString('he-IL'):n.toFixed(2);})()">+</button>
+        </div>
+      </div>
+      <div class="fg"><span class="slbl2">דירוג ⭐</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-rating');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var n=Math.round((v-0.1)*10)/10;if(n<0)n=0;el.value=n.toFixed(1);})()">−</button>
+          <input class="ifield" id="e-rating" type="text" inputmode="decimal" value="${gc(p,COL.RATING)?formatNumber(gc(p,COL.RATING)):''}" oninput="_numInput(this)" style="flex:1;text-align:center">
+          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-rating');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var n=Math.round((v+0.1)*10)/10;el.value=n.toFixed(1);})()">+</button>
+        </div>
+      </div>
+      <div class="fg"><span class="slbl2">רכישות 🔥</span>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-bought');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var s=_boughtStep(v);var base=Math.floor(v/s)*s;var n=base-s;if(n<0)n=0;el.value=n.toLocaleString('he-IL');})()">−</button>
+          <input class="ifield" id="e-bought" type="text" inputmode="numeric" value="${gc(p,COL.BOUGHT)?formatNumber(gc(p,COL.BOUGHT)):''}" oninput="_numInput(this)" onkeydown="_dynStep(this,event)" style="flex:1;text-align:center">
+          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-bought');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var s=_boughtStep(v);var base=Math.floor(v/s)*s;var n=base+s;el.value=n.toLocaleString('he-IL');})()">+</button>
+        </div>
+      </div>
       <div class="fg"><span class="slbl2">📂 קטגוריה</span>
         <select class="fsel" id="e-cat" style="width:100%">
           ${(()=>{
@@ -2975,14 +3009,14 @@ function openEditModal(rowNum){
   const footerBtns = fromDash
     ? `<button class="btn sec" style="border-color:var(--acc);color:var(--acc)" onclick="cancelEditReturnToDash()">🏠 ביטול וחזרה לדשבורד</button>
        <button class="btn sec" onclick="closeModal()">ביטול</button>
-       <button class="btn grn" onclick="saveEditReturnToDash(${row})">💾 שמור וחזור לדשבורד</button>`
+       <button id="edit-savedash-btn" class="btn grn" onclick="saveEditReturnToDash(${row})">💾 שמור וחזור לדשבורד</button>`
     : fromRadar
     ? `<button class="btn sec" style="border-color:var(--acc);color:var(--acc)" onclick="cancelEditReturnToRadar()">🔙 חזור לרשימת הרענון</button>
        <button class="btn sec" onclick="closeModal()">ביטול</button>
-       <button class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>`
+       <button id="edit-save-btn" class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>`
     : `<button class="btn sec" onclick="closeModal()">ביטול</button>
-       <button class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>`;
-  openModal('✏️ עריכת פוסט — שורה '+rowNum,body,footerBtns);
+       <button id="edit-save-btn" class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>`;
+  openModal('✏️ עריכת פוסט — שורה '+rowNum+navStr,body,footerBtns);
 }
 
 // ── כפתור "אשר הכל": מעדכן G, P, R, T לאותו ערך ───────────────────
@@ -3093,6 +3127,125 @@ function cancelEditReturnToRadar(){
   radarNavigationState = { active: false };
   closeModal();
   openFullRadarModal();
+}
+
+// ════════════════════════════════════════════════════════════
+// EDIT NAV: ניווט הבא/קודם בתוך חלון העריכה
+// ════════════════════════════════════════════════════════════
+// editNavState מחזיק את ה-array הנוכחי (G.filtered) ואת אינדקס המוצר הנוכחי
+let editNavState = { list: [], idx: -1 };
+
+// מחשב קפיצה דינמית לשדה רכישות
+function _boughtStep(val) {
+  if (val >= 100000) return 100000;
+  if (val >= 10000)  return 10000;
+  if (val >= 1000)   return 1000;
+  if (val >= 100)    return 100;
+  return 10;
+}
+
+// כפתורי stepper ± לשדה מספרי — מחזיר HTML
+function _stepperBtns(fieldId, stepFn) {
+  return `<button type="button" class="btn sec sm" style="padding:0 7px;font-size:14px;line-height:1" `
+       + `onclick="(function(){var el=document.getElementById('${fieldId}');`
+       + `var v=parseFloat((el.value||'').replace(/,/g,''))||0;`
+       + `var s=${stepFn};`
+       + `var n=Math.round((v-s)*1000)/1000;if(n<0)n=0;`
+       + `el.value=n%1===0?n.toLocaleString('he-IL'):n.toFixed(1);`
+       + `})()">−</button>`
+       + `<button type="button" class="btn sec sm" style="padding:0 7px;font-size:14px;line-height:1" `
+       + `onclick="(function(){var el=document.getElementById('${fieldId}');`
+       + `var v=parseFloat((el.value||'').replace(/,/g,''))||0;`
+       + `var s=${stepFn};`
+       + `var n=Math.round((v+s)*1000)/1000;`
+       + `el.value=n%1===0?n.toLocaleString('he-IL'):n.toFixed(1);`
+       + `})()">+</button>`;
+}
+
+// טעינה מחדש של שדות הטופס עבור מוצר חדש (ללא סגירת המודאל)
+function _reloadEditForm(rowNum) {
+  const p = G.posts.find(x => x.row === rowNum);
+  if (!p) { toast('מוצר לא נמצא', 'err'); return; }
+
+  // עדכן editNavState
+  const newIdx = editNavState.list.findIndex(x => x.row === rowNum);
+  if (newIdx !== -1) editNavState.idx = newIdx;
+
+  // שדות פשוטים
+  const setV = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+  setV('e-heb',  gc(p, COL.HEB));
+  setV('e-eng',  gc(p, COL.ENG));
+  setV('e-price', gc(p, COL.PRICE) ? formatNumber(gc(p, COL.PRICE)) : '');
+  setV('e-rating', gc(p, COL.RATING) ? formatNumber(gc(p, COL.RATING)) : '');
+  setV('e-bought', gc(p, COL.BOUGHT) ? formatNumber(gc(p, COL.BOUGHT)) : '');
+  setV('e-link',  gc(p, COL.LINK));
+  setV('e-img',   gc(p, COL.IMG));
+  setV('e-tags',  gc(p, COL.TAGS));
+  const contentEl = document.getElementById('e-content');
+  if (contentEl) contentEl.value = gc(p, COL.CONTENT);
+
+  // תאריך E
+  const dateEl = document.getElementById('e-date-e');
+  if (dateEl) {
+    var d = parseDateIL(gc(p, COL.COL_E));
+    if (d) {
+      var parts = fmtDate(d).split('/');
+      dateEl.value = parts[2] + '-' + parts[1] + '-' + parts[0];
+    } else {
+      var raw = gc(p, COL.COL_E) || '';
+      var m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      dateEl.value = m ? m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0') : '';
+    }
+  }
+
+  // קטגוריה
+  const catEl = document.getElementById('e-cat');
+  if (catEl) catEl.value = gc(p, COL.CAT).trim();
+
+  // סטטוסים
+  setV('e-status', gc(p, COL.STATUS));
+  setV('e-tgs',    gc(p, COL.TG_S));
+  setV('e-fbs',    gc(p, COL.FB_S));
+  setV('e-igs',    gc(p, COL.IG_S));
+
+  // עדכון כותרת המודאל ומונה ניווט
+  const titleEl = document.querySelector('#modal-root h3');
+  if (titleEl) {
+    const total = editNavState.list.length;
+    const cur   = editNavState.idx + 1;
+    const navStr = total > 1 ? ` (${cur}/${total})` : '';
+    titleEl.textContent = `✏️ עריכת פוסט — שורה ${p.row}${navStr}`;
+  }
+
+  // עדכון כפתורי שמירה (row)
+  const saveBtn = document.getElementById('edit-save-btn');
+  if (saveBtn) saveBtn.setAttribute('onclick', `saveEdit(${rowNum})`);
+  const saveDashBtn = document.getElementById('edit-savedash-btn');
+  if (saveDashBtn) saveDashBtn.setAttribute('onclick', `saveEditReturnToDash(${rowNum})`);
+
+  // עדכון כפתורי ניווט
+  const prevBtn = document.getElementById('edit-nav-prev');
+  const nextBtn = document.getElementById('edit-nav-next');
+  const total = editNavState.list.length;
+  if (prevBtn) {
+    const hasPrev = editNavState.idx > 0;
+    prevBtn.disabled = !hasPrev;
+    prevBtn.setAttribute('onclick', hasPrev ? `_reloadEditForm(${editNavState.list[editNavState.idx-1].row})` : '');
+  }
+  if (nextBtn) {
+    const hasNext = editNavState.idx < total - 1;
+    nextBtn.disabled = !hasNext;
+    nextBtn.setAttribute('onclick', hasNext ? `_reloadEditForm(${editNavState.list[editNavState.idx+1].row})` : '');
+  }
+
+  // ibox info
+  const iboxEl = document.getElementById('edit-ibox');
+  if (iboxEl) {
+    const total2 = editNavState.list.length;
+    const cur2   = editNavState.idx + 1;
+    const navStr2 = total2 > 1 ? ` | מוצר ${cur2} מתוך ${total2}` : '';
+    iboxEl.innerHTML = `שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.row}${navStr2}.`;
+  }
 }
 
 // ── שמירה + חזרה לדשבורד ─────────────────────────────────────────
@@ -3449,7 +3602,6 @@ let dashNavigationState = {
 };
 
 // ── דגל ניווט מרשימת הרדאר ───────────────────────────────────────
-// מוגדר כ-true כאשר חלון העריכה נפתח מתוך פופ-אפ הרדאר המלא.
 let radarNavigationState = { active: false };
 
 // ── שמירת מצב ניווט מהדשבורד ────────────────────────────────────
