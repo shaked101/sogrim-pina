@@ -2263,7 +2263,8 @@ function _buildRadarItem(p,now){
     +'<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">'
       +'<button class="btn sec sm" style="font-size:10px;white-space:nowrap;color:var(--grn);border-color:var(--grn)" '
         +'onclick="event.stopPropagation();refreshRadarPost('+row+')" title="סמן כנבדק — איפוס שעון 30 יום">🔄 רענן</button>'
-      +(link?'<a href="'+esc(link)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:10px;font-weight:700;color:var(--blue);text-decoration:none;text-align:center">פתח ↗</a>':'')
+      +'<button class="btn sec sm" style="font-size:10px;white-space:nowrap" '
+        +'onclick="event.stopPropagation();radarEditFromModal('+row+')">✏️ ערוך</button>'
     +'</div>'
   +'</div>';
 }
@@ -2367,6 +2368,19 @@ async function refreshRadarPost(rowNum){
   renderStaleRadar();
   var modalRoot=document.getElementById('modal-root');
   if(modalRoot&&modalRoot.style.display!=='none')openFullRadarModal();
+}
+
+// ── פתיחת עריכה מתוך מודאל הרדאר — שומר דגל חזרה ──────────────
+function radarEditFromModal(rowNum){
+  radarNavigationState.active = true;
+  closeModal();
+  openEditModal(rowNum);
+}
+
+// ── שחזור פופ-אפ הרדאר לאחר עריכה ────────────────────────────────
+function _restoreRadarModal(){
+  radarNavigationState.active = false;
+  openFullRadarModal();
 }
 
 // ════════════════════════════════════════════════
@@ -2856,7 +2870,6 @@ function openViewModal(rowNum){
   `);
 }
 
-// ── העתקת קישור מוצר מתוך פופ-אפ הצפייה ──────────────
 function viewModalCopyLink(rowNum){
   var p=G.posts.find(function(x){return x.row===rowNum;});
   if(!p)return;
@@ -2873,7 +2886,6 @@ function viewModalCopyLink(rowNum){
   else doFallback();
 }
 
-// ── העתקת פוסט מלא (תוכן + האשטגים) מתוך פופ-אפ הצפייה ─
 function viewModalCopyPost(rowNum){
   var p=G.posts.find(function(x){return x.row===rowNum;});
   if(!p)return;
@@ -2909,10 +2921,11 @@ function viewModalCopyPost(rowNum){
 function openEditModal(rowNum){
   const p=G.posts.find(x=>x.row===rowNum);if(!p)return;
   const row=rowNum;
-  // Check if we arrived from dashboard recycle modal
+  // Check if we arrived from dashboard recycle modal or radar modal
   const fromDash = dashNavigationState.active;
+  const fromRadar = radarNavigationState.active;
   const body=`
-    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.row||rowNum}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':''}</div>
+    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.row||rowNum}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':fromRadar?'<br>📡 <strong>הגעת מרשימת הרענון</strong> — שמירה תסמן את המוצר כנבדק.':''}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px">
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם בעברית</span><input class="ifield" id="e-heb" value="${esc(gc(p,COL.HEB))}"></div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם באנגלית</span><input class="ifield" id="e-eng" value="${esc(gc(p,COL.ENG))}"></div>
@@ -2973,6 +2986,10 @@ function openEditModal(rowNum){
     ? `<button class="btn sec" style="border-color:var(--acc);color:var(--acc)" onclick="cancelEditReturnToDash()">🏠 ביטול וחזרה לדשבורד</button>
        <button class="btn sec" onclick="closeModal()">ביטול</button>
        <button class="btn grn" onclick="saveEditReturnToDash(${row})">💾 שמור וחזור לדשבורד</button>`
+    : fromRadar
+    ? `<button class="btn sec" style="border-color:var(--acc);color:var(--acc)" onclick="_restoreRadarModal()">🔙 חזור לרשימת הרענון</button>
+       <button class="btn sec" onclick="closeModal()">ביטול</button>
+       <button class="btn grn" onclick="saveEditFromRadar(${row})">💾 שמור וחזור לרשימה</button>`
     : `<button class="btn sec" onclick="closeModal()">ביטול</button>
        <button class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>`;
   openModal('✏️ עריכת פוסט — שורה '+rowNum,body,footerBtns);
@@ -3050,6 +3067,62 @@ async function saveEdit(rowNum){
       });
     }
     closeModal();toast('✅ נשמר!','ok');renderDash();filterPosts();renderCal();
+  }
+}
+
+// ── שמירה מרדאר: שמור + סמן כנבדק + חזור לרשימת הרענון ────────────
+async function saveEditFromRadar(rowNum){
+  // תחילה מריצים את saveEdit הרגיל (ללא סגירת מודאל)
+  const contentEl=document.getElementById('e-content');
+  if(!contentEl){toast('שגיאה: שדות לא נמצאו','err');return;}
+
+  const updates={
+    [COL.HEB+1]:gv('e-heb'),[COL.ENG+1]:gv('e-eng'),
+    [COL.PRICE+1]:gvRaw('e-price'),[COL.RATING+1]:gvRaw('e-rating'),
+    [COL.BOUGHT+1]:gvRaw('e-bought'),[COL.CAT+1]:gv('e-cat'),
+    [COL.LINK+1]:gv('e-link'),[COL.IMG+1]:gv('e-img'),
+    [COL.CONTENT+1]:contentEl.value,[COL.TAGS+1]:gv('e-tags'),
+    [COL.STATUS+1]:gv('e-status'),
+    [COL.TG_S+1]:gv('e-tgs'),[COL.FB_S+1]:gv('e-fbs'),[COL.IG_S+1]:gv('e-igs'),
+  };
+
+  const p=G.posts.find(x=>x.row===rowNum);
+  const _origParsed=p?parseDateIL(p.data[COL.COL_E]):null;
+  const originalDateE=_origParsed?fmtDate(_origParsed):(p?String(p.data[COL.COL_E]||'').trim():'');
+  const rawDateE=gv('e-date-e').trim();
+  var editedDateE='';
+  if(rawDateE){var dp=rawDateE.split('-');if(dp.length===3)editedDateE=dp[2]+'/'+dp[1]+'/'+dp[0];else editedDateE=rawDateE;}
+  if(editedDateE&&editedDateE!==originalDateE){updates[COL.COL_E+1]=editedDateE;}
+
+  // הוסף גם את תאריך הבדיקה (REVIEWED_DATE) כדי להוציא מהרדאר
+  var today=new Date();
+  var todayStr=String(today.getDate()).padStart(2,'0')+'/'+String(today.getMonth()+1).padStart(2,'0')+'/'+today.getFullYear();
+  updates[COL.REVIEWED_DATE+1]=todayStr;
+
+  toast('שומר...','inf');
+  const ok=await writeSheet(rowNum,updates);
+  if(ok){
+    const edited=G.posts.find(x=>x.row===rowNum);
+    if(edited){
+      edited.data[COL.REVIEWED_DATE]=todayStr;
+      try{edited._dateE=parseDateIL(gc(edited,COL.COL_E));}catch(e){edited._dateE=null;}
+      try{edited._dateTG=parseDateIL(gc(edited,COL.COL_Q));}catch(e){edited._dateTG=null;}
+      try{edited._dateIG=parseDateIL(gc(edited,COL.COL_IG_D));}catch(e){edited._dateIG=null;}
+      G.dateMap={};
+      G.posts.forEach(function(pp){
+        function ins(num,bkt){
+          if(!G.dateMap[num])G.dateMap[num]={fb:[],tg:[],ig:[],all:[]};
+          G.dateMap[num][bkt].push(pp);
+          if(G.dateMap[num].all.indexOf(pp)===-1)G.dateMap[num].all.push(pp);
+        }
+        if(pp._dateE)ins(pp._dateE.num,'fb');
+        if(pp._dateTG)ins(pp._dateTG.num,'tg');
+        if(pp._dateIG)ins(pp._dateIG.num,'ig');
+      });
+    }
+    renderDash();filterPosts();renderCal();
+    toast('✅ נשמר וסומן כנבדק!','ok');
+    _restoreRadarModal(); // חזרה לפופ-אפ הרדאר המעודכן
   }
 }
 
@@ -3425,6 +3498,11 @@ let dashNavigationState = {
   channelName: null,   // שם הערוץ (למשל: 'פייסבוק')
   channelIcon: null,   // אייקון הערוץ (למשל: '📘')
   recycleShown: 5,     // כמה מוצרים היו פתוחים (ה-Offset)
+};
+
+// ── דגל: האם העריכה נפתחה מתוך פופ-אפ הרדאר (רענון) ────────────
+let radarNavigationState = {
+  active: false,       // true = נפתח מתוך openFullRadarModal
 };
 
 // ── שמירת מצב ניווט מהדשבורד ────────────────────────────────────
@@ -6209,7 +6287,7 @@ async function _npSubmit(){
     + '\nתיאור: '       + desc.trim();
 
   // ─── הכנס כאן את כתובת ה-Webhook של Make ───────────────────
-  var MAKE_WEBHOOK_URL = 'https://hook.eu1.make.com/2rfc1ivjqwu72pdmpv5x9cguzbwplhd9'; // ← הכנס URL
+  var MAKE_WEBHOOK_URL = 'YOUR_WEBHOOK_URL_HERE'; // ← הכנס URL
   // ─────────────────────────────────────────────────────────────
 
   var btn = document.querySelector('#pg-new-product button[onclick="_npSubmit()"]');
@@ -6964,14 +7042,7 @@ document.addEventListener('DOMContentLoaded',function(){
     if(!inp) return;
 
     function getPostName(p){
-      // מחפש בשם עברי ואנגלי כאחד
       return [(gc(p,COL.HEB)||''),(gc(p,COL.ENG)||'')].join(' ');
-    }
-    function getPostImg(p){
-      return gc(p,COL.IMG)||'';
-    }
-    function getPostPrice(p){
-      return gc(p,COL.PRICE)||'';
     }
 
     function renderDrop(q){
@@ -6979,11 +7050,9 @@ document.addEventListener('DOMContentLoaded',function(){
       if(!q){ drop.classList.remove('open'); drop.innerHTML=''; return; }
       var posts = G.posts||[];
       var ql = q.toLowerCase();
-      // שימוש ב-includes בלבד — תומך עברית, אנגלית, ומספרים
       var results = posts.filter(function(p){
         return getPostName(p).toLowerCase().includes(ql);
       }).slice(0,8);
-
       if(!results.length){
         drop.innerHTML='<div class="gsearch-empty">אין תוצאות עבור "'+q+'"</div>';
         drop.classList.add('open');
@@ -6991,13 +7060,12 @@ document.addEventListener('DOMContentLoaded',function(){
       }
       drop.innerHTML = results.map(function(p){
         var heb   = esc(gc(p,COL.HEB)||'');
-        var price = getPostPrice(p);
-        var img   = getPostImg(p);
+        var price = gc(p,COL.PRICE)||'';
+        var img   = gc(p,COL.IMG)||'';
         var imgEl = img
-          ? '<img class="gsearch-drop-img" src="'+img+'" loading="lazy" onerror="this.style.display=\'none\'">'
+          ? '<img class="gsearch-drop-img" src="'+img+'" loading="lazy" onerror="this.style.display='none'">'
           : '<div class="gsearch-drop-img" style="display:flex;align-items:center;justify-content:center;font-size:14px">📦</div>';
         var priceEl = price ? '<span class="gsearch-drop-price">$'+price+'</span>' : '';
-        // מעביר row (מספר) — לא אובייקט — כדי למנוע [object Object]
         return '<div class="gsearch-drop-item" data-row="'+p.row+'">'
           + imgEl
           + '<span class="gsearch-drop-name">'+heb+'</span>'
@@ -7024,7 +7092,6 @@ document.addEventListener('DOMContentLoaded',function(){
 
     clr.addEventListener('click', function(){ clearSearch(); inp.focus(); });
 
-    // לחיצה על תוצאה — שולף את הפוסט לפי row ומפעיל openViewModal
     drop.addEventListener('click', function(e){
       var item = e.target.closest('.gsearch-drop-item');
       if(!item) return;
@@ -7032,16 +7099,14 @@ document.addEventListener('DOMContentLoaded',function(){
       var post = (G.posts||[]).find(function(p){ return p.row===row; });
       if(!post){ toast('מוצר לא נמצא','err'); return; }
       clearSearch();
-      openViewModal(post.row);   // מעביר row — לא האובייקט עצמו
+      openViewModal(post.row);
     });
 
-    // סגירה בלחיצה מחוץ לחיפוש
     document.addEventListener('click', function(e){
       var wrap = document.getElementById('gsearch-wrap');
       if(wrap && !wrap.contains(e.target)) drop.classList.remove('open');
     });
 
-    // סגירה ב-Escape
     inp.addEventListener('keydown', function(e){
       if(e.key==='Escape') clearSearch();
     });
