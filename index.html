@@ -2844,16 +2844,8 @@ function openViewModal(rowNum, navList){
   const igD=fmtDate(p._dateIG);
   const row=rowNum;
 
-  // שורת ניווט עליונה
-  const navBar = navTotal > 1 ? `
-    <div id="view-nav-bar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;background:var(--s2);border-radius:8px;padding:5px 8px;border:1px solid var(--b1)">
-      <button id="view-nav-prev" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasPrev?`onclick="_reloadViewForm(${prevRow})"`:' disabled'}>→ הקודם</button>
-      <span style="font-size:11px;font-weight:800;color:var(--t2)">${navIdx+1} / ${navTotal}</span>
-      <button id="view-nav-next" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasNext?`onclick="_reloadViewForm(${nextRow})"`:' disabled'}>הבא ←</button>
-    </div>` : '';
-
   const body=`
-    ${navBar}
+    <div id="view-nav-bar" style="display:none"></div>
     <div id="view-modal-content">
     ${img?`<img style="width:100%;border-radius:7px;margin-bottom:11px;max-height:190px;object-fit:cover;cursor:zoom-in" src="${img}" onerror="this.remove()" onclick="openImageLightbox('${img.replace(/'/g,"\\'")}')" title="לחץ להגדלה">`: ''}
     <div style="display:flex;gap:6px;margin-bottom:11px">
@@ -2896,8 +2888,21 @@ function openViewModal(rowNum, navList){
     <button class="btn fbb" id="view-fb-btn" onclick="triggerPublish(${row},'FB')">שגר פייסבוק</button>
     <button class="btn igb" id="view-ig-btn" onclick="triggerPublish(${row},'IG')">שגר אינסטגרם</button>
   `);
-  // הגדר את viewNavState.currentRow לשימוש מאזין המקלדת
+  // הזרקת כפתורי ניווט לתוך ה-header (RTL: ימינה=הבא, שמאלה=הקודם)
   viewNavState.currentRow = rowNum;
+  if(navTotal > 1){
+    const header = document.querySelector('#modal-root > div > div:first-child');
+    if(header){
+      const navWrap = document.createElement('div');
+      navWrap.id = 'view-nav-bar';
+      navWrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
+      navWrap.innerHTML = `<button id="view-nav-next" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasNext?`onclick="_reloadViewForm(${nextRow})"`:' disabled'}>הבא ←</button><span style="font-size:11px;font-weight:800;color:var(--t2)">${navIdx+1}/${navTotal}</span><button id="view-nav-prev" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasPrev?`onclick="_reloadViewForm(${prevRow})"`:' disabled'}>→ הקודם</button>`;
+      // הכנס לפני כפתור ה-X (האלמנט האחרון ב-header)
+      const closeBtn = header.querySelector('button');
+      if(closeBtn) header.insertBefore(navWrap, closeBtn);
+      else header.appendChild(navWrap);
+    }
+  }
 }
 
 // ── טעינה מחדש של תוכן פופ-אפ הצפייה למוצר חדש ──────────────────
@@ -3054,10 +3059,10 @@ function openEditModal(rowNum){
 
   const body=`
     <div id="edit-ibox" class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.row||rowNum}${navTotal>1&&!fromDash&&!fromRadar?' | מוצר '+(navIdx+1)+' מתוך '+navTotal:'.'}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':""}${fromRadar?'<br>📡 <strong>הגעת מרשימת הרענון</strong> — לחץ "🔙 חזור לרשימת הרענון" לחזרה.':""}</div>
-    ${navTotal>1&&!fromDash&&!fromRadar?`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;background:var(--s2);border-radius:8px;padding:6px 10px;border:1px solid var(--b1)">
-      <button id="edit-nav-prev" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasPrev?`onclick="_reloadEditForm(${prevRow})"`:' disabled'}>→ הקודם</button>
-      <span style="font-size:11px;font-weight:800;color:var(--t2)">${navIdx+1} / ${navTotal}</span>
-      <button id="edit-nav-next" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasNext?`onclick="_reloadEditForm(${nextRow})"`:' disabled'}>הבא ←</button>
+    ${navTotal>1&&!fromDash&&!fromRadar?`<div id="edit-nav-bar" style="display:none">
+      <button id="edit-nav-prev" class="btn sec sm" ${hasPrev?`onclick="_reloadEditForm(${prevRow})"`:' disabled'}>→ הקודם</button>
+      <span>${navIdx+1} / ${navTotal}</span>
+      <button id="edit-nav-next" class="btn sec sm" ${hasNext?`onclick="_reloadEditForm(${nextRow})"`:' disabled'}>הבא ←</button>
     </div>`:''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px">
       <div class="fg" style="grid-column:1/-1">
@@ -7356,9 +7361,9 @@ document.addEventListener('DOMContentLoaded',function(){
     if(!list || !list.length) return;
     if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
       e.preventDefault();
-      // RTL: שמאלה = הבא, ימינה = הקודם
-      if(e.key==='ArrowLeft' && idx < list.length-1) _reloadViewForm(list[idx+1].row);
-      if(e.key==='ArrowRight' && idx > 0)            _reloadViewForm(list[idx-1].row);
+      // RTL: ימינה = הבא, שמאלה = הקודם
+      if(e.key==='ArrowRight' && idx < list.length-1) _reloadViewForm(list[idx+1].row);
+      if(e.key==='ArrowLeft'  && idx > 0)             _reloadViewForm(list[idx-1].row);
     }
   });
 
