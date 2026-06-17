@@ -99,6 +99,9 @@ body.dark-mode .up-item:hover{background:#3a3a3c}
 .fg label{font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.4px}
 .ifield{width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--tx);font-family:inherit;transition:border-color .2s}
 .ifield:focus{outline:none;border-color:var(--acc)}
+input[type=number].ifield{padding:5px 6px;height:32px;-moz-appearance:auto}
+input[type=number].ifield::-webkit-inner-spin-button,
+input[type=number].ifield::-webkit-outer-spin-button{opacity:1;height:100%}
 .tedit{width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:9px 11px;font-size:12px;color:var(--tx);font-family:inherit;line-height:1.7;resize:vertical;min-height:100px;transition:border-color .2s}
 .tedit:focus{outline:none;border-color:var(--acc)}
 .slbl2{font-size:9px;font-weight:800;color:var(--t2);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;display:block}
@@ -1739,7 +1742,17 @@ function _dynStep(el,e){
   var base=Math.floor(raw/step)*step;
   var next=e.key==='ArrowUp'?base+step:base-step;
   if(next<0)next=0;
-  el.value=next.toLocaleString('he-IL');
+  el.value=next;
+}
+
+// ── _priceKeyStep: קפיצת $1 ב-ArrowUp/Down לשדה מחיר ──────────
+function _priceKeyStep(el,e){
+  if(!e||(e.key!=='ArrowUp'&&e.key!=='ArrowDown'))return;
+  e.preventDefault();
+  var raw=parseFloat(el.value)||0;
+  var next=e.key==='ArrowUp'?Math.round((raw+1)*100)/100:Math.round((raw-1)*100)/100;
+  if(next<0)next=0;
+  el.value=next;
 }
 
 // ── v53: Dark mode ───────────────────────────────
@@ -2801,16 +2814,47 @@ function openDayModal(day,y,m){
 // ════════════════════════════════════════════════
 const statusOpts=cur=>['','טיוטה','מאושר','פורסם'].map(v=>`<option value="${v}"${cur===v?' selected':''}>${v||'— ריק —'}</option>`).join('');
 
-function openViewModal(rowNum){
+// ── מצב ניווט צפייה ─────────────────────────────────────────────────
+let viewNavState = { list: [], idx: -1 };
+
+function openViewModal(rowNum, navList){
   const p=G.posts.find(x=>x.row===rowNum);if(!p)return;
+
+  // קבע רשימת ניווט: אם הועברה navList, השתמש בה; אחרת G.filtered או G.posts
+  if(navList){
+    viewNavState = { list: navList, idx: navList.findIndex(x=>x.row===rowNum) };
+  } else if(!viewNavState.list.length || viewNavState.list.findIndex(x=>x.row===rowNum)===-1){
+    const list = G.filtered && G.filtered.length ? G.filtered : G.posts;
+    viewNavState = { list, idx: list.findIndex(x=>x.row===rowNum) };
+  } else {
+    viewNavState.idx = viewNavState.list.findIndex(x=>x.row===rowNum);
+  }
+
+  const navTotal = viewNavState.list.length;
+  const navIdx   = viewNavState.idx;
+  const hasPrev  = navIdx > 0;
+  const hasNext  = navIdx < navTotal - 1;
+  const prevRow  = hasPrev ? viewNavState.list[navIdx-1].row : 0;
+  const nextRow  = hasNext ? viewNavState.list[navIdx+1].row : 0;
+
   const img=gc(p,COL.IMG),link=gc(p,COL.LINK);
   const fb=gc(p,COL.FB_S),tg=gc(p,COL.TG_S),ig=gc(p,COL.IG_S);
-  // Fix 6: display clean DD/MM/YYYY — no time ever
-  const fbD=fmtDate(p._dateE);    // FB date = COL_E
-  const tgD=fmtDate(p._dateTG);   // TG date = COL_Q
-  const igD=fmtDate(p._dateIG);   // IG date = COL_IG_D
+  const fbD=fmtDate(p._dateE);
+  const tgD=fmtDate(p._dateTG);
+  const igD=fmtDate(p._dateIG);
   const row=rowNum;
+
+  // שורת ניווט עליונה
+  const navBar = navTotal > 1 ? `
+    <div id="view-nav-bar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;background:var(--s2);border-radius:8px;padding:5px 8px;border:1px solid var(--b1)">
+      <button id="view-nav-prev" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasPrev?`onclick="_reloadViewForm(${prevRow})"`:' disabled'}>→ הקודם</button>
+      <span style="font-size:11px;font-weight:800;color:var(--t2)">${navIdx+1} / ${navTotal}</span>
+      <button id="view-nav-next" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasNext?`onclick="_reloadViewForm(${nextRow})"`:' disabled'}>הבא ←</button>
+    </div>` : '';
+
   const body=`
+    ${navBar}
+    <div id="view-modal-content">
     ${img?`<img style="width:100%;border-radius:7px;margin-bottom:11px;max-height:190px;object-fit:cover;cursor:zoom-in" src="${img}" onerror="this.remove()" onclick="openImageLightbox('${img.replace(/'/g,"\\'")}')" title="לחץ להגדלה">`: ''}
     <div style="display:flex;gap:6px;margin-bottom:11px">
       <div style="flex:1;background:var(--s2);border-radius:6px;padding:8px;text-align:center;font-size:11px;border:1px solid var(--b1);border-top:3px solid #0369a1">
@@ -2843,14 +2887,97 @@ function openViewModal(rowNum){
       ${link?`<button class="btn sec sm" onclick="viewModalCopyLink(${row})">📋 העתק קישור</button>`:''}
       <button class="btn sec sm" onclick="viewModalCopyPost(${row})">📄 העתק פוסט</button>
     </div>
+    </div>
   `;
   openModal(esc(gc(p,COL.HEB))||'פרטי פוסט',body,`
     <button class="btn sec" onclick="closeModal()">סגור</button>
-    <button class="btn sec" onclick="closeModal();openEditModal(${row})">✏️ ערוך</button>
-    <button class="btn tgb" onclick="triggerPublish(${row},'TG')">שגר טלגרם</button>
-    <button class="btn fbb" onclick="triggerPublish(${row},'FB')">שגר פייסבוק</button>
-    <button class="btn igb" onclick="triggerPublish(${row},'IG')">שגר אינסטגרם</button>
+    <button class="btn sec" id="view-edit-btn" onclick="closeModal();openEditModal(${row})">✏️ ערוך</button>
+    <button class="btn tgb" id="view-tg-btn" onclick="triggerPublish(${row},'TG')">שגר טלגרם</button>
+    <button class="btn fbb" id="view-fb-btn" onclick="triggerPublish(${row},'FB')">שגר פייסבוק</button>
+    <button class="btn igb" id="view-ig-btn" onclick="triggerPublish(${row},'IG')">שגר אינסטגרם</button>
   `);
+  // הגדר את viewNavState.currentRow לשימוש מאזין המקלדת
+  viewNavState.currentRow = rowNum;
+}
+
+// ── טעינה מחדש של תוכן פופ-אפ הצפייה למוצר חדש ──────────────────
+function _reloadViewForm(rowNum){
+  const p = G.posts.find(x => x.row === rowNum);
+  if(!p){ toast('מוצר לא נמצא','err'); return; }
+
+  const newIdx = viewNavState.list.findIndex(x => x.row === rowNum);
+  if(newIdx !== -1) viewNavState.idx = newIdx;
+  viewNavState.currentRow = rowNum;
+
+  const navTotal = viewNavState.list.length;
+  const navIdx   = viewNavState.idx;
+  const hasPrev  = navIdx > 0;
+  const hasNext  = navIdx < navTotal - 1;
+  const prevRow  = hasPrev ? viewNavState.list[navIdx-1].row : 0;
+  const nextRow  = hasNext ? viewNavState.list[navIdx+1].row : 0;
+
+  // עדכון כפתורי ניווט
+  const prevBtn = document.getElementById('view-nav-prev');
+  const nextBtn = document.getElementById('view-nav-next');
+  const cntEl   = prevBtn ? prevBtn.parentElement.querySelector('span') : null;
+  if(prevBtn){ prevBtn.disabled = !hasPrev; prevBtn.setAttribute('onclick', hasPrev ? `_reloadViewForm(${prevRow})` : ''); }
+  if(nextBtn){ nextBtn.disabled = !hasNext; nextBtn.setAttribute('onclick', hasNext ? `_reloadViewForm(${nextRow})` : ''); }
+  if(cntEl)    cntEl.textContent = `${navIdx+1} / ${navTotal}`;
+
+  // עדכון כותרת
+  const titleEl = document.querySelector('#modal-root h3');
+  if(titleEl) titleEl.textContent = esc(gc(p,COL.HEB)) || 'פרטי פוסט';
+
+  // עדכון כפתורי footer
+  const editBtn = document.getElementById('view-edit-btn');
+  const tgBtn   = document.getElementById('view-tg-btn');
+  const fbBtn   = document.getElementById('view-fb-btn');
+  const igBtn   = document.getElementById('view-ig-btn');
+  if(editBtn) editBtn.setAttribute('onclick', `closeModal();openEditModal(${rowNum})`);
+  if(tgBtn)   tgBtn.setAttribute('onclick', `triggerPublish(${rowNum},'TG')`);
+  if(fbBtn)   fbBtn.setAttribute('onclick', `triggerPublish(${rowNum},'FB')`);
+  if(igBtn)   igBtn.setAttribute('onclick', `triggerPublish(${rowNum},'IG')`);
+
+  // עדכון תוכן
+  const img=gc(p,COL.IMG),link=gc(p,COL.LINK);
+  const fb=gc(p,COL.FB_S),tg=gc(p,COL.TG_S),ig=gc(p,COL.IG_S);
+  const fbD=fmtDate(p._dateE), tgD=fmtDate(p._dateTG), igD=fmtDate(p._dateIG);
+  const row=rowNum;
+  const content=`
+    ${img?`<img style="width:100%;border-radius:7px;margin-bottom:11px;max-height:190px;object-fit:cover;cursor:zoom-in" src="${img}" onerror="this.remove()" onclick="openImageLightbox('${img.replace(/'/g,"\\'")}')" title="לחץ להגדלה">`: ''}
+    <div style="display:flex;gap:6px;margin-bottom:11px">
+      <div style="flex:1;background:var(--s2);border-radius:6px;padding:8px;text-align:center;font-size:11px;border:1px solid var(--b1);border-top:3px solid #0369a1">
+        <div style="font-weight:800;color:#0369a1;margin-bottom:2px">✈️ טלגרם</div>
+        <div style="color:var(--t2);font-size:10px">${esc(tg)||'—'}</div>
+        ${tgD!=='—'?`<div style="font-size:9px;color:var(--t3)">${tgD}</div>`:''}
+      </div>
+      <div style="flex:1;background:var(--s2);border-radius:6px;padding:8px;text-align:center;font-size:11px;border:1px solid var(--b1);border-top:3px solid var(--fb)">
+        <div style="font-weight:800;color:var(--fb);margin-bottom:2px">📘 פייסבוק</div>
+        <div style="color:var(--t2);font-size:10px">${esc(fb)||'—'}</div>
+        ${fbD!=='—'?`<div style="font-size:9px;color:var(--t3)">${fbD}</div>`:''}
+      </div>
+      <div style="flex:1;background:var(--s2);border-radius:6px;padding:8px;text-align:center;font-size:11px;border:1px solid var(--b1);border-top:3px solid var(--ig)">
+        <div style="font-weight:800;color:var(--ig);margin-bottom:2px">📸 אינסטגרם</div>
+        <div style="color:var(--t2);font-size:10px">${esc(ig)||'—'}</div>
+        ${igD!=='—'?`<div style="font-size:9px;color:var(--t3)">${igD}</div>`:''}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:11px">
+      <div style="background:var(--s2);border-radius:6px;padding:8px 11px;border:1px solid var(--b1)"><div style="font-size:9px;color:var(--t2);font-weight:800;text-transform:uppercase;margin-bottom:2px">מחיר</div><div style="font-size:13px;font-weight:800;color:var(--acc)">${gc(p,COL.PRICE)?gc(p,COL.PRICE)+'$':'—'}</div></div>
+      <div style="background:var(--s2);border-radius:6px;padding:8px 11px;border:1px solid var(--b1)"><div style="font-size:9px;color:var(--t2);font-weight:800;text-transform:uppercase;margin-bottom:2px">רכישות 🔥</div><div style="font-size:13px;font-weight:800;color:var(--grn)">${gc(p,COL.BOUGHT)?formatNumber(gc(p,COL.BOUGHT)):'—'}</div></div>
+      <div style="background:var(--s2);border-radius:6px;padding:8px 11px;border:1px solid var(--b1)"><div style="font-size:9px;color:var(--t2);font-weight:800;text-transform:uppercase;margin-bottom:2px">דירוג</div><div style="font-size:13px;font-weight:800">⭐ ${gc(p,COL.RATING)||'—'}</div></div>
+    </div>
+    <div class="slbl2">תוכן הפוסט</div>
+    <div style="background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:11px;font-size:12px;line-height:1.7;white-space:pre-wrap;max-height:160px;overflow-y:auto;margin-bottom:11px">${esc(gc(p,COL.CONTENT))||'אין תוכן'}</div>
+    <div class="slbl2">האשטגים</div>
+    <div style="font-size:11px;color:var(--blue);margin-bottom:11px;word-break:break-all">${esc(gc(p,COL.TAGS))||'—'}</div>
+    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:2px">
+      ${link?`<a href="${esc(link)}" target="_blank" rel="noopener" style="font-size:12px;font-weight:800;color:var(--acc);text-decoration:none;background:#fef9f7;padding:5px 11px;border-radius:5px;border:1px solid #fed7aa;display:inline-flex;align-items:center;gap:4px">🔗 פתח באלי אקספרס</a>`:''}
+      ${link?`<button class="btn sec sm" onclick="viewModalCopyLink(${row})">📋 העתק קישור</button>`:''}
+      <button class="btn sec sm" onclick="viewModalCopyPost(${row})">📄 העתק פוסט</button>
+    </div>`;
+  const contentEl = document.getElementById('view-modal-content');
+  if(contentEl) contentEl.innerHTML = content;
 }
 
 // ── העתקת קישור מוצר מתוך פופ-אפ הצפייה ──────────────
@@ -2933,28 +3060,20 @@ function openEditModal(rowNum){
       <button id="edit-nav-next" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasNext?`onclick="_reloadEditForm(${nextRow})"`:' disabled'}>הבא ←</button>
     </div>`:''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px">
-      <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם בעברית</span><input class="ifield" id="e-heb" value="${esc(gc(p,COL.HEB))}"></div>
-      <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם באנגלית</span><input class="ifield" id="e-eng" value="${esc(gc(p,COL.ENG))}"></div>
-      <div class="fg"><span class="slbl2">מחיר ($)</span>
-        <div style="display:flex;gap:4px;align-items:center">
-          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-price');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var n=Math.round((v-1)*100)/100;if(n<0)n=0;el.value=n%1===0?n.toLocaleString('he-IL'):n.toFixed(2);})()">−</button>
-          <input class="ifield" id="e-price" type="text" inputmode="decimal" value="${gc(p,COL.PRICE)?formatNumber(gc(p,COL.PRICE)):''}" oninput="_numInput(this)" style="flex:1;text-align:center">
-          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-price');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var n=Math.round((v+1)*100)/100;el.value=n%1===0?n.toLocaleString('he-IL'):n.toFixed(2);})()">+</button>
+      <div class="fg" style="grid-column:1/-1">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div class="fg"><span class="slbl2">שם בעברית</span><input class="ifield" id="e-heb" value="${esc(gc(p,COL.HEB))}"></div>
+          <div class="fg"><span class="slbl2">שם באנגלית</span><input class="ifield" id="e-eng" value="${esc(gc(p,COL.ENG))}"></div>
         </div>
+      </div>
+      <div class="fg"><span class="slbl2">מחיר ($)</span>
+        <input class="ifield" id="e-price" type="number" inputmode="decimal" min="0" step="1" value="${gc(p,COL.PRICE)?parseFloat(gc(p,COL.PRICE)):''}" onkeydown="_priceKeyStep(this,event)" style="width:100%">
       </div>
       <div class="fg"><span class="slbl2">דירוג ⭐</span>
-        <div style="display:flex;gap:4px;align-items:center">
-          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-rating');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var n=Math.round((v-0.1)*10)/10;if(n<0)n=0;el.value=n.toFixed(1);})()">−</button>
-          <input class="ifield" id="e-rating" type="text" inputmode="decimal" value="${gc(p,COL.RATING)?formatNumber(gc(p,COL.RATING)):''}" oninput="_numInput(this)" style="flex:1;text-align:center">
-          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-rating');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var n=Math.round((v+0.1)*10)/10;el.value=n.toFixed(1);})()">+</button>
-        </div>
+        <input class="ifield" id="e-rating" type="number" inputmode="decimal" min="0" max="5" step="0.1" value="${gc(p,COL.RATING)?parseFloat(gc(p,COL.RATING)):''}" style="width:100%">
       </div>
       <div class="fg"><span class="slbl2">רכישות 🔥</span>
-        <div style="display:flex;gap:4px;align-items:center">
-          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-bought');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var s=_boughtStep(v);var base=Math.floor(v/s)*s;var n=base-s;if(n<0)n=0;el.value=n.toLocaleString('he-IL');})()">−</button>
-          <input class="ifield" id="e-bought" type="text" inputmode="numeric" value="${gc(p,COL.BOUGHT)?formatNumber(gc(p,COL.BOUGHT)):''}" oninput="_numInput(this)" onkeydown="_dynStep(this,event)" style="flex:1;text-align:center">
-          <button type="button" class="btn sec sm" style="padding:0 8px;font-size:15px;flex-shrink:0" onclick="(function(){var el=document.getElementById('e-bought');var v=parseFloat((el.value||'').replace(/,/g,''))||0;var s=_boughtStep(v);var base=Math.floor(v/s)*s;var n=base+s;el.value=n.toLocaleString('he-IL');})()">+</button>
-        </div>
+        <input class="ifield" id="e-bought" type="number" inputmode="numeric" min="0" step="100" value="${gc(p,COL.BOUGHT)?parseFloat(gc(p,COL.BOUGHT)):''}" onkeydown="_dynStep(this,event)" style="width:100%">
       </div>
       <div class="fg"><span class="slbl2">📂 קטגוריה</span>
         <select class="fsel" id="e-cat" style="width:100%">
@@ -3175,9 +3294,9 @@ function _reloadEditForm(rowNum) {
   const setV = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
   setV('e-heb',  gc(p, COL.HEB));
   setV('e-eng',  gc(p, COL.ENG));
-  setV('e-price', gc(p, COL.PRICE) ? formatNumber(gc(p, COL.PRICE)) : '');
-  setV('e-rating', gc(p, COL.RATING) ? formatNumber(gc(p, COL.RATING)) : '');
-  setV('e-bought', gc(p, COL.BOUGHT) ? formatNumber(gc(p, COL.BOUGHT)) : '');
+  setV('e-price', gc(p, COL.PRICE) ? parseFloat(gc(p, COL.PRICE)) : '');
+  setV('e-rating', gc(p, COL.RATING) ? parseFloat(gc(p, COL.RATING)) : '');
+  setV('e-bought', gc(p, COL.BOUGHT) ? parseFloat(gc(p, COL.BOUGHT)) : '');
   setV('e-link',  gc(p, COL.LINK));
   setV('e-img',   gc(p, COL.IMG));
   setV('e-tags',  gc(p, COL.TAGS));
@@ -7223,6 +7342,25 @@ document.addEventListener('DOMContentLoaded',function(){
       if(e.key==='Escape') clearSearch();
     });
   })();
+
+  // ── ניווט מקלדת בפופ-אפ צפייה (חץ שמאלה/ימינה) ──────────────────
+  document.addEventListener('keydown', function(e){
+    var modalRoot = document.getElementById('modal-root');
+    if(!modalRoot || modalRoot.style.display==='none') return;
+    // וודא שמדובר בפופ-אפ צפייה (view-nav-bar קיים)
+    if(!document.getElementById('view-nav-bar')) return;
+    // אל תתעסק בשדות קלט
+    if(e.target && (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')) return;
+    var idx  = viewNavState.idx;
+    var list = viewNavState.list;
+    if(!list || !list.length) return;
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+      e.preventDefault();
+      // RTL: שמאלה = הבא, ימינה = הקודם
+      if(e.key==='ArrowLeft' && idx < list.length-1) _reloadViewForm(list[idx+1].row);
+      if(e.key==='ArrowRight' && idx > 0)            _reloadViewForm(list[idx-1].row);
+    }
+  });
 
   // ── INIT ───────────────────────────────────────
   if(sessionStorage.getItem('sp_auth')){
