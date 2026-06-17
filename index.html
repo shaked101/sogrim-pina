@@ -99,9 +99,9 @@ body.dark-mode .up-item:hover{background:#3a3a3c}
 .fg label{font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.4px}
 .ifield{width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--tx);font-family:inherit;transition:border-color .2s}
 .ifield:focus{outline:none;border-color:var(--acc)}
-input[type=number].ifield{padding:5px 6px;height:32px;-moz-appearance:auto}
+input[type=number].ifield{padding:5px 22px 5px 6px;height:32px;-moz-appearance:textfield}
 input[type=number].ifield::-webkit-inner-spin-button,
-input[type=number].ifield::-webkit-outer-spin-button{opacity:1;height:100%}
+input[type=number].ifield::-webkit-outer-spin-button{opacity:1;height:28px;cursor:pointer;-webkit-appearance:inner-spin-button}
 .tedit{width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:9px 11px;font-size:12px;color:var(--tx);font-family:inherit;line-height:1.7;resize:vertical;min-height:100px;transition:border-color .2s}
 .tedit:focus{outline:none;border-color:var(--acc)}
 .slbl2{font-size:9px;font-weight:800;color:var(--t2);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;display:block}
@@ -2896,7 +2896,7 @@ function openViewModal(rowNum, navList){
       const navWrap = document.createElement('div');
       navWrap.id = 'view-nav-bar';
       navWrap.style.cssText = 'display:flex;align-items:center;gap:6px;';
-      navWrap.innerHTML = `<button id="view-nav-next" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasNext?`onclick="_reloadViewForm(${nextRow})"`:' disabled'}>הבא ←</button><span style="font-size:11px;font-weight:800;color:var(--t2)">${navIdx+1}/${navTotal}</span><button id="view-nav-prev" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasPrev?`onclick="_reloadViewForm(${prevRow})"`:' disabled'}>→ הקודם</button>`;
+      navWrap.innerHTML = `<button id="view-nav-next" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasNext?`onclick="_reloadViewForm(${nextRow})"`:' disabled'}>הבא</button><span style="font-size:11px;font-weight:800;color:var(--t2)">${navIdx+1}/${navTotal}</span><button id="view-nav-prev" class="btn sec sm" style="font-size:13px;padding:3px 10px" ${hasPrev?`onclick="_reloadViewForm(${prevRow})"`:' disabled'}>הקודם</button>`;
       // הכנס לפני כפתור ה-X (האלמנט האחרון ב-header)
       const closeBtn = header.querySelector('button');
       if(closeBtn) header.insertBefore(navWrap, closeBtn);
@@ -3060,9 +3060,9 @@ function openEditModal(rowNum){
   const body=`
     <div id="edit-ibox" class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.row||rowNum}${navTotal>1&&!fromDash&&!fromRadar?' | מוצר '+(navIdx+1)+' מתוך '+navTotal:'.'}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':""}${fromRadar?'<br>📡 <strong>הגעת מרשימת הרענון</strong> — לחץ "🔙 חזור לרשימת הרענון" לחזרה.':""}</div>
     ${navTotal>1&&!fromDash&&!fromRadar?`<div id="edit-nav-bar" style="display:none">
-      <button id="edit-nav-prev" class="btn sec sm" ${hasPrev?`onclick="_reloadEditForm(${prevRow})"`:' disabled'}>→ הקודם</button>
+      <button id="edit-nav-prev" class="btn sec sm" ${hasPrev?`onclick="_reloadEditForm(${prevRow})"`:' disabled'}>הקודם</button>
       <span>${navIdx+1} / ${navTotal}</span>
-      <button id="edit-nav-next" class="btn sec sm" ${hasNext?`onclick="_reloadEditForm(${nextRow})"`:' disabled'}>הבא ←</button>
+      <button id="edit-nav-next" class="btn sec sm" ${hasNext?`onclick="_reloadEditForm(${nextRow})"`:' disabled'}>הבא</button>
     </div>`:''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px">
       <div class="fg" style="grid-column:1/-1">
@@ -4268,8 +4268,15 @@ function fillSettings(){
   for(const[id,key]of Object.entries(m)){const e=document.getElementById(id);if(e&&c[key])e.value=c[key];}
   // v45: if no URL in localStorage, show the hardcoded fallback so user knows what's active
   const urlEl=document.getElementById('s-url');
-  if(urlEl&&!urlEl.value&&POSTS_GAS_URL_DEFAULT){
-    urlEl.placeholder='ברירת מחדל: '+POSTS_GAS_URL_DEFAULT.slice(0,60)+'...';
+  if(urlEl&&!urlEl.value){
+    if(POSTS_GAS_URL_DEFAULT)urlEl.value=POSTS_GAS_URL_DEFAULT;
+  }
+  // Fix: ודא שה-rewrite webhook מציג את ברירת המחדל כשאין ערך שמור
+  const rewriteEl=document.getElementById('s-rewrite-wh');
+  if(rewriteEl&&!rewriteEl.value&&REWRITE_WEBHOOK_DEFAULT&&REWRITE_WEBHOOK_DEFAULT!=='https://hook.eu1.make.com/YOUR_WEBHOOK_HERE'){
+    rewriteEl.value=REWRITE_WEBHOOK_DEFAULT;
+  } else if(rewriteEl&&!rewriteEl.value){
+    rewriteEl.placeholder=REWRITE_WEBHOOK_DEFAULT||'https://hook.eu1.make.com/...';
   }
   // Fix 2: ודא שפלייסחולדרים לקישורים תמיד מוצגים
   const fbEl=document.getElementById('s-fb-url');
