@@ -3078,7 +3078,7 @@ function openEditModal(rowNum){
         <input class="ifield" id="e-rating" type="number" inputmode="decimal" min="0" max="5" step="0.1" value="${gc(p,COL.RATING)?parseFloat(gc(p,COL.RATING)):''}" style="width:100%">
       </div>
       <div class="fg"><span class="slbl2">רכישות 🔥</span>
-        <input class="ifield" id="e-bought" type="number" inputmode="numeric" min="0" step="100" value="${gc(p,COL.BOUGHT)?parseFloat(gc(p,COL.BOUGHT)):''}" onkeydown="_dynStep(this,event)" style="width:100%">
+        <input class="ifield" id="e-bought" type="number" inputmode="numeric" min="0" step="100" value="${gc(p,COL.BOUGHT)?parseFloat(gc(p,COL.BOUGHT)):''}" onkeydown="_dynStep(this,event)" oninput="_updateBoughtStep(this)" style="width:100%">
       </div>
       <div class="fg"><span class="slbl2">📂 קטגוריה</span>
         <select class="fsel" id="e-cat" style="width:100%">
@@ -3268,6 +3268,12 @@ function _boughtStep(val) {
   return 10;
 }
 
+// מעדכן את תכונת step של ה-input בזמן אמת — כך גם חצי spin-button המובנים קופצים נכון
+function _updateBoughtStep(el) {
+  var raw = parseFloat((el.value || '').replace(/,/g, '')) || 0;
+  el.step = _boughtStep(raw);
+}
+
 // כפתורי stepper ± לשדה מספרי — מחזיר HTML
 function _stepperBtns(fieldId, stepFn) {
   return `<button type="button" class="btn sec sm" style="padding:0 7px;font-size:14px;line-height:1" `
@@ -3302,6 +3308,7 @@ function _reloadEditForm(rowNum) {
   setV('e-price', gc(p, COL.PRICE) ? parseFloat(gc(p, COL.PRICE)) : '');
   setV('e-rating', gc(p, COL.RATING) ? parseFloat(gc(p, COL.RATING)) : '');
   setV('e-bought', gc(p, COL.BOUGHT) ? parseFloat(gc(p, COL.BOUGHT)) : '');
+  (function(){ var el=document.getElementById('e-bought'); if(el) el.step=_boughtStep(parseFloat(el.value)||0); })();
   setV('e-link',  gc(p, COL.LINK));
   setV('e-img',   gc(p, COL.IMG));
   setV('e-tags',  gc(p, COL.TAGS));
