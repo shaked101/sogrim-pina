@@ -2263,7 +2263,8 @@ function _buildRadarItem(p,now){
     +'<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">'
       +'<button class="btn sec sm" style="font-size:10px;white-space:nowrap;color:var(--grn);border-color:var(--grn)" '
         +'onclick="event.stopPropagation();refreshRadarPost('+row+')" title="סמן כנבדק — איפוס שעון 30 יום">🔄 רענן</button>'
-      +(link?'<a href="'+esc(link)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:10px;font-weight:700;color:var(--blue);text-decoration:none;text-align:center">פתח ↗</a>':'')
+      +'<button class="btn sec sm" style="font-size:10px;white-space:nowrap" '
+        +'onclick="event.stopPropagation();radarNavigationState={active:true};closeModal();openEditModal('+row+')">✏️ ערוך</button>'
     +'</div>'
   +'</div>';
 }
@@ -2911,8 +2912,10 @@ function openEditModal(rowNum){
   const row=rowNum;
   // Check if we arrived from dashboard recycle modal
   const fromDash = dashNavigationState.active;
+  // Check if we arrived from the full radar modal
+  const fromRadar = radarNavigationState.active;
   const body=`
-    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.row||rowNum}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':''}</div>
+    <div class="ibox" style="font-size:11px">שינויים נשמרים ישירות בגוגל שיטס. שורה פיזית: ${p.row||rowNum}.${fromDash?'<br>📌 <strong>הגעת מהדשבורד</strong> — לחץ "ביטול וחזרה לדשבורד" לחזרה למחזור.':""}${fromRadar?'<br>📡 <strong>הגעת מרשימת הרענון</strong> — לחץ "🔙 חזור לרשימת הרענון" לחזרה.':""}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px">
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם בעברית</span><input class="ifield" id="e-heb" value="${esc(gc(p,COL.HEB))}"></div>
       <div class="fg" style="grid-column:1/-1"><span class="slbl2">שם באנגלית</span><input class="ifield" id="e-eng" value="${esc(gc(p,COL.ENG))}"></div>
@@ -2973,6 +2976,10 @@ function openEditModal(rowNum){
     ? `<button class="btn sec" style="border-color:var(--acc);color:var(--acc)" onclick="cancelEditReturnToDash()">🏠 ביטול וחזרה לדשבורד</button>
        <button class="btn sec" onclick="closeModal()">ביטול</button>
        <button class="btn grn" onclick="saveEditReturnToDash(${row})">💾 שמור וחזור לדשבורד</button>`
+    : fromRadar
+    ? `<button class="btn sec" style="border-color:var(--acc);color:var(--acc)" onclick="cancelEditReturnToRadar()">🔙 חזור לרשימת הרענון</button>
+       <button class="btn sec" onclick="closeModal()">ביטול</button>
+       <button class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>`
     : `<button class="btn sec" onclick="closeModal()">ביטול</button>
        <button class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>`;
   openModal('✏️ עריכת פוסט — שורה '+rowNum,body,footerBtns);
@@ -3049,7 +3056,14 @@ async function saveEdit(rowNum){
         if(p._dateIG)ins(p._dateIG.num,'ig');
       });
     }
+    // v_radar: אם הגענו מרשימת הרענון — בצע רענון אוטומטי ופתח מחדש את מודאל הרדאר
+    const _wasFromRadar = radarNavigationState.active;
+    radarNavigationState = { active: false };
     closeModal();toast('✅ נשמר!','ok');renderDash();filterPosts();renderCal();
+    if(_wasFromRadar){
+      await refreshRadarPost(rowNum);
+      openFullRadarModal();
+    }
   }
 }
 
@@ -3072,6 +3086,13 @@ function _restoreDashRecycleModal(){
 function cancelEditReturnToDash(){
   closeModal();
   _restoreDashRecycleModal();
+}
+
+// ── ביטול עריכה + חזרה לרשימת הרענון ──────────────────────────────
+function cancelEditReturnToRadar(){
+  radarNavigationState = { active: false };
+  closeModal();
+  openFullRadarModal();
 }
 
 // ── שמירה + חזרה לדשבורד ─────────────────────────────────────────
@@ -3426,6 +3447,10 @@ let dashNavigationState = {
   channelIcon: null,   // אייקון הערוץ (למשל: '📘')
   recycleShown: 5,     // כמה מוצרים היו פתוחים (ה-Offset)
 };
+
+// ── דגל ניווט מרשימת הרדאר ───────────────────────────────────────
+// מוגדר כ-true כאשר חלון העריכה נפתח מתוך פופ-אפ הרדאר המלא.
+let radarNavigationState = { active: false };
 
 // ── שמירת מצב ניווט מהדשבורד ────────────────────────────────────
 // נקראת מה-onclick של שם מוצר בפופ-אפ המחזור.
