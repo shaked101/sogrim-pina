@@ -1241,22 +1241,45 @@ body.dark-mode .gsearch-drop-img{background:#3a3a3c}
 
           <!-- ── אזור שמאלי: גריד קולאז' 8 משבצות ── -->
           <div class="tw" style="padding:14px">
-            <div style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">🖼️ גריד קולאז' (8 משבצות)</div>
 
-            <!-- שורה 1: 3 משבצות עליונות (slots 0,1,2) -->
-            <div id="ws-slots-row-top" dir="ltr"
-              style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:5px">
+            <!-- בחירת מצב: תמונה בודדת / קולאז' 6 / קולאז' 8 -->
+            <div id="ws-mode-row" style="display:flex;gap:11px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding:7px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:7px">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;font-weight:800;color:var(--t2);user-select:none;white-space:nowrap">
+                <input type="radio" name="ws-mode" value="single" onchange="_wsSetMode('single')" style="cursor:pointer;accent-color:var(--acc)">
+                תמונה בודדת
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;font-weight:800;color:var(--t2);user-select:none;white-space:nowrap">
+                <input type="radio" name="ws-mode" value="collage6" onchange="_wsSetMode('collage6')" style="cursor:pointer;accent-color:var(--acc)">
+                קולאז' 6
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;font-weight:800;color:var(--t2);user-select:none;white-space:nowrap">
+                <input type="radio" name="ws-mode" value="collage8" onchange="_wsSetMode('collage8')" checked style="cursor:pointer;accent-color:var(--acc)">
+                קולאז' 8
+              </label>
             </div>
 
-            <!-- שורה 2: slot 6 | לוגו | slot 7 -->
-            <div id="ws-slots-row-mid" dir="ltr"
-              style="display:grid;grid-template-columns:1fr auto 1fr;gap:5px;align-items:center;margin-bottom:5px">
+            <div id="ws-grid-title" style="font-size:11px;font-weight:800;color:var(--t2);margin-bottom:10px">🖼️ גריד קולאז' (8 משבצות)</div>
+
+            <!-- עטיפת הגריד (מוסתרת במצב "תמונה בודדת") -->
+            <div id="ws-grid-wrap">
+              <!-- שורה 1: 3 משבצות עליונות (slots 0,1,2) -->
+              <div id="ws-slots-row-top" dir="ltr"
+                style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:5px">
+              </div>
+
+              <!-- שורה 2: slot 6 | לוגו | slot 7 -->
+              <div id="ws-slots-row-mid" dir="ltr"
+                style="display:grid;grid-template-columns:1fr auto 1fr;gap:5px;align-items:center;margin-bottom:5px">
+              </div>
+
+              <!-- שורה 3: 3 משבצות תחתונות (slots 3,4,5) -->
+              <div id="ws-slots-row-bot" dir="ltr"
+                style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:12px">
+              </div>
             </div>
 
-            <!-- שורה 3: 3 משבצות תחתונות (slots 3,4,5) -->
-            <div id="ws-slots-row-bot" dir="ltr"
-              style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:12px">
-            </div>
+            <!-- משבצת תמונה בודדת לסטורי (מוצגת רק במצב "תמונה בודדת") -->
+            <div id="ws-single-wrap" style="display:none;margin-bottom:12px"></div>
 
             <!-- כפתור ייצר קולאז' -->
             <button id="ws-collage-btn" onclick="_wsGenerateCollage()"
@@ -6565,6 +6588,15 @@ var MAKE_COLLAGE_WEBHOOK = 'https://hook.eu1.make.com/ga5g3izykkvvhi185wy2qtglmp
 // ── מצב ה-slots (מערך 6 איברים, null = ריק) ─────────────────────
 var _wsSlots = [null,null,null,null,null,null,null,null]; // indices 0-7
 
+// ── מצב תצוגה: 'single' | 'collage6' | 'collage8' (ברירת מחדל: קולאז' 8) ──
+var _wsMode = 'collage8';
+
+// ── המוצר במשבצת הבודדת (מצב "תמונה בודדת"), null = ריק ──────────
+var _wsSingle = null;
+
+// מספר המשבצות הפעילות לפי המצב הנוכחי
+function _wsSlotLimit(){ return _wsMode === 'collage6' ? 6 : 8; }
+
 // ── כל פוסטי השבוע המסוננים (מאגר) ─────────────────────────────
 var _wsFiltered = [];
 
@@ -6702,7 +6734,9 @@ function _wsFilter(){
   if(cnt) cnt.textContent = _wsFiltered.length+' פוסטים';
 
   _wsSlots = [null,null,null,null,null,null,null,null];
+  _wsSingle = null;
   _wsRenderSlots();
+  _wsRenderSingle();
   _wsRenderPool();
   _wsRebuildSummary();
 
@@ -6724,7 +6758,9 @@ function _wsRenderPool(){
     var img    = gc(p, COL.IMG);
     var name   = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
     var price  = gc(p, COL.PRICE);
-    var inSlot = _wsSlots.some(function(s){ return s && s.row===p.row; });
+    var inSlot = (_wsMode === 'single')
+      ? !!(_wsSingle && _wsSingle.row === p.row)
+      : _wsSlots.some(function(s){ return s && s.row===p.row; });
     // כל שורה היא draggable כשאינה כבר בגריד
     return '<div'
       +(!inSlot ? ' draggable="true" ondragstart="_wsDragStartPool(event,'+idx+')" ondragend="_wsDragEnd(event)"' : '')
@@ -6757,11 +6793,20 @@ function _wsRenderPool(){
 function _wsAddToSlot(poolIdx){
   var p = _wsFiltered[poolIdx];
   if(!p){ toast('פוסט לא נמצא','err'); return; }
+  // מצב "תמונה בודדת": המוצר מחליף את הקיים במשבצת
+  if(_wsMode === 'single'){
+    _wsSingle = p;
+    _wsRenderSingle();
+    _wsRenderPool();
+    _wsRebuildSummary();
+    return;
+  }
   if(_wsSlots.some(function(s){ return s && s.row===p.row; })){
     toast('המוצר כבר בגריד','inf'); return;
   }
-  var freeIdx = _wsSlots.indexOf(null);
-  if(freeIdx===-1){ toast('הגריד מלא (8 מוצרים) — הסר מוצר תחילה','warn'); return; }
+  var limit = _wsSlotLimit();
+  var freeIdx = _wsSlots.slice(0, limit).indexOf(null);
+  if(freeIdx===-1){ toast('הגריד מלא ('+limit+' מוצרים) — הסר מוצר תחילה','warn'); return; }
   _wsSlots[freeIdx] = p;
   _wsRenderSlots();
   _wsRenderPool();
@@ -6826,13 +6871,19 @@ function _wsRenderSlots(){
   rowTop.innerHTML = topIndices.map(buildSlot).join('');
   rowBot.innerHTML = botIndices.map(buildSlot).join('');
 
-  // שורה אמצעית: slot 6 | לוגו | slot 7
-  rowMid.innerHTML =
-    buildSlot(midLeft)
-    +'<div style="text-align:center;padding:4px 6px;font-size:10px;font-weight:900;color:var(--acc);white-space:nowrap;line-height:1.4;background:#fef3ee;border-radius:7px;border:1px solid #fed7aa">'
+  var logoHtml = '<div style="text-align:center;padding:4px 6px;font-size:10px;font-weight:900;color:var(--acc);white-space:nowrap;line-height:1.4;background:#fef3ee;border-radius:7px;border:1px solid #fed7aa">'
       +'סוגרים<br>פינה 👊'
-    +'</div>'
-    +buildSlot(midRight);
+    +'</div>';
+
+  if(_wsMode === 'collage6'){
+    // קולאז' 6: משבצות האמצע (6,7) מוסתרות — רק הלוגו במרכז
+    rowMid.style.gridTemplateColumns = '1fr';
+    rowMid.innerHTML = '<div style="display:flex;justify-content:center">'+logoHtml+'</div>';
+  } else {
+    // שורה אמצעית: slot 6 | לוגו | slot 7
+    rowMid.style.gridTemplateColumns = '1fr auto 1fr';
+    rowMid.innerHTML = buildSlot(midLeft) + logoHtml + buildSlot(midRight);
+  }
 
   // הוסף event listeners לכל ה-8 slots
   for(var ii=0; ii<8; ii++){
@@ -6938,7 +6989,9 @@ function _wsDropOnSlot(targetSlotIdx){
 // בנייה מחדש של textarea לפי slots
 // ────────────────────────────────────────────────
 function _wsRebuildSummary(){
-  var filled = _wsSlots.filter(Boolean);
+  var filled = (_wsMode === 'single')
+    ? (_wsSingle ? [_wsSingle] : [])
+    : _wsSlots.filter(Boolean);
   var ta = document.getElementById('ws-summary-text');
   if(!ta) return;
   if(!filled.length){ ta.value=''; return; }
@@ -6963,17 +7016,155 @@ function _wsRebuildSummary(){
 }
 
 // ────────────────────────────────────────────────
+// מצב תצוגה: תמונה בודדת / קולאז' 6 / קולאז' 8
+// ────────────────────────────────────────────────
+function _wsSetMode(mode){
+  _wsMode = mode;
+  var gridWrap   = document.getElementById('ws-grid-wrap');
+  var singleWrap = document.getElementById('ws-single-wrap');
+  var title      = document.getElementById('ws-grid-title');
+  var btn        = document.getElementById('ws-collage-btn');
+
+  if(mode === 'single'){
+    if(gridWrap)   gridWrap.style.display   = 'none';
+    if(singleWrap) singleWrap.style.display = 'block';
+    if(title) title.textContent = '📱 תמונה בודדת (סטורי)';
+    if(btn)   btn.innerHTML     = '✨ ייצר תמונת סטורי';
+    _wsRenderSingle();
+  } else {
+    if(gridWrap)   gridWrap.style.display   = 'block';
+    if(singleWrap) singleWrap.style.display = 'none';
+    if(title) title.textContent = mode === 'collage6' ? "🖼️ גריד קולאז' (6 משבצות)" : "🖼️ גריד קולאז' (8 משבצות)";
+    if(btn)   btn.innerHTML     = "✨ ייצר קולאז'";
+    if(mode === 'collage6'){
+      // מעבר ל-6: מוצרים שנמצאים במשבצות 6/7 עוברים למשבצת פנויה (0-5), אחרת מוסרים
+      for(var i = 6; i < 8; i++){
+        if(_wsSlots[i]){
+          var free = _wsSlots.slice(0,6).indexOf(null);
+          if(free !== -1){
+            _wsSlots[free] = _wsSlots[i];
+          } else {
+            toast('מוצר הוסר ממשבצת '+(i+1)+' — אין מקום בגריד 6','inf');
+          }
+          _wsSlots[i] = null;
+        }
+      }
+    }
+    _wsRenderSlots();
+  }
+
+  _wsRenderPool();
+  _wsRebuildSummary();
+
+  // הסתרת תוצאה קודמת בעת החלפת מצב
+  var res = document.getElementById('ws-collage-result');
+  if(res) res.style.display = 'none';
+}
+
+// ────────────────────────────────────────────────
+// ציור המשבצת הבודדת (מצב "תמונה בודדת", פרופורציות סטורי 9:16)
+// ────────────────────────────────────────────────
+function _wsRenderSingle(){
+  var wrap = document.getElementById('ws-single-wrap');
+  if(!wrap) return;
+
+  var p = _wsSingle;
+  if(!p){
+    wrap.innerHTML = '<div id="ws-single-slot"'
+      +' style="border:2px dashed var(--b2);border-radius:14px;aspect-ratio:9/16;display:flex;'
+      +'flex-direction:column;align-items:center;justify-content:center;gap:10px;'
+      +'background:var(--s2);transition:border-color .15s,background .15s;cursor:default">'
+      +'<span style="font-size:38px;opacity:.4">📱</span>'
+      +'<span style="font-size:11px;font-weight:800;color:var(--t3);text-align:center;line-height:1.6;padding:0 14px">גרור לכאן מוצר<br>לתמונת סטורי<br>(9:16)</span>'
+    +'</div>';
+  } else {
+    var img  = gc(p, COL.IMG);
+    var name = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
+    wrap.innerHTML = '<div id="ws-single-slot"'
+      +' style="position:relative;border-radius:14px;overflow:hidden;aspect-ratio:9/16;'
+      +'border:2px solid var(--acc);transition:border-color .15s">'
+      +(img
+        ?'<img src="'+esc(img)+'" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none" onerror="this.style.display=\'none\'">'
+        :'<div style="width:100%;height:100%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:40px;pointer-events:none">📦</div>')
+      +'<div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.55),transparent 40%);display:flex;flex-direction:column;justify-content:flex-end;padding:9px;pointer-events:none">'
+        +'<div style="font-size:11px;font-weight:800;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(name)+'</div>'
+      +'</div>'
+      +'<button id="ws-single-rm" style="position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(185,28,28,.85);color:#fff;font-size:10px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2">✕</button>'
+    +'</div>';
+  }
+
+  var el = document.getElementById('ws-single-slot');
+  if(!el) return;
+
+  var rmBtn = document.getElementById('ws-single-rm');
+  if(rmBtn){
+    rmBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      _wsRemoveSingle();
+    });
+  }
+
+  el.addEventListener('dragover', function(e){
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    el.style.borderColor = 'var(--a2)';
+    el.style.background  = 'rgba(212,84,26,.08)';
+  });
+  el.addEventListener('dragleave', function(){
+    el.style.borderColor = _wsSingle ? 'var(--acc)' : 'var(--b2)';
+    el.style.background  = _wsSingle ? '' : 'var(--s2)';
+  });
+  el.addEventListener('drop', function(e){
+    e.preventDefault();
+    // רק מוצר אחד במשבצת — גרירת מוצר שני מחליפה את הראשון
+    if(_wsDrag && _wsDrag.source === 'pool'){
+      var p2 = _wsFiltered[_wsDrag.idx];
+      if(p2) _wsSingle = p2;
+    }
+    _wsDrag = null;
+    _wsRenderSingle();
+    _wsRenderPool();
+    _wsRebuildSummary();
+  });
+}
+
+// ────────────────────────────────────────────────
+// הסרת המוצר מהמשבצת הבודדת
+// ────────────────────────────────────────────────
+function _wsRemoveSingle(){
+  _wsSingle = null;
+  _wsRenderSingle();
+  _wsRenderPool();
+  _wsRebuildSummary();
+}
+
+// ────────────────────────────────────────────────
 // ייצור קולאז' — slots לפי סדר, fetch חסין + Regex URL
 // ────────────────────────────────────────────────
 async function _wsGenerateCollage(){
-  var images = _wsSlots
-    .filter(Boolean)
-    .map(function(p){ return gc(p, COL.IMG); })
-    .filter(Boolean);
+  var payload;
 
-  if(!images.length){
-    toast('שבץ לפחות מוצר אחד בגריד תחילה','err');
-    return;
+  if(_wsMode === 'single'){
+    // מצב "תמונה בודדת": שולחים רק את ה-URL של תמונת המוצר + דגל mode
+    // (Make/Cloudinary מוסיפים כיתוב ואגרוף בצד השרת)
+    var singleImg = _wsSingle ? gc(_wsSingle, COL.IMG) : '';
+    if(!singleImg){
+      toast('שבץ מוצר עם תמונה במשבצת תחילה','err');
+      return;
+    }
+    payload = { mode: 'single_story', image: singleImg };
+  } else {
+    // מצבי קולאז' (6/8): מערך תמונות כמקודם + דגל mode
+    var images = _wsSlots
+      .filter(Boolean)
+      .map(function(p){ return gc(p, COL.IMG); })
+      .filter(Boolean);
+
+    if(!images.length){
+      toast('שבץ לפחות מוצר אחד בגריד תחילה','err');
+      return;
+    }
+    payload = { mode: 'weekly_summary', images: images };
   }
 
   var loader = document.getElementById('ws-collage-loader');
@@ -6987,7 +7178,7 @@ async function _wsGenerateCollage(){
     var resp = await fetch(MAKE_COLLAGE_WEBHOOK,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({images: images})
+      body: JSON.stringify(payload)
     });
 
     var text = await resp.text();
@@ -7007,7 +7198,7 @@ async function _wsGenerateCollage(){
       if(imgEl) imgEl.src  = finalUrl;
       if(lnk)   lnk.href   = finalUrl;
       if(result) result.style.display = 'block';
-      toast('✅ הקולאז׳ מוכן!','ok');
+      toast(_wsMode === 'single' ? '✅ תמונת הסטורי מוכנה!' : '✅ הקולאז׳ מוכן!','ok');
     }else{
       toast('Make לא החזיר URL תקין: '+text.slice(0,80),'err');
     }
@@ -7056,7 +7247,9 @@ function _wsInitCatSelect(){
 
 function _wsInitSlots(){
   _wsSlots = [null,null,null,null,null,null,null,null];
+  _wsSingle = null;
   _wsRenderSlots();
+  _wsRenderSingle();
 }
 
 // ════════════════════════════════════════════════
