@@ -1324,6 +1324,12 @@ body.dark-mode .gsearch-drop-img{background:#3a3a3c}
               onmouseout="this.style.background='transparent';this.style.color='var(--acc)'">
               📋 העתק סיכום
             </button>
+            <button id="ws-telegram-btn" onclick="_wsSendTelegram()" disabled
+              style="width:100%;margin-top:8px;padding:10px;border-radius:9px;border:none;background:#229ed9;color:#fff;font-size:12px;font-weight:800;cursor:pointer;transition:all .15s;opacity:.5"
+              onmouseover="if(!this.disabled)this.style.opacity='.85'"
+              onmouseout="if(!this.disabled)this.style.opacity='1'">
+              ✈️ שגר לטלגרם
+            </button>
           </div>
 
         </div>
@@ -6591,6 +6597,9 @@ var _wsSlots = [null,null,null,null,null,null,null,null]; // indices 0-7
 // ── מצב תצוגה: 'single' | 'collage6' | 'collage8' (ברירת מחדל: קולאז' 8) ──
 var _wsMode = 'collage8';
 
+// ── URL של התמונה האחרונה שנוצרה (קולאז'/סטורי), null = אין תמונה זמינה ──
+var _wsLastImageUrl = null;
+
 // ── המוצר במשבצת הבודדת (מצב "תמונה בודדת"), null = ריק ──────────
 var _wsSingle = null;
 
@@ -7059,6 +7068,8 @@ function _wsSetMode(mode){
   // הסתרת תוצאה קודמת בעת החלפת מצב
   var res = document.getElementById('ws-collage-result');
   if(res) res.style.display = 'none';
+  _wsLastImageUrl = null;
+  _wsUpdateTelegramBtn();
 }
 
 // ────────────────────────────────────────────────
@@ -7198,6 +7209,8 @@ async function _wsGenerateCollage(){
       if(imgEl) imgEl.src  = finalUrl;
       if(lnk)   lnk.href   = finalUrl;
       if(result) result.style.display = 'block';
+      _wsLastImageUrl = finalUrl;
+      _wsUpdateTelegramBtn();
       toast(_wsMode === 'single' ? '✅ תמונת הסטורי מוכנה!' : '✅ הקולאז׳ מוכן!','ok');
     }else{
       toast('Make לא החזיר URL תקין: '+text.slice(0,80),'err');
@@ -7222,6 +7235,59 @@ function _wsCopy(){
     ta.select(); document.execCommand('copy');
     toast('✅ הסיכום הועתק','ok');
   });
+}
+
+// ────────────────────────────────────────────────
+// כפתור "שיגור לטלגרם" — פעיל רק כשיש תמונה שנוצרה
+// ────────────────────────────────────────────────
+function _wsUpdateTelegramBtn(){
+  var btn = document.getElementById('ws-telegram-btn');
+  if(!btn) return;
+  var enabled = !!_wsLastImageUrl;
+  btn.disabled = !enabled;
+  btn.style.opacity = enabled ? '1' : '.5';
+  btn.style.cursor   = enabled ? 'pointer' : 'not-allowed';
+}
+
+// ────────────────────────────────────────────────
+// שיגור הסיכום (טקסט + תמונה) לטלגרם דרך אותו Webhook קיים
+// ────────────────────────────────────────────────
+async function _wsSendTelegram(){
+  var ta = document.getElementById('ws-summary-text');
+  var text = ta ? ta.value : '';
+  if(!_wsLastImageUrl){
+    toast('צור קודם קולאז׳/תמונה לפני השיגור','err');
+    return;
+  }
+
+  var btn = document.getElementById('ws-telegram-btn');
+  var originalHtml = btn ? btn.innerHTML : '';
+  if(btn){
+    btn.disabled = true;
+    btn.style.opacity = '.6';
+    btn.innerHTML = '⏳ שולח...';
+  }
+
+  try{
+    var resp = await fetch(MAKE_COLLAGE_WEBHOOK,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ mode:'send_telegram', text: text, image: _wsLastImageUrl })
+    });
+
+    if(resp.ok){
+      toast('נשלח לטלגרם בהצלחה!','ok');
+    }else{
+      toast('שגיאה בשיגור לטלגרם: '+resp.status,'err');
+    }
+  }catch(e){
+    toast('שגיאת תקשורת עם Make: '+e.message,'err');
+  }finally{
+    if(btn){
+      btn.innerHTML = originalHtml;
+      _wsUpdateTelegramBtn();
+    }
+  }
 }
 
 // ────────────────────────────────────────────────
@@ -7250,6 +7316,8 @@ function _wsInitSlots(){
   _wsSingle = null;
   _wsRenderSlots();
   _wsRenderSingle();
+  _wsLastImageUrl = null;
+  _wsUpdateTelegramBtn();
 }
 
 // ════════════════════════════════════════════════
