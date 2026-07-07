@@ -1845,7 +1845,7 @@ const COL={HEB:0,ENG:1,PRICE:2,LINK:3,COL_E:4,CAT:5,STATUS:6,BOUGHT:7,TAGS:8,CON
 // ════════════════════════════════════════════════
 // COMMUNITY — תחרות הפניות
 // ════════════════════════════════════════════════
-const COMMUNITY_GAS_URL = 'https://script.google.com/macros/s/AKfycbwPscBzB5hJAiRn49Cu3IjSChVBbqDEYurVNAyKE2q5NLUiOdNOP9AG9EPFvZPdytgq/exec';
+const COMMUNITY_GAS_URL = '/api/community'; // v-SEC1: proxied via Vercel Serverless (env: GOOGLE_SCRIPT_COMMUNITY_URL)
 const REFERRAL_GOAL = 7; // מספר הפניות לזכאות לפרס
 
 // ════════════════════════════════════════════════
@@ -1853,7 +1853,7 @@ const REFERRAL_GOAL = 7; // מספר הפניות לזכאות לפרס
 // without the user configuring anything in Settings.
 // If the user saves a different URL in Settings it takes priority.
 // ════════════════════════════════════════════════
-const POSTS_GAS_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbxak322tQEglS1uJHmRlKi3JL3asOSFxP3CqFcmZCewb_QGn-f4A2-BAa4tKBR5DPkOtw/exec';
+const POSTS_GAS_URL_DEFAULT = '/api/posts'; // v-SEC1: proxied via Vercel Serverless (env: GOOGLE_SCRIPT_POSTS_URL)
 
 // ════════════════════════════════════════════════
 // STATE — v53: followers loaded async from cloud in bootApp
@@ -2058,6 +2058,12 @@ const saveCfg=obj=>{const c=getCfg();localStorage.setItem('sp_cfg',JSON.stringif
 function getPostsUrl(){
   const fromStorage = (getCfg().url||'').trim();
   return fromStorage || POSTS_GAS_URL_DEFAULT;
+}
+// v-SEC1: publish webhook — same pattern as getPostsUrl (localStorage override → proxy fallback)
+const PUBLISH_WEBHOOK_DEFAULT='/api/publish'; // proxied via Vercel Serverless (env: MAKE_PUBLISH_WEBHOOK_URL)
+function getPublishUrl(){
+  const fromStorage = (getCfg().makeWebhook||'').trim();
+  return fromStorage || PUBLISH_WEBHOOK_DEFAULT;
 }
 const safeNum=v=>{const n=parseFloat((v||'').toString().replace(/[^\d.\-]/g,''));return isNaN(n)?0:n;};
 
@@ -3886,7 +3892,7 @@ async function saveEditReturnToDash(rowNum){
 
 
 // ☑️ עדכן את הכתובת הבאה ב-getCfg().rewriteWebhook דרך ההגדרות, או שנה כאן
-const REWRITE_WEBHOOK_DEFAULT='https://hook.eu1.make.com/YOUR_WEBHOOK_HERE';
+const REWRITE_WEBHOOK_DEFAULT='/api/rewrite'; // v-SEC1: proxied via Vercel Serverless (env: MAKE_REWRITE_WEBHOOK_URL)
 
 async function rewritePost(rowNum){
   // ── תיקון קריטי: וודא שמספר השורה תקין לפני השליחה ──────────────
@@ -4065,7 +4071,7 @@ async function bulkDeleteProducts(){
 // The edited text is sent once and NOT saved back to Google Sheets
 function triggerPublish(rowNum,target){
   const p=G.posts.find(x=>x.row===rowNum);if(!p)return;
-  const c=getCfg();if(!c.makeWebhook){toast('הגדר Make Webhook בהגדרות','err');return;}
+  const c=getCfg();if(!getPublishUrl()){toast('הגדר Make Webhook בהגדרות','err');return;}
   const content=gc(p,COL.CONTENT)||'';
   const link=gc(p,COL.LINK)||'';
   const targetLabel=target==='TG'?'✈️ טלגרם':target==='FB'?'📘 פייסבוק':'📸 אינסטגרם';
@@ -4083,14 +4089,14 @@ function triggerPublish(rowNum,target){
 
 async function confirmPublish(rowNum,target){
   const p=G.posts.find(x=>x.row===rowNum);if(!p)return;
-  const c=getCfg();if(!c.makeWebhook){toast('הגדר Make Webhook','err');return;}
+  const c=getCfg();if(!getPublishUrl()){toast('הגדר Make Webhook','err');return;}
   const txtEl=document.getElementById('publish-txt');
   const text=txtEl?txtEl.value:gc(p,COL.CONTENT)||'';
   const payload={target,link:gc(p,COL.LINK)||'',row:rowNum,text};
   closeModal();
   toast(`שולח ל-Make → ${target}...`,'inf');
   try{
-    await fetch(c.makeWebhook,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    await fetch(getPublishUrl(),{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     toast(`✅ Make קיבל: ${target}!`,'ok');
   }catch(e){toast('שגיאה: '+e.message,'err');}
 }
@@ -4730,10 +4736,10 @@ function fillSettings(){
   }
   // Fix: ודא שה-rewrite webhook מציג את ברירת המחדל כשאין ערך שמור
   const rewriteEl=document.getElementById('s-rewrite-wh');
-  if(rewriteEl&&!rewriteEl.value&&REWRITE_WEBHOOK_DEFAULT&&REWRITE_WEBHOOK_DEFAULT!=='https://hook.eu1.make.com/YOUR_WEBHOOK_HERE'){
+  if(rewriteEl&&!rewriteEl.value&&REWRITE_WEBHOOK_DEFAULT&&REWRITE_WEBHOOK_DEFAULT!=='YOUR_WEBHOOK_HERE'){
     rewriteEl.value=REWRITE_WEBHOOK_DEFAULT;
   } else if(rewriteEl&&!rewriteEl.value){
-    rewriteEl.placeholder=REWRITE_WEBHOOK_DEFAULT||'https://hook.eu1.make.com/...';
+    rewriteEl.placeholder=REWRITE_WEBHOOK_DEFAULT||'/api/rewrite';
   }
   // Fix 2: ודא שפלייסחולדרים לקישורים תמיד מוצגים
   const fbEl=document.getElementById('s-fb-url');
@@ -6974,7 +6980,7 @@ async function _npSubmit(){
     + '\nתיאור: '       + desc.trim();
 
   // ─── הכנס כאן את כתובת ה-Webhook של Make ───────────────────
-  var MAKE_WEBHOOK_URL = 'https://hook.eu1.make.com/2rfc1ivjqwu72pdmpv5x9cguzbwplhd9'; // ← הכנס URL
+  var MAKE_WEBHOOK_URL = '/api/new-product'; // v-SEC1: proxied via Vercel Serverless (env: MAKE_NEW_PRODUCT_WEBHOOK_URL)
   // ─────────────────────────────────────────────────────────────
 
   var btn = document.querySelector('#pg-new-product button[onclick="_npSubmit()"]');
@@ -7010,7 +7016,7 @@ async function _npSubmit(){
 // v3: כיתובי מיקום בגריד, HTML5 Drag & Drop (pool→slot + slot↔slot swap),
 //     חילוץ URL עם Regex חסין.
 // ════════════════════════════════════════════════
-var MAKE_COLLAGE_WEBHOOK = 'https://hook.eu1.make.com/ga5g3izykkvvhi185wy2qtglmpuily12';
+var MAKE_COLLAGE_WEBHOOK = '/api/collage'; // v-SEC1: proxied via Vercel Serverless (env: MAKE_COLLAGE_WEBHOOK_URL)
 
 // ── מצב ה-slots (מערך 6 איברים, null = ריק) ─────────────────────
 var _wsSlots = [null,null,null,null,null,null,null,null]; // indices 0-7
