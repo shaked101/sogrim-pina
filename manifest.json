@@ -12,19 +12,19 @@
   "theme_color": "#d4541a",
   "icons": [
     {
-      "src": "App-icon.png",
+      "src": "./App-icon.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "App-icon.png",
+      "src": "./App-icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "App-icon.png",
+      "src": "./App-icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

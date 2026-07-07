@@ -9,8 +9,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Sogrim Pina">
-<link rel="apple-touch-icon" href="App-icon.png">
-<link rel="icon" type="image/png" href="App-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./App-icon.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./App-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./App-icon.png">
+<link rel="shortcut icon" href="./App-icon.png">
 <meta name="description" content="מערכת ניהול פוסטים ושיווק שותפים לאלי אקספרס">
 <title>סוגרים פינה 👊</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -737,6 +739,94 @@ body.dark-mode .gsearch-drop-img{background:#3a3a3c}
   #pg-posts tbody tr{grid-template-columns:56px minmax(0,1fr) auto}
   #pg-posts .timg,#pg-posts .timg-ph{width:56px!important;height:56px!important}
   .bnav-lbl{font-size:9px}
+}
+
+/* ═══════════════════════════════════════════════
+   MOBILE UI v3 — Refinements (רץ אחרי v2, מנצח בקסקדה)
+   100% בתוך media queries של מובייל · אפס שינוי לוגיקה.
+═══════════════════════════════════════════════ */
+@media(max-width:768px){
+
+  /* ── Fix 2: החזרת שורת החיפוש הגלובלי לטופ-בר ──
+     הופכת לשורה שנייה ברוחב מלא מתחת ללוגו והכפתורים. */
+  .topbar{flex-wrap:wrap;row-gap:6px;padding-bottom:8px}
+  .gsearch-wrap{display:flex!important;order:3;flex-basis:100%;min-width:0}
+  .gsearch-input{width:100%!important;min-height:40px;font-size:16px;border-radius:12px;padding:6px 34px 6px 14px}
+  .gsearch-input:focus{width:100%!important}
+  .gsearch-drop{width:100%;min-width:0;max-width:100%;right:0;left:0}
+  .gsearch-drop-item{min-height:48px}
+
+  /* ── Fix 3: קוביות הפלטפורמות בדשבורד — קומפקטיות, 2 בשורה ── */
+  .fcards{grid-template-columns:1fr 1fr!important;gap:8px}
+  .fcard{padding:10px 11px!important;gap:8px!important;border-radius:14px}
+  .fcard>div[style*="width:38px"]{width:28px!important;height:28px!important;font-size:13px!important;border-radius:8px!important}
+  .fcard div[style*="font-size:20px"]{font-size:17px!important}
+  .fcard div[style*="font-size:9px"]{font-size:9px!important;letter-spacing:0}
+  .fcard .g-pos,.fcard .g-neg,.fcard .g-neu{font-size:10px;padding:1px 6px}
+  .fcard .btn.sm{min-height:30px;padding:3px 8px;font-size:11px}
+
+  /* ── Fix 4: סרגל סינון בלשונית פוסטים — גריד צפוף 2×2 ── */
+  #pg-posts .ttbar{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:10px 11px}
+  #pg-posts .ttbar .sinput{grid-column:1/-1;min-height:42px;font-size:16px}
+  #pg-posts .ttbar .fsel{width:100%;min-height:38px;font-size:13px;padding:5px 8px;border-radius:9px}
+  #pg-posts .ttbar #sort-date-btn{min-height:38px;font-size:12px;padding:5px 8px;justify-content:center;width:100%}
+  #pg-posts .ttbar .tcnt{grid-column:1/-1;width:auto;margin:0;text-align:center;font-size:11px;order:0}
+
+  /* ── Fix 5: סרגל סינון בסיכום שבועי — קומפקטי ── */
+  #pg-weekly-summary .fsel{min-height:38px;font-size:13px;padding:5px 8px;border-radius:9px}
+  #ws-week{min-width:0!important;width:100%}
+  #pg-weekly-summary div:has(> #ws-week){flex:1 1 100%;min-width:0}
+  #pg-weekly-summary div:has(> #ws-platform),
+  #pg-weekly-summary div:has(> #ws-cat){flex:1 1 40%;min-width:130px}
+  #ws-platform,#ws-cat{flex:1;min-width:0}
+  #pg-weekly-summary label[style*="white-space:nowrap"]{font-size:11px}
+  #ws-count{flex-basis:100%;text-align:center;margin:2px 0 0!important}
+  #ws-mode-row{gap:8px;justify-content:space-between;border-radius:10px}
+  #ws-mode-row label{font-size:12px}
+
+  /* ── Fix 6: פרופורציות הקולאז' — ביטול השטחת הגריד ומשבצות ריבועיות ──
+     שכבת v-PWA שיטחה את שורות המשבצות לעמודה אחת בעוד הגובה נשאר
+     76px קבוע — מכאן המתיחה. כאן מחזירים 3 עמודות ופרופורציה 1:1. */
+  #ws-slots-row-top,#ws-slots-row-bot{grid-template-columns:1fr 1fr 1fr!important;gap:6px}
+  #pg-weekly-summary [id^="ws-slot-"]{height:auto!important;aspect-ratio:1/1}
+  #pg-weekly-summary [id^="ws-slot-"] img{width:100%;height:100%;object-fit:cover}
+  /* משבצת סטורי בודדת (9:16) — קומפקטית וממורכזת במקום לתפוס מסך שלם */
+  #ws-single-wrap{max-width:230px;margin-left:auto;margin-right:auto}
+  #ws-single-wrap img{object-fit:cover}
+  /* תצוגת תוצאת הקולאז' — לעולם לא נמתחת */
+  #ws-collage-result img{max-width:100%;height:auto;object-fit:contain;border-radius:12px}
+
+  /* ── Fix 7: טיפוגרפיה — ריסון גדלים חריגים במסך קטן ── */
+  .pt{font-size:20px}
+  .sval{font-size:22px}
+  .comp-timer{padding:16px}
+  .comp-timer .days{font-size:36px}
+  .login-box{width:min(310px,calc(100vw - 32px))}
+  .snap-mini-val{font-size:18px}
+  .cart-total-val{font-size:15px}
+  .pacts .btn,.pacts .np-pill{font-size:12px;min-height:42px}
+  .calnav h3{font-size:14px}
+  .empty{font-size:13px}
+  #modal-root h1,#modal-root h2{font-size:18px}
+  #modal-root h3{font-size:15px}
+
+  /* ── ליטוש מגירת "עוד": שכבה מלאה מעל התוכן, הסרגל התחתון נשאר נגיש ── */
+  .sidebar{
+    top:0!important;bottom:0;height:100%!important;z-index:55;
+    padding-top:calc(16px + env(safe-area-inset-top,0px));
+    box-shadow:none;
+  }
+  .sidebar.mob-open{animation:mob-pg-in .18s ease}
+  .bnav{z-index:60}
+  .bnav-lbl{font-size:9px}
+}
+
+/* ── טלפון צר (480px-) — התאמות v3 ── */
+@media(max-width:480px){
+  .sidebar{top:0!important}
+  .fcards{grid-template-columns:1fr 1fr!important}
+  #pg-weekly-summary div:has(> #ws-platform),
+  #pg-weekly-summary div:has(> #ws-cat){flex:1 1 100%}
 }
 </style>
 
@@ -1620,8 +1710,8 @@ body.dark-mode .gsearch-drop-img{background:#3a3a3c}
   <nav class="bnav" id="bnav" style="display:none">
     <button type="button" class="bnav-item on" data-page="dash"><span class="bnav-ic">📊</span><span class="bnav-lbl">דשבורד</span></button>
     <button type="button" class="bnav-item" data-page="posts"><span class="bnav-ic">📝</span><span class="bnav-lbl">פוסטים</span></button>
-    <button type="button" class="bnav-item" data-page="new-product"><span class="bnav-ic">➕</span><span class="bnav-lbl">מוצר</span></button>
-    <button type="button" class="bnav-item" data-page="creator"><span class="bnav-ic">🚀</span><span class="bnav-lbl">יוצר</span></button>
+    <button type="button" class="bnav-item" data-page="weekly-summary"><span class="bnav-ic">📋</span><span class="bnav-lbl">סיכום שבועי</span></button>
+    <button type="button" class="bnav-item" data-page="calendar"><span class="bnav-ic">📅</span><span class="bnav-lbl">לוח שנה</span></button>
     <button type="button" class="bnav-item" id="bnav-more" onclick="document.querySelector('.sidebar').classList.toggle('mob-open')"><span class="bnav-ic">☰</span><span class="bnav-lbl">עוד</span></button>
   </nav>
 </div>
