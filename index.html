@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Sogrim Pina">
-<link rel="icon" type="image/png" sizes="192x192" href="./App-icon.png">
-<link rel="icon" type="image/png" sizes="512x512" href="./App-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./App-icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./App-icon-512.png">
 <link rel="apple-touch-icon" sizes="180x180" href="./App-icon.png">
 <link rel="shortcut icon" href="./App-icon.png">
 <meta name="description" content="מערכת ניהול פוסטים ושיווק שותפים לאלי אקספרס">
@@ -830,13 +830,58 @@ body.dark-mode .gsearch-drop-img{background:#3a3a3c}
 }
 </style>
 
+<style>
+/* ═══════════════════════════════════════════════════════════
+   v3 Mobile Additions — תוספות בלבד. אפס שינוי בחוקים קיימים,
+   אפס השפעה על Desktop (הכל בתוך media queries / רכיב חדש).
+═══════════════════════════════════════════════════════════ */
+
+/* ── 1. דשבורד: קוביות מידע קומפקטיות (מובייל בלבד, #pg-dash בלבד) ── */
+@media(max-width:768px){
+  #pg-dash .sgrid4{grid-template-columns:repeat(3,1fr)!important;gap:7px!important;margin-bottom:12px!important}
+  #pg-dash .sgrid4 .scard{padding:9px 6px 8px!important;border-radius:12px!important;text-align:center;box-shadow:0 1px 2px rgba(30,41,59,.05)}
+  #pg-dash .sgrid4 .slbl{font-size:8.5px!important;margin-bottom:2px!important;letter-spacing:.2px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #pg-dash .sgrid4 .sval{font-size:19px!important}
+  #pg-dash .sgrid4 .ssub{display:none!important}
+}
+
+/* ── 2. Pattern Lock — סגנונות לרכיב החדש בלבד ── */
+#pattern-wrap{margin-top:2px}
+.pl-msg{font-size:11.5px;color:var(--t2);min-height:16px;margin:4px 0 8px;font-weight:700;transition:color .15s}
+.pl-msg.err{color:var(--red)}
+.pl-msg.ok{color:var(--grn)}
+.pl-alt{background:none;border:none;color:var(--t2);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;padding:7px 10px;border-radius:8px;text-decoration:underline;text-underline-offset:3px;transition:color .15s}
+.pl-alt:hover{color:var(--acc)}
+#pl-svg .pl-dot{fill:var(--b2);transition:fill .12s}
+#pl-svg .pl-dot.on{fill:var(--acc)}
+#pl-svg .pl-halo{fill:rgba(212,84,26,.13);opacity:0;transition:opacity .12s}
+#pl-svg .pl-halo.on{opacity:1}
+#pl-svg .pl-line{stroke:var(--acc);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;fill:none;opacity:.85}
+#pattern-wrap.pl-err .pl-dot.on{fill:var(--red)}
+#pattern-wrap.pl-err .pl-line{stroke:var(--red)}
+#pattern-wrap.pl-err .pl-halo.on{fill:rgba(185,28,28,.12)}
+@keyframes pl-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+#pattern-wrap.pl-err #pl-svg{animation:pl-shake .3s ease}
+body.dark-mode #pl-svg .pl-dot{fill:#48484a}
+body.dark-mode #pl-svg .pl-dot.on{fill:var(--acc)}
+</style>
 <div id="login-wrap" class="login-wrap">
   <div class="login-box">
     <div class="login-logo">👊</div>
     <div class="login-title">סוגרים <span>פינה</span></div>
     <div class="login-sub">גישה מורשית בלבד</div>
-    <input class="login-field" id="pw-in" type="password">
-    <button class="login-btn" id="login-btn">כניסה ←</button>
+    <!-- ═══ Pattern Lock v3 (mobile) — רכיב חדש, מוסתר כברירת מחדל ═══ -->
+    <div id="pattern-wrap" style="display:none">
+      <svg id="pl-svg" viewBox="0 0 240 240" width="228" height="228" style="touch-action:none;display:block;margin:0 auto;-webkit-user-select:none;user-select:none"></svg>
+      <div id="pl-msg" class="pl-msg">צייר את הסימון לכניסה</div>
+      <button type="button" class="pl-alt" id="pl-to-pw">🔑 התחבר עם סיסמה</button>
+    </div>
+    <div id="pw-mode">
+      <input class="login-field" id="pw-in" type="password">
+      <button class="login-btn" id="login-btn">כניסה ←</button>
+      <div id="pl-setup-err" style="display:none;color:var(--red);font-size:11px;margin-top:8px;font-weight:700"></div>
+      <button type="button" class="pl-alt" id="pl-setup-link" style="display:none;margin-top:6px">🔒 הגדרת סימון כניסה</button>
+    </div>
     <div id="login-loading" style="display:none;margin-top:12px;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--t2);font-size:12px">
       <div style="display:flex;align-items:center;gap:8px">
         <div class="spin" style="width:16px;height:16px;border-width:2px"></div>
@@ -8073,6 +8118,236 @@ if('serviceWorker' in navigator){
       sb.classList.remove('mob-open');
     });
     syncBnav();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════
+   Pattern Lock v3 — קוד חדש ומבודד לחלוטין.
+   חוק ברזל: לא נוגע ב-tryLogin / bootApp / Webhooks / API —
+   רק מפעיל את אותו מסלול הצלחה של הלוגין הקיים.
+═══════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var KEY='sp_pattern', MIN_DOTS=4, HIT_R=26;
+  var GRID=[40,120,200];
+  var wrap,svg,msg,pwMode,setupLink,setupErr,toPwBtn;
+  var centers=[], path=[], drawing=false;
+  var mode='login', firstDraw=null, lockUI=false;
+
+  function $(id){return document.getElementById(id);}
+  function isMobile(){return window.matchMedia('(max-width:768px)').matches;}
+  function storedPattern(){return localStorage.getItem(KEY)||'';}
+  function vib(p){try{if(navigator.vibrate)navigator.vibrate(p);}catch(e){}}
+
+  /* ── בניית ה-SVG: 9 נקודות + קווים ── */
+  function buildSvg(){
+    var ns='http://www.w3.org/2000/svg';
+    svg.innerHTML='';
+    centers=[];
+    var poly=document.createElementNS(ns,'polyline');
+    poly.setAttribute('class','pl-line');poly.setAttribute('points','');poly.id='pl-line';
+    svg.appendChild(poly);
+    var live=document.createElementNS(ns,'line');
+    live.setAttribute('class','pl-line');live.id='pl-live';live.style.display='none';
+    svg.appendChild(live);
+    for(var r=0;r<3;r++)for(var c=0;c<3;c++){
+      var i=r*3+c, x=GRID[c], y=GRID[r];
+      centers.push({x:x,y:y});
+      var halo=document.createElementNS(ns,'circle');
+      halo.setAttribute('cx',x);halo.setAttribute('cy',y);halo.setAttribute('r',22);
+      halo.setAttribute('class','pl-halo');halo.setAttribute('data-i',i);
+      svg.appendChild(halo);
+      var dot=document.createElementNS(ns,'circle');
+      dot.setAttribute('cx',x);dot.setAttribute('cy',y);dot.setAttribute('r',7);
+      dot.setAttribute('class','pl-dot');dot.setAttribute('data-i',i);
+      svg.appendChild(dot);
+    }
+  }
+
+  function svgPoint(ev){
+    var rect=svg.getBoundingClientRect();
+    var scale=240/rect.width;
+    return {x:(ev.clientX-rect.left)*scale, y:(ev.clientY-rect.top)*scale};
+  }
+  function hitTest(p){
+    for(var i=0;i<9;i++){
+      var dx=p.x-centers[i].x, dy=p.y-centers[i].y;
+      if(dx*dx+dy*dy<=HIT_R*HIT_R) return i;
+    }
+    return -1;
+  }
+  function markDot(i,on){
+    var d=svg.querySelector('.pl-dot[data-i="'+i+'"]');
+    var h=svg.querySelector('.pl-halo[data-i="'+i+'"]');
+    if(d)d.classList.toggle('on',on);
+    if(h)h.classList.toggle('on',on);
+  }
+  function redrawPoly(){
+    var pts=path.map(function(i){return centers[i].x+','+centers[i].y;}).join(' ');
+    $('pl-line').setAttribute('points',pts);
+  }
+  function pushDot(i){
+    path.push(i);markDot(i,true);redrawPoly();vib(10);
+  }
+  function addDot(i){
+    if(path.indexOf(i)>=0)return;
+    if(path.length){
+      /* התנהגות אנדרואיד: מעבר מעל נקודה באמצע — נכללת אוטומטית */
+      var a=path[path.length-1];
+      var r1=Math.floor(a/3),c1=a%3,r2=Math.floor(i/3),c2=i%3;
+      if((r1+r2)%2===0&&(c1+c2)%2===0){
+        var m=((r1+r2)/2)*3+(c1+c2)/2;
+        if(m!==a&&m!==i&&path.indexOf(m)<0)pushDot(m);
+      }
+    }
+    pushDot(i);
+  }
+  function resetPath(){
+    path=[];drawing=false;
+    for(var i=0;i<9;i++)markDot(i,false);
+    var l=$('pl-line');if(l)l.setAttribute('points','');
+    var lv=$('pl-live');if(lv)lv.style.display='none';
+  }
+  function setMsg(t,cls){
+    msg.textContent=t||'';
+    msg.className='pl-msg'+(cls?' '+cls:'');
+  }
+
+  /* ── מעברי תצוגה ── */
+  function showPattern(){
+    wrap.style.display='block';pwMode.style.display='none';
+    setupErr.style.display='none';
+  }
+  function showPassword(){
+    wrap.style.display='none';pwMode.style.display='block';
+    mode='login';firstDraw=null;resetPath();
+    updateSetupLabel();
+  }
+  function updateSetupLabel(){
+    setupLink.textContent=storedPattern()?'🔒 שינוי סימון כניסה':'🔒 הגדרת סימון כניסה';
+  }
+
+  /* ── מסלול הצלחה — זהה למסלול של tryLogin הקיים ── */
+  function loginSuccess(){
+    lockUI=true;
+    sessionStorage.setItem('sp_auth','1');
+    setMsg('טוען...','ok');
+    var ld=$('login-loading');if(ld)ld.style.display='flex';
+    setTimeout(function(){
+      $('login-wrap').style.display='none';
+      $('app').style.display='block';
+      if(typeof bootApp==='function')bootApp();
+    },120);
+  }
+  function patternError(t){
+    lockUI=true;
+    wrap.classList.add('pl-err');
+    setMsg(t,'err');vib([30,40,30]);
+    setTimeout(function(){
+      wrap.classList.remove('pl-err');
+      resetPath();lockUI=false;
+      setMsg(mode==='login'?'צייר את הסימון לכניסה':'צייר סימון חדש (לפחות '+MIN_DOTS+' נקודות)');
+    },650);
+  }
+
+  /* ── סיום ציור: אימות / הגדרה ── */
+  function finishDraw(){
+    if(!path.length)return;
+    var key=path.join('-');
+    if(mode==='login'){
+      if(key===storedPattern())loginSuccess();
+      else patternError('סימון שגוי — נסה שוב');
+    }else if(mode==='setup1'){
+      if(path.length<MIN_DOTS){patternError('נדרשות לפחות '+MIN_DOTS+' נקודות');return;}
+      firstDraw=key;mode='setup2';
+      setMsg('מעולה! צייר שוב לאישור','ok');
+      setTimeout(resetPath,350);
+    }else if(mode==='setup2'){
+      if(key===firstDraw){
+        localStorage.setItem(KEY,key);
+        setMsg('הסימון נשמר ✔','ok');
+        mode='login';firstDraw=null;updateSetupLabel();
+        setTimeout(function(){resetPath();setMsg('צייר את הסימון לכניסה');},900);
+      }else{
+        mode='setup1';firstDraw=null;
+        patternError('הסימונים לא תואמים — נתחיל שוב');
+      }
+    }
+  }
+
+  /* ── Touch/Pointer: חלק בסמארטפון, בלי לגרור את המסך ── */
+  function onDown(ev){
+    if(lockUI)return;
+    ev.preventDefault();
+    drawing=true;resetPath();drawing=true;
+    var i=hitTest(svgPoint(ev));
+    if(i>=0)addDot(i);
+  }
+  function onMove(ev){
+    if(!drawing||lockUI)return;
+    ev.preventDefault();
+    var p=svgPoint(ev);
+    var i=hitTest(p);
+    if(i>=0)addDot(i);
+    if(path.length){
+      var lv=$('pl-live'),last=centers[path[path.length-1]];
+      lv.setAttribute('x1',last.x);lv.setAttribute('y1',last.y);
+      lv.setAttribute('x2',p.x);lv.setAttribute('y2',p.y);
+      lv.style.display='block';
+    }
+  }
+  function onUp(){
+    if(!drawing||lockUI){drawing=false;return;}
+    drawing=false;
+    var lv=$('pl-live');if(lv)lv.style.display='none';
+    finishDraw();
+  }
+
+  /* ── הגדרת סימון: דורשת אימות סיסמה קודם ── */
+  function startSetup(){
+    var pw=$('pw-in').value;
+    var st=localStorage.getItem('sp_pw')||'sogrim2024';
+    if(pw!==st){
+      setupErr.textContent='להגדרת סימון — הקלד קודם את הסיסמה הנוכחית בשדה למעלה';
+      setupErr.style.display='block';
+      setTimeout(function(){setupErr.style.display='none';},3000);
+      return;
+    }
+    $('pw-in').value='';
+    mode='setup1';firstDraw=null;resetPath();
+    showPattern();
+    setMsg('צייר סימון חדש (לפחות '+MIN_DOTS+' נקודות)');
+  }
+
+  function init(){
+    wrap=$('pattern-wrap');svg=$('pl-svg');msg=$('pl-msg');
+    pwMode=$('pw-mode');setupLink=$('pl-setup-link');
+    setupErr=$('pl-setup-err');toPwBtn=$('pl-to-pw');
+    if(!wrap||!svg||!pwMode)return;
+    buildSvg();
+
+    svg.addEventListener('pointerdown',onDown);
+    window.addEventListener('pointermove',onMove,{passive:false});
+    window.addEventListener('pointerup',onUp);
+    window.addEventListener('pointercancel',onUp);
+    /* חגורת ביטחון נגד גלילת דף בזמן ציור */
+    svg.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+
+    toPwBtn.addEventListener('click',showPassword);
+    setupLink.addEventListener('click',startSetup);
+
+    /* מובייל בלבד: הצגת קישור ההגדרה + ברירת מחדל של סימון אם קיים */
+    if(isMobile()){
+      setupLink.style.display='block';
+      updateSetupLabel();
+      if(storedPattern()&&!sessionStorage.getItem('sp_auth')){
+        showPattern();
+        setMsg('צייר את הסימון לכניסה');
+      }
+    }
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);
   else init();

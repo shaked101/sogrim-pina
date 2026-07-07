@@ -6,7 +6,7 @@
    עוברת ישירות לרשת ללא שום תיווך או קאשינג.
 ═══════════════════════════════════════════════════════════ */
 
-const SW_VERSION = 'sogrim-pina-v2'; // v2: Mobile UI Overhaul — אין שינוי לוגיקה, רק סימון גרסה
+const SW_VERSION = 'sogrim-pina-v2';
 
 // התקנה — נכנס לפעולה מיד, בלי להמתין לסגירת טאבים ישנים
 self.addEventListener('install', (event) => {
