@@ -1,12 +1,12 @@
 /* ═══════════════════════════════════════════════════════════
-   Sogrim Pina — Service Worker (PWA v1)
+   Sogrim Pina — Service Worker (PWA v2)
    מטרה: רישום בסיסי שמאפשר לדפדפן להציע "Add to Home Screen".
    חוק ברזל: ה-SW לא נוגע בשום בקשת POST / Webhook / API —
    כל התעבורה ל-Make, Google Sheets, Cloudinary וטלגרם
    עוברת ישירות לרשת ללא שום תיווך או קאשינג.
 ═══════════════════════════════════════════════════════════ */
 
-const SW_VERSION = 'sogrim-pina-v1';
+const SW_VERSION = 'sogrim-pina-v2'; // v2: Mobile UI Overhaul — אין שינוי לוגיקה, רק סימון גרסה
 
 // התקנה — נכנס לפעולה מיד, בלי להמתין לסגירת טאבים ישנים
 self.addEventListener('install', (event) => {
