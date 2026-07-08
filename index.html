@@ -870,18 +870,18 @@ body.dark-mode .gsearch-drop-img{background:#3a3a3c}
 .pl-msg.ok{color:var(--grn)}
 .pl-alt{background:none;border:none;color:var(--t2);font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;padding:7px 10px;border-radius:8px;text-decoration:underline;text-underline-offset:3px;transition:color .15s}
 .pl-alt:hover{color:var(--acc)}
-#pl-svg .pl-dot{fill:var(--b2);transition:fill .12s}
-#pl-svg .pl-dot.on{fill:var(--acc)}
-#pl-svg .pl-halo{fill:rgba(212,84,26,.13);opacity:0;transition:opacity .12s}
-#pl-svg .pl-halo.on{opacity:1}
-#pl-svg .pl-line{stroke:var(--acc);stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;fill:none;opacity:.85}
-#pattern-wrap.pl-err .pl-dot.on{fill:var(--red)}
-#pattern-wrap.pl-err .pl-line{stroke:var(--red)}
-#pattern-wrap.pl-err .pl-halo.on{fill:rgba(185,28,28,.12)}
+#pl-svg .pl-dot,#ps-svg .pl-dot{fill:var(--b2);transition:fill .12s}
+#pl-svg .pl-dot.on,#ps-svg .pl-dot.on{fill:var(--acc)}
+#pl-svg .pl-halo,#ps-svg .pl-halo{fill:rgba(212,84,26,.13);opacity:0;transition:opacity .12s}
+#pl-svg .pl-halo.on,#ps-svg .pl-halo.on{opacity:1}
+#pl-svg .pl-line,#ps-svg .pl-line{stroke:var(--acc);stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;fill:none;opacity:.85}
+#pattern-wrap.pl-err .pl-dot.on,#ps-wrap.pl-err .pl-dot.on{fill:var(--red)}
+#pattern-wrap.pl-err .pl-line,#ps-wrap.pl-err .pl-line{stroke:var(--red)}
+#pattern-wrap.pl-err .pl-halo.on,#ps-wrap.pl-err .pl-halo.on{fill:rgba(185,28,28,.12)}
 @keyframes pl-shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
-#pattern-wrap.pl-err #pl-svg{animation:pl-shake .3s ease}
-body.dark-mode #pl-svg .pl-dot{fill:#48484a}
-body.dark-mode #pl-svg .pl-dot.on{fill:var(--acc)}
+#pattern-wrap.pl-err #pl-svg,#ps-wrap.pl-err #ps-svg{animation:pl-shake .3s ease}
+body.dark-mode #pl-svg .pl-dot,body.dark-mode #ps-svg .pl-dot{fill:#48484a}
+body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--acc)}
 </style>
 <div id="login-wrap" class="login-wrap">
   <div class="login-box">
@@ -1392,6 +1392,22 @@ body.dark-mode #pl-svg .pl-dot.on{fill:var(--acc)}
             <div class="fg" style="margin-bottom:8px"><label>נוכחית</label><input class="ifield" id="s-oldpw" type="password"></div>
             <div class="fg" style="margin-bottom:13px"><label>חדשה (מינ 6)</label><input class="ifield" id="s-newpw" type="password"></div>
             <button class="btn full" id="change-pw-btn">🔑 שנה</button>
+          </div>
+          <div class="cfcard">
+            <h3>🔓 סימון רץ (Pattern Lock)</h3>
+            <div class="ibox" style="font-size:11px">כניסה מהירה במסך ההתחברות במובייל באמצעות ציור סימון על רשת 4x4. הסימון נשמר במכשיר זה בלבד.</div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:13px">
+              <svg viewBox="0 0 60 60" width="46" height="46" aria-hidden="true" style="flex:0 0 auto">
+                <polyline points="7.5,7.5 22.5,22.5 37.5,37.5 52.5,52.5" fill="none" stroke="var(--acc)" stroke-width="2.5" stroke-linecap="round" opacity=".8"/>
+                <circle cx="22.5" cy="7.5" r="3" fill="var(--b2)"/><circle cx="37.5" cy="7.5" r="3" fill="var(--b2)"/><circle cx="52.5" cy="7.5" r="3" fill="var(--b2)"/>
+                <circle cx="7.5" cy="22.5" r="3" fill="var(--b2)"/><circle cx="37.5" cy="22.5" r="3" fill="var(--b2)"/><circle cx="52.5" cy="22.5" r="3" fill="var(--b2)"/>
+                <circle cx="7.5" cy="37.5" r="3" fill="var(--b2)"/><circle cx="22.5" cy="37.5" r="3" fill="var(--b2)"/><circle cx="52.5" cy="37.5" r="3" fill="var(--b2)"/>
+                <circle cx="7.5" cy="52.5" r="3" fill="var(--b2)"/><circle cx="22.5" cy="52.5" r="3" fill="var(--b2)"/><circle cx="37.5" cy="52.5" r="3" fill="var(--b2)"/>
+                <circle cx="7.5" cy="7.5" r="3.5" fill="var(--acc)"/><circle cx="22.5" cy="22.5" r="3.5" fill="var(--acc)"/><circle cx="37.5" cy="37.5" r="3.5" fill="var(--acc)"/><circle cx="52.5" cy="52.5" r="3.5" fill="var(--acc)"/>
+              </svg>
+              <div style="font-size:12px;font-weight:700;color:var(--t2)" id="s-pattern-status">—</div>
+            </div>
+            <button class="btn full" id="s-pattern-btn" onclick="openPatternSetupModal()">✏️ הגדר / שנה סימון</button>
           </div>
           <div class="cfcard">
             <h3>🤖 Make Webhooks</h3>
@@ -8457,6 +8473,146 @@ if('serviceWorker' in navigator){
     setMsg('צייר סימון חדש (לפחות '+MIN_DOTS+' נקודות)');
   }
 
+  /* ══ UX-R3: הגדרת סימון מתוך לשונית "הגדרות" ═══════════════════
+     מודאל עצמאי עם רשת 4x4 משלו (ps-*) — אפס נגיעה במופע ההתחברות
+     ובאף לוגיקת רשת/API. שמירה: sp_pattern בלבד בפורמט v4:.
+     ה-Vault הסודי (sp_secret_vault) לעולם לא נדרס — הוא נזרע מהסוד
+     של הסשן הנוכחי אך ורק אם אינו קיים כלל. */
+  var psPath=[], psCenters=[], psDrawing=false, psLock=false, psStage=1, psFirst=null;
+
+  function _psSvg(){return document.getElementById('ps-svg');}
+  function _psSetMsg(t,cls){var m=document.getElementById('ps-msg');if(m){m.textContent=t||'';m.className='pl-msg'+(cls?' '+cls:'');}}
+  function _psBuild(){
+    var s=_psSvg(); if(!s)return;
+    var ns='http://www.w3.org/2000/svg';
+    s.innerHTML=''; psCenters=[]; psPath=[]; psDrawing=false; psLock=false;
+    var poly=document.createElementNS(ns,'polyline');
+    poly.setAttribute('class','pl-line');poly.setAttribute('points','');poly.id='ps-line';
+    s.appendChild(poly);
+    var live=document.createElementNS(ns,'line');
+    live.setAttribute('class','pl-line');live.id='ps-live';live.style.display='none';
+    s.appendChild(live);
+    for(var r=0;r<N;r++)for(var c=0;c<N;c++){
+      var i=r*N+c, x=GRID[c], y=GRID[r];
+      psCenters.push({x:x,y:y});
+      var halo=document.createElementNS(ns,'circle');
+      halo.setAttribute('cx',x);halo.setAttribute('cy',y);halo.setAttribute('r',18);
+      halo.setAttribute('class','pl-halo');halo.setAttribute('data-i',i);
+      s.appendChild(halo);
+      var dot=document.createElementNS(ns,'circle');
+      dot.setAttribute('cx',x);dot.setAttribute('cy',y);dot.setAttribute('r',6.5);
+      dot.setAttribute('class','pl-dot');dot.setAttribute('data-i',i);
+      s.appendChild(dot);
+    }
+  }
+  function _psPoint(ev){var s=_psSvg(),rect=s.getBoundingClientRect(),sc=240/rect.width;return {x:(ev.clientX-rect.left)*sc, y:(ev.clientY-rect.top)*sc};}
+  function _psHit(p){for(var i=0;i<DOTS;i++){var dx=p.x-psCenters[i].x,dy=p.y-psCenters[i].y;if(dx*dx+dy*dy<=HIT_R*HIT_R)return i;}return -1;}
+  function _psMark(i,on){var s=_psSvg();if(!s)return;var d=s.querySelector('.pl-dot[data-i="'+i+'"]'),h=s.querySelector('.pl-halo[data-i="'+i+'"]');if(d)d.classList.toggle('on',on);if(h)h.classList.toggle('on',on);}
+  function _psRedraw(){var l=document.getElementById('ps-line');if(l)l.setAttribute('points',psPath.map(function(i){return psCenters[i].x+','+psCenters[i].y;}).join(' '));}
+  function _psPush(i){psPath.push(i);_psMark(i,true);_psRedraw();vib(10);}
+  function _psAdd(i){
+    if(psPath.indexOf(i)>=0)return;
+    if(psPath.length){
+      /* אותה הכללת GCD של נקודות ביניים כמו במופע ההתחברות */
+      var a=psPath[psPath.length-1];
+      var r1=Math.floor(a/N),c1=a%N,r2=Math.floor(i/N),c2=i%N;
+      var dr=r2-r1,dc=c2-c1,g=_gcd(Math.abs(dr),Math.abs(dc));
+      if(g>1){var sr=dr/g,sc=dc/g;for(var st=1;st<g;st++){var m=(r1+sr*st)*N+(c1+sc*st);if(m!==a&&m!==i&&psPath.indexOf(m)<0)_psPush(m);}}
+    }
+    _psPush(i);
+  }
+  function _psReset(){
+    psPath=[];psDrawing=false;
+    for(var i=0;i<DOTS;i++)_psMark(i,false);
+    var l=document.getElementById('ps-line');if(l)l.setAttribute('points','');
+    var lv=document.getElementById('ps-live');if(lv)lv.style.display='none';
+  }
+  function _psError(t){
+    psLock=true;
+    var w=document.getElementById('ps-wrap');if(w)w.classList.add('pl-err');
+    _psSetMsg(t,'err');vib([30,40,30]);
+    setTimeout(function(){
+      var w2=document.getElementById('ps-wrap');if(w2)w2.classList.remove('pl-err');
+      _psReset();psLock=false;
+      _psSetMsg(psStage===1?'צייר סימון חדש (לפחות '+MIN_DOTS+' נקודות)':'צייר שוב לאישור');
+    },650);
+  }
+  function _psFinish(){
+    if(!psPath.length)return;
+    var key=psPath.join('-');
+    if(psStage===1){
+      if(psPath.length<MIN_DOTS){_psError('נדרשות לפחות '+MIN_DOTS+' נקודות');return;}
+      psFirst=key;psStage=2;
+      _psSetMsg('מעולה! צייר שוב לאישור','ok');
+      setTimeout(_psReset,350);
+    }else{
+      if(key===psFirst){
+        localStorage.setItem(KEY,PAT_VER+key);
+        /* זריעת ה-vault מהסוד של הסשן — אך ורק אם ה-vault חסר לגמרי.
+           vault קיים לעולם אינו נדרס. */
+        if(!localStorage.getItem('sp_secret_vault')){
+          var cur=sessionStorage.getItem('sp_secret')||'';
+          if(cur)localStorage.setItem('sp_secret_vault',cur);
+        }
+        _psSetMsg('הסימון נשמר ✔','ok');
+        try{toast('✅ סימון הכניסה עודכן!','ok');}catch(e){}
+        if(setupLink)updateSetupLabel();
+        _updatePatternStatus();
+        setTimeout(function(){if(typeof closeModal==='function')closeModal();},900);
+      }else{
+        psStage=1;psFirst=null;
+        _psError('הסימונים לא תואמים — נתחיל שוב');
+      }
+    }
+  }
+  /* מאזינים גלובליים משותפים — פעילים רק כשה-SVG של המודאל קיים בדף */
+  function _psDown(ev){
+    if(psLock||!_psSvg())return;
+    if(!(ev.target&&ev.target.closest&&ev.target.closest('#ps-svg')))return;
+    ev.preventDefault();
+    psDrawing=true;_psReset();psDrawing=true;
+    var i=_psHit(_psPoint(ev));
+    if(i>=0)_psAdd(i);
+  }
+  function _psMove(ev){
+    if(!psDrawing||psLock||!_psSvg())return;
+    ev.preventDefault();
+    var p=_psPoint(ev),i=_psHit(p);
+    if(i>=0)_psAdd(i);
+    if(psPath.length){
+      var lv=document.getElementById('ps-live'),last=psCenters[psPath[psPath.length-1]];
+      if(lv){lv.setAttribute('x1',last.x);lv.setAttribute('y1',last.y);lv.setAttribute('x2',p.x);lv.setAttribute('y2',p.y);lv.style.display='block';}
+    }
+  }
+  function _psUp(){
+    if(!psDrawing||psLock){psDrawing=false;return;}
+    psDrawing=false;
+    var lv=document.getElementById('ps-live');if(lv)lv.style.display='none';
+    if(_psSvg())_psFinish();
+  }
+  function _updatePatternStatus(){
+    var el=document.getElementById('s-pattern-status');
+    if(el)el.textContent=storedPattern()?'✅ סימון מוגדר במכשיר זה':'⚪ טרם הוגדר סימון במכשיר זה';
+  }
+  window.openPatternSetupModal=function(){
+    if(typeof openModal!=='function')return;
+    psStage=1;psFirst=null;psLock=false;psDrawing=false;
+    openModal('🔓 סימון רץ (Pattern Lock)',
+      '<div id="ps-wrap" style="text-align:center">'
+      +'<div class="ibox" style="font-size:11px;text-align:right">צייר סימון על רשת ה-4x4 (לפחות '+MIN_DOTS+' נקודות), ואז צייר שוב לאישור. הסימון נשמר במכשיר זה בלבד ומחליף את הקיים.</div>'
+      +'<svg id="ps-svg" viewBox="0 0 240 240" style="width:240px;max-width:100%;height:auto;touch-action:none;display:block;margin:6px auto 0;-webkit-user-select:none;user-select:none"></svg>'
+      +'<div id="ps-msg" class="pl-msg" style="margin-top:8px"></div>'
+      +'</div>',
+      '<button class="btn sec" onclick="closeModal()">סגור</button>'
+      +'<button class="btn sec" onclick="window._psRestart()">↺ התחל מחדש</button>');
+    _psBuild();
+    _psSetMsg('צייר סימון חדש (לפחות '+MIN_DOTS+' נקודות)');
+    var s=_psSvg();
+    /* חגורת ביטחון נגד גלילת דף בזמן ציור (המאזין נאסף עם האלמנט בסגירה) */
+    if(s)s.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+  };
+  window._psRestart=function(){psStage=1;psFirst=null;psLock=false;_psReset();_psSetMsg('צייר סימון חדש (לפחות '+MIN_DOTS+' נקודות)');};
+
   function init(){
     wrap=$('pattern-wrap');svg=$('pl-svg');msg=$('pl-msg');
     pwMode=$('pw-mode');setupLink=$('pl-setup-link');
@@ -8478,6 +8634,14 @@ if('serviceWorker' in navigator){
 
     toPwBtn.addEventListener('click',showPassword);
     setupLink.addEventListener('click',startSetup);
+
+    /* UX-R3: מאזינים למודאל הגדרת הסימון מ"הגדרות" —
+       רשומים פעם אחת, פעילים רק כש-#ps-svg קיים בדף. */
+    document.addEventListener('pointerdown',_psDown);
+    window.addEventListener('pointermove',_psMove,{passive:false});
+    window.addEventListener('pointerup',_psUp);
+    window.addEventListener('pointercancel',_psUp);
+    _updatePatternStatus();
 
     /* מובייל בלבד: הצגת קישור ההגדרה + ברירת מחדל של סימון אם קיים */
     if(isMobile()){
