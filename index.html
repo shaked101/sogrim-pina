@@ -46,6 +46,17 @@ body.dark-mode .main{background:#1c1c1e!important}
 .pt{font-size:18px;font-weight:900;letter-spacing:-.5px;color:var(--tx)}
 .ps{font-size:11px;color:var(--t2);margin-top:2px}
 .pacts{display:flex;gap:6px;flex-wrap:wrap}
+/* ── UX-R1: כפתורי פעולה קומפקטיים (אייקון בלבד) בכותרת עמוד ──
+   .icon-act — כפתור ריבועי קטן ועדין; .pacts-icons — קונטיינר שמנטרל
+   את חוקי המובייל הקיימים (grid / width:100%) עבור כפתורי האייקון בלבד. */
+.icon-act{width:36px;height:36px;min-height:36px;padding:0;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;flex:0 0 auto}
+.pacts-icons{display:flex!important;grid-template-columns:none!important;align-items:center;gap:8px}
+.pacts-icons .btn.icon-act{flex:0 0 auto!important;width:36px!important;height:36px;min-height:36px!important;padding:0!important;font-size:16px;justify-content:center}
+.pacts-icons .btn:not(.icon-act){flex:1 1 auto}
+@media(max-width:768px){
+  .pacts-icons{justify-content:flex-start}
+  .pacts-icons .btn.icon-act{width:42px!important;height:42px;min-height:42px!important;font-size:18px}
+}
 .np-pill{padding:5px 12px;border-radius:20px;border:1.5px solid var(--acc);background:transparent;color:var(--acc);font-size:12px;font-weight:800;cursor:pointer;transition:all .13s;font-family:inherit}
 .np-pill:hover,.np-pill.active{background:var(--acc);color:#fff}
 textarea.sinput{height:auto}
@@ -1103,9 +1114,9 @@ body.dark-mode #pl-svg .pl-dot.on{fill:var(--acc)}
       <div class="pg" id="pg-posts">
         <div class="ph">
           <div><div class="pt">ניהול פוסטים</div><div class="ps">לחץ 👁 לצפייה · ✏️ לעריכה · 📋 להעתקה לפייסבוק</div></div>
-          <div class="pacts">
-            <button class="btn sec" id="export-btn">⬇️ CSV</button>
-            <button class="btn" id="refresh-posts-btn">🔄 רענן</button>
+          <div class="pacts pacts-icons">
+            <button class="btn sec icon-act" id="export-btn" title="ייצוא ל-CSV (Excel)" aria-label="ייצוא ל-CSV">📗</button>
+            <button class="btn sec icon-act" id="refresh-posts-btn" title="רענון נתונים" aria-label="רענון נתונים">🔄</button>
             <button class="btn" id="bulk-delete-btn" style="background:var(--red);display:none" onclick="bulkDeleteProducts()">🗑️ מחק מסומנים (<span id="bulk-count">0</span>)</button>
           </div>
         </div>
@@ -2302,8 +2313,13 @@ function openImageLightbox(src){
 // ════════════════════════════════════════════════
 function tryLogin(){
   const pw=document.getElementById('pw-in').value;
-  const stored=localStorage.getItem('sp_pw')||'sogrim2024';
-  if(pw===stored){
+  /* v-SEC3 (L1): הוסרה סיסמת ברירת המחדל הקשיחה מהקוד.
+     מקור האמת המקומי: הסיסמה ששונתה בהגדרות (sp_pw) או ה-Vault של הסימון.
+     במכשיר חדש (אין sp_pw ואין vault) — הסיסמה שהוקלדה מתקבלת ונשלחת
+     כ-X-App-Secret; השרת (APP_SECRET_TOKEN ב-Vercel) הוא המאמת הסופי,
+     וסיסמה שגויה תחזיר 401 מכל קריאת API. */
+  const stored=localStorage.getItem('sp_pw')||localStorage.getItem('sp_secret_vault');
+  if(pw && (!stored || pw===stored)){
     sessionStorage.setItem('sp_auth','1');
     // v-SEC2: הסוד שהוזן = ה-Token שנשלח ל-API (חייב להיות זהה ל-APP_SECRET_TOKEN ב-Vercel)
     sessionStorage.setItem('sp_secret', pw);
@@ -7900,7 +7916,10 @@ document.addEventListener('DOMContentLoaded',function(){
   });
   on('change-pw-btn','click',function(){
     const o=gv('s-oldpw'),n=gv('s-newpw');
-    if(o!==(localStorage.getItem('sp_pw')||'sogrim2024')){toast('סיסמה נוכחית שגויה','err');return;}
+    /* v-SEC3 (L1): ללא Fallback קשיח — הסיסמה הנוכחית היא sp_pw,
+       ואם טרם הוגדרה מקומית: הסוד שאיתו המשתמש מחובר כרגע (sp_secret). */
+    const curPw=localStorage.getItem('sp_pw')||sessionStorage.getItem('sp_secret')||'';
+    if(!curPw||o!==curPw){toast('סיסמה נוכחית שגויה','err');return;}
     if(n.length<6){toast('הסיסמה קצרה','err');return;}
     localStorage.setItem('sp_pw',n);
     // v-SEC2: הסיסמה = ה-Token. עדכון הסוד המקומי + ה-vault, והתראה לעדכן את Vercel
@@ -8108,6 +8127,47 @@ document.addEventListener('DOMContentLoaded',function(){
       if(e.key==='ArrowLeft'  && idx > 0)             _reloadViewForm(list[idx-1].row);
     }
   });
+
+  // ── UX-R1: ניווט מחוות החלקה (Swipe) בפופ-אפ צפייה/עריכה ──────────
+  // RTL: החלקה ימינה = המוצר הקודם, החלקה שמאלה = המוצר הבא.
+  // תנאי הפעלה: מודאל פתוח + סרגל ניווט קיים (view-nav-bar / edit-nav-bar).
+  // הגנות: Threshold אופקי של 60px, ודרישה שהתנועה האופקית גדולה פי 1.5
+  // מהאנכית — כך גלילה למעלה/למטה בתוך המודאל לא מפעילה ניווט בטעות.
+  // מאזינים פסיביים בלבד — אפס פגיעה בגלילה או בביצועים.
+  (function(){
+    var sx=0, sy=0, tracking=false;
+    var SWIPE_MIN_X=60, SWIPE_XY_RATIO=1.5;
+    function _activeSwipeNav(){
+      var modalRoot=document.getElementById('modal-root');
+      if(!modalRoot||modalRoot.style.display==='none') return null;
+      if(document.getElementById('edit-nav-bar')) return 'edit';
+      if(document.getElementById('view-nav-bar')) return 'view';
+      return null;
+    }
+    document.addEventListener('touchstart',function(e){
+      tracking=false;
+      if(!_activeSwipeNav()) return;
+      var t=e.target;
+      // לא מתחילים מעקב מתוך שדות קלט — מניעת התנגשות עם בחירת טקסט
+      if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable)) return;
+      var tp=e.changedTouches&&e.changedTouches[0]; if(!tp) return;
+      sx=tp.clientX; sy=tp.clientY; tracking=true;
+    },{passive:true});
+    document.addEventListener('touchend',function(e){
+      if(!tracking) return; tracking=false;
+      var which=_activeSwipeNav(); if(!which) return;
+      var tp=e.changedTouches&&e.changedTouches[0]; if(!tp) return;
+      var dx=tp.clientX-sx, dy=tp.clientY-sy;
+      if(Math.abs(dx)<SWIPE_MIN_X) return;                 // תנועה קצרה מדי — לא החלקה
+      if(Math.abs(dx)<Math.abs(dy)*SWIPE_XY_RATIO) return; // תנועה אנכית בעיקרה — גלילה
+      var state=(which==='edit')?editNavState:viewNavState;
+      var go=(which==='edit')?_reloadEditForm:_reloadViewForm;
+      var list=state.list, idx=state.idx;
+      if(!list||list.length<2||idx<0) return;
+      if(dx>0 && idx>0)                  go(list[idx-1].row); // החלקה ימינה → הקודם
+      else if(dx<0 && idx<list.length-1) go(list[idx+1].row); // החלקה שמאלה → הבא
+    },{passive:true});
+  })();
 
   // ── INIT ───────────────────────────────────────
   if(sessionStorage.getItem('sp_auth')){
@@ -8359,8 +8419,11 @@ if('serviceWorker' in navigator){
   /* ── הגדרת סימון: דורשת אימות סיסמה קודם ── */
   function startSetup(){
     var pw=$('pw-in').value;
-    var st=localStorage.getItem('sp_pw')||'sogrim2024';
-    if(pw!==st){
+    /* v-SEC3 (L1): ללא סיסמת ברירת מחדל בקוד. אימות מול sp_pw או ה-vault
+       הקיים; במכשיר חדש (אין אף אחד מהם) — הסיסמה שהוקלדה נזרעת ל-vault
+       והשרת יאמת אותה (401 אם שגויה) בקריאת ה-API הראשונה. */
+    var st=localStorage.getItem('sp_pw')||localStorage.getItem('sp_secret_vault')||'';
+    if(!pw||(st&&pw!==st)){
       setupErr.textContent='להגדרת סימון — הקלד קודם את הסיסמה הנוכחית בשדה למעלה';
       setupErr.style.display='block';
       setTimeout(function(){setupErr.style.display='none';},3000);
