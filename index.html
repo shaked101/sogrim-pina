@@ -1855,6 +1855,28 @@ const REFERRAL_GOAL = 7; // מספר הפניות לזכאות לפרס
 // ════════════════════════════════════════════════
 const POSTS_GAS_URL_DEFAULT = '/api/posts'; // v-SEC1: proxied via Vercel Serverless (env: GOOGLE_SCRIPT_POSTS_URL)
 
+/* ═══════════════════════════════════════════════════════════
+   v-SEC2 — API auth wrapper
+   כל קריאה אל /api/* עוברת דרך apiFetch, שמזריק את ה-Secret
+   (הסיסמה/הסימון שהוזן) בכותרת X-App-Secret. הפרוקסי ב-Vercel
+   משווה אותו מול APP_SECRET_TOKEN ומחזיר 401 אם אין התאמה.
+   הסוד נשמר ב-sessionStorage בלבד (נמחק בהתנתקות/סגירת טאב).
+═══════════════════════════════════════════════════════════ */
+const _origFetch = window.fetch.bind(window);
+let _sec401Warned = false;
+async function apiFetch(url, opts){
+  opts = opts || {};
+  const headers = Object.assign({}, opts.headers || {});
+  headers['X-App-Secret'] = sessionStorage.getItem('sp_secret') || '';
+  const resp = await _origFetch(url, Object.assign({}, opts, { headers }));
+  if(resp.status === 401 && !_sec401Warned){
+    _sec401Warned = true;
+    try{ toast('🔒 אימות נכשל (401) — התחבר מחדש או ודא ש-APP_SECRET_TOKEN תואם לסיסמה','err'); }catch(e){}
+    setTimeout(function(){ _sec401Warned = false; }, 5000);
+  }
+  return resp;
+}
+
 // ════════════════════════════════════════════════
 // STATE — v53: followers loaded async from cloud in bootApp
 // ════════════════════════════════════════════════
@@ -1903,7 +1925,7 @@ let G={
 // ── Helper: POST to community GAS ───────────────
 async function _cloudPost(payload){
   try{
-    var resp=await fetch(COMMUNITY_GAS_URL,{
+    var resp=await apiFetch(COMMUNITY_GAS_URL,{
       method:'POST',mode:'cors',redirect:'follow',
       headers:{'Accept':'application/json','Content-Type':'application/x-www-form-urlencoded'},
       body:'payload='+encodeURIComponent(JSON.stringify(payload))
@@ -1922,7 +1944,7 @@ async function _cloudGet(action,extra){
   var qs='?action='+action+'&_t='+Date.now();
   if(extra)for(var k in extra)qs+='&'+k+'='+encodeURIComponent(extra[k]);
   try{
-    var resp=await fetch(COMMUNITY_GAS_URL+qs,{
+    var resp=await apiFetch(COMMUNITY_GAS_URL+qs,{
       method:'GET',mode:'cors',redirect:'follow',
       headers:{'Accept':'application/json'}
     });
@@ -2283,6 +2305,9 @@ function tryLogin(){
   const stored=localStorage.getItem('sp_pw')||'sogrim2024';
   if(pw===stored){
     sessionStorage.setItem('sp_auth','1');
+    // v-SEC2: הסוד שהוזן = ה-Token שנשלח ל-API (חייב להיות זהה ל-APP_SECRET_TOKEN ב-Vercel)
+    sessionStorage.setItem('sp_secret', pw);
+    if(localStorage.getItem('sp_pattern')) localStorage.setItem('sp_secret_vault', pw);
     // Fix 1: show loading state immediately
     const btn=document.getElementById('login-btn');
     btn.textContent='טוען...';btn.disabled=true;
@@ -2357,7 +2382,7 @@ async function loadData(){
   //   ✅ Accept header only  — simple request, no preflight
   //   ✅ _t= query param     — cache-bust WITHOUT headers (key insight)
   //   ❌ cache:'no-store'   — REMOVED: adds Cache-Control header → preflight → blocked
-  const r = await fetch(url, {
+  const r = await apiFetch(url, {
     method:   'GET',
     mode:     'cors',
     redirect: 'follow',
@@ -2433,17 +2458,26 @@ function _dmAdd(num,bucket,post){
   if(!_dmSets[num].has(post)){_dmSets[num].add(post);G.dateMap[num].all.push(post);}
 }
 
-// writeSheet — uses getPostsUrl() so it works even when localStorage is empty
+// writeSheet — v-SEC2: cors + בדיקת תשובה אמיתית (אין יותר optimistic no-cors)
 async function writeSheet(rowNum,updates){
   const url=getPostsUrl();
   if(!url){toast('Apps Script לא מוגדר','err');return false;}
+  const p=G.posts.find(x=>x.row===rowNum);
+  // uid = מזהה קשיח מעמודה K — השרת יחפש לפיו ויחזור fallback ל-row אם חסר
+  const uid = p ? (p.uid||null) : null;
   try{
-    const p=G.posts.find(x=>x.row===rowNum);
-    // uid = מזהה קשיח מעמודה K — השרת יחפש לפיו ויחזור fallback ל-row אם חסר
-    const uid = p ? (p.uid||null) : null;
-    console.log('[writeSheet] rowNum:',rowNum,'| uid:',uid,'| action:update');
-    await fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update',row:rowNum,uid,updates})});
-    // Optimistic update — assume success since no-cors gives opaque response
+    const resp=await apiFetch(url,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({action:'update',row:rowNum,uid,updates})});
+    if(!resp.ok){
+      let msg='HTTP '+resp.status;
+      try{const j=await resp.json();if(j&&j.error)msg=j.error;}catch(_){}
+      toast('שגיאת שמירה: '+msg,'err');
+      return false;
+    }
+    // GAS מחזיר לרוב {ok:true} או 200 עם גוף ריק — שניהם הצלחה
+    let result={ok:true};
+    try{result=await resp.json();}catch(_){}
+    if(result&&result.ok===false){toast('שגיאת שמירה: '+(result.error||'תשובה שלילית'),'err');return false;}
+    // הצלחה אמיתית — רק עכשיו מעדכנים את ה-UI
     if(p){for(const[col,val]of Object.entries(updates))p.data[parseInt(col)-1]=val;}
     return true;
   }catch(e){toast('שגיאת כתיבה: '+e.message,'err');return false;}
@@ -3922,8 +3956,9 @@ async function rewritePost(rowNum){
   console.log('[rewritePost] payload to be sent:', JSON.stringify(payload));
   toast('📤 בקשת שכתוב נשלחה...','inf');
   try{
-    await fetch(webhookUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    toast('✅ בקשת שכתוב נשלחה! Make יטפל בה בקרוב.','ok');
+    const resp=await apiFetch(webhookUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(resp.ok){ toast('✅ בקשת שכתוב נשלחה! Make יטפל בה בקרוב.','ok'); }
+    else{ toast('❌ שליחת שכתוב נכשלה ('+resp.status+')','err'); }
   }catch(e){
     toast('שגיאה בשליחה: '+e.message,'err');
   }
@@ -3945,7 +3980,7 @@ async function deleteProduct(rowNum){
   toast('מוחק...','inf');
   try{
     // POST עם mode:'cors' כדי לקבל תשובה אמיתית (לא no-cors שמחזיר opaque)
-    const resp=await fetch(url,{
+    const resp=await apiFetch(url,{
       method:'POST',
       mode:'cors',
       redirect:'follow',
@@ -4042,7 +4077,7 @@ async function bulkDeleteProducts(){
   if(!url){toast('Apps Script לא מוגדר','err');return;}
   toast('מוחק '+uids.length+' מוצרים...','inf');
   try{
-    var resp=await fetch(url,{
+    var resp=await apiFetch(url,{
       method:'POST',
       mode:'cors',
       redirect:'follow',
@@ -4096,8 +4131,9 @@ async function confirmPublish(rowNum,target){
   closeModal();
   toast(`שולח ל-Make → ${target}...`,'inf');
   try{
-    await fetch(getPublishUrl(),{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    toast(`✅ Make קיבל: ${target}!`,'ok');
+    const resp=await apiFetch(getPublishUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(resp.ok){ toast(`✅ Make קיבל: ${target}!`,'ok'); }
+    else{ toast(`❌ שיגור נכשל (${resp.status})`,'err'); }
   }catch(e){toast('שגיאה: '+e.message,'err');}
 }
 
@@ -4822,7 +4858,7 @@ async function fetchCommunityData(){
   if(btn){ btn.disabled=true; btn.textContent='⏳ מסנכרן...'; }
   _setLoadStep('טוען קהילה...');
   try{
-    const resp = await fetch(url+'?action=leaderboard&_t='+Date.now(),{
+    const resp = await apiFetch(url+'?action=leaderboard&_t='+Date.now(),{
       method:'GET', mode:'cors', redirect:'follow',
       headers:{'Accept':'application/json'},
     });
@@ -5732,7 +5768,7 @@ async function loadRaffleData(){
   var url=COMMUNITY_GAS_URL+'?action=getRaffleAll&_t='+Date.now();
   var fetched=false;
   try{
-    var resp=await fetch(url,{method:'GET',mode:'cors',redirect:'follow',headers:{'Accept':'application/json'}});
+    var resp=await apiFetch(url,{method:'GET',mode:'cors',redirect:'follow',headers:{'Accept':'application/json'}});
     if(resp.ok){
       var json=await resp.json();
       if(json&&json.ok){
@@ -6987,7 +7023,7 @@ async function _npSubmit(){
   if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
 
   try {
-    var resp = await fetch(MAKE_WEBHOOK_URL, {
+    var resp = await apiFetch(MAKE_WEBHOOK_URL, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ text: finalString })
@@ -7613,7 +7649,7 @@ async function _wsGenerateCollage(){
   if(btn){ btn.disabled=true; btn.style.opacity='.6'; }
 
   try{
-    var resp = await fetch(MAKE_COLLAGE_WEBHOOK,{
+    var resp = await apiFetch(MAKE_COLLAGE_WEBHOOK,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify(payload)
@@ -7696,7 +7732,7 @@ async function _wsSendTelegram(){
   }
 
   try{
-    var resp = await fetch(MAKE_COLLAGE_WEBHOOK,{
+    var resp = await apiFetch(MAKE_COLLAGE_WEBHOOK,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ mode:'send_telegram', text: text, image: _wsLastImageUrl })
@@ -7761,7 +7797,7 @@ document.addEventListener('DOMContentLoaded',function(){
   // ── Topbar ─────────────────────────────────────
   on('refresh-btn','click',function(){toast('מרענן...','inf');loadData().then(()=>toast('✅ עודכן!','ok'));});
   on('top-settings-btn','click',function(){showPage('settings');});
-  on('logout-btn','click',function(){sessionStorage.removeItem('sp_auth');location.reload();});
+  on('logout-btn','click',function(){sessionStorage.removeItem('sp_auth');sessionStorage.removeItem('sp_secret');location.reload();});
 
   // ── Sidebar navigation ─────────────────────────
   document.querySelectorAll('.ni[data-page]').forEach(function(ni){
@@ -7867,8 +7903,12 @@ document.addEventListener('DOMContentLoaded',function(){
     if(o!==(localStorage.getItem('sp_pw')||'sogrim2024')){toast('סיסמה נוכחית שגויה','err');return;}
     if(n.length<6){toast('הסיסמה קצרה','err');return;}
     localStorage.setItem('sp_pw',n);
+    // v-SEC2: הסיסמה = ה-Token. עדכון הסוד המקומי + ה-vault, והתראה לעדכן את Vercel
+    sessionStorage.setItem('sp_secret', n);
+    if(localStorage.getItem('sp_pattern')) localStorage.setItem('sp_secret_vault', n);
     document.getElementById('s-oldpw').value='';document.getElementById('s-newpw').value='';
     toast('✅ סיסמה שונתה!','ok');
+    toast('⚠️ עדכן גם את APP_SECRET_TOKEN ב-Vercel לערך החדש, אחרת ה-API יחזיר 401','inf');
   });
 
   // ── Community ──────────────────────────────────
@@ -8240,6 +8280,10 @@ if('serviceWorker' in navigator){
   function loginSuccess(){
     lockUI=true;
     sessionStorage.setItem('sp_auth','1');
+    // v-SEC2: כניסת סימון שולפת את הסוד מה-vault (נזרע בעת הגדרת הסימון / כניסת סיסמה)
+    var _vault = localStorage.getItem('sp_secret_vault') || '';
+    sessionStorage.setItem('sp_secret', _vault);
+    if(!_vault){ try{ toast('לאחר עדכון האבטחה — התחבר פעם אחת עם סיסמה כדי להפעיל את הסימון','inf'); }catch(e){} }
     setMsg('טוען...','ok');
     var ld=$('login-loading');if(ld)ld.style.display='flex';
     setTimeout(function(){
@@ -8322,6 +8366,8 @@ if('serviceWorker' in navigator){
       setTimeout(function(){setupErr.style.display='none';},3000);
       return;
     }
+    // v-SEC2: זריעת ה-vault בסוד שאומת זה עתה, כדי שכניסת סימון תוכל לשלוח X-App-Secret
+    localStorage.setItem('sp_secret_vault', pw);
     $('pw-in').value='';
     mode='setup1';firstDraw=null;resetPath();
     showPattern();
