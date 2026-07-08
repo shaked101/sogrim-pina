@@ -53,9 +53,12 @@ body.dark-mode .main{background:#1c1c1e!important}
 .pacts-icons{display:flex!important;grid-template-columns:none!important;align-items:center;gap:8px}
 .pacts-icons .btn.icon-act{flex:0 0 auto!important;width:36px!important;height:36px;min-height:36px!important;padding:0!important;font-size:16px;justify-content:center}
 .pacts-icons .btn:not(.icon-act){flex:1 1 auto}
+/* UX-R2: אייקון האקסל (SVG פנימי) — ממדים זהים לאייקון הרענון */
+.icon-act .xl-ico{width:18px;height:18px;display:block;flex:0 0 auto}
 @media(max-width:768px){
   .pacts-icons{justify-content:flex-start}
   .pacts-icons .btn.icon-act{width:42px!important;height:42px;min-height:42px!important;font-size:18px}
+  .icon-act .xl-ico{width:20px;height:20px}
 }
 .np-pill{padding:5px 12px;border-radius:20px;border:1.5px solid var(--acc);background:transparent;color:var(--acc);font-size:12px;font-weight:800;cursor:pointer;transition:all .13s;font-family:inherit}
 .np-pill:hover,.np-pill.active{background:var(--acc);color:#fff}
@@ -858,6 +861,10 @@ body.dark-mode .gsearch-drop-img{background:#3a3a3c}
 
 /* ── 2. Pattern Lock — סגנונות לרכיב החדש בלבד ── */
 #pattern-wrap{margin-top:2px}
+/* UX-R2 (4x4): ריבוע רספונסיבי — לעולם לא גולש מקופסת ההתחברות,
+   גם במסכים צרים (viewBox שומר על פרופורציה; height:auto). */
+#pl-svg{width:240px;max-width:100%;height:auto;display:block;margin:0 auto}
+@media(max-width:360px){#pl-svg{width:216px}}
 .pl-msg{font-size:11.5px;color:var(--t2);min-height:16px;margin:4px 0 8px;font-weight:700;transition:color .15s}
 .pl-msg.err{color:var(--red)}
 .pl-msg.ok{color:var(--grn)}
@@ -867,7 +874,7 @@ body.dark-mode .gsearch-drop-img{background:#3a3a3c}
 #pl-svg .pl-dot.on{fill:var(--acc)}
 #pl-svg .pl-halo{fill:rgba(212,84,26,.13);opacity:0;transition:opacity .12s}
 #pl-svg .pl-halo.on{opacity:1}
-#pl-svg .pl-line{stroke:var(--acc);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;fill:none;opacity:.85}
+#pl-svg .pl-line{stroke:var(--acc);stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;fill:none;opacity:.85}
 #pattern-wrap.pl-err .pl-dot.on{fill:var(--red)}
 #pattern-wrap.pl-err .pl-line{stroke:var(--red)}
 #pattern-wrap.pl-err .pl-halo.on{fill:rgba(185,28,28,.12)}
@@ -883,7 +890,7 @@ body.dark-mode #pl-svg .pl-dot.on{fill:var(--acc)}
     <div class="login-sub">גישה מורשית בלבד</div>
     <!-- ═══ Pattern Lock v3 (mobile) — רכיב חדש, מוסתר כברירת מחדל ═══ -->
     <div id="pattern-wrap" style="display:none">
-      <svg id="pl-svg" viewBox="0 0 240 240" width="228" height="228" style="touch-action:none;display:block;margin:0 auto;-webkit-user-select:none;user-select:none"></svg>
+      <svg id="pl-svg" viewBox="0 0 240 240" width="240" height="240" style="touch-action:none;display:block;margin:0 auto;-webkit-user-select:none;user-select:none"></svg>
       <div id="pl-msg" class="pl-msg">צייר את הסימון לכניסה</div>
       <button type="button" class="pl-alt" id="pl-to-pw">🔑 התחבר עם סיסמה</button>
     </div>
@@ -1115,7 +1122,7 @@ body.dark-mode #pl-svg .pl-dot.on{fill:var(--acc)}
         <div class="ph">
           <div><div class="pt">ניהול פוסטים</div><div class="ps">לחץ 👁 לצפייה · ✏️ לעריכה · 📋 להעתקה לפייסבוק</div></div>
           <div class="pacts pacts-icons">
-            <button class="btn sec icon-act" id="export-btn" title="ייצוא ל-CSV (Excel)" aria-label="ייצוא ל-CSV">📗</button>
+            <button class="btn sec icon-act" id="export-btn" title="ייצוא ל-CSV (Excel)" aria-label="ייצוא ל-CSV"><svg class="xl-ico" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="1" y="1" width="22" height="22" rx="5" fill="#217346"/><path d="M7.1 6.2h3.05L12 9.55 13.85 6.2h3.05l-3.4 5.8 3.5 5.8h-3.1L12 14.45 10.1 17.8H7l3.5-5.8-3.4-5.8z" fill="#fff"/></svg></button>
             <button class="btn sec icon-act" id="refresh-posts-btn" title="רענון נתונים" aria-label="רענון נתונים">🔄</button>
             <button class="btn" id="bulk-delete-btn" style="background:var(--red);display:none" onclick="bulkDeleteProducts()">🗑️ מחק מסומנים (<span id="bulk-count">0</span>)</button>
           </div>
@@ -8237,8 +8244,12 @@ if('serviceWorker' in navigator){
 ═══════════════════════════════════════════════════════════ */
 (function(){
   'use strict';
-  var KEY='sp_pattern', MIN_DOTS=4, HIT_R=26;
-  var GRID=[40,120,200];
+  var KEY='sp_pattern', MIN_DOTS=4, HIT_R=22;
+  /* UX-R2: שדרוג לרשת 4x4 — אינדקסים 0–15, ארבע עמודות בקואורדינטות GRID
+     בתוך viewBox של 240. PAT_VER הוא מזהה הפורמט החדש שנשמר כקידומת
+     ב-localStorage; סימון ישן מרשת ה-3x3 (ללא הקידומת) נמחק אוטומטית ב-init. */
+  var N=4, DOTS=16, PAT_VER='v4:';
+  var GRID=[30,90,150,210];
   var wrap,svg,msg,pwMode,setupLink,setupErr,toPwBtn;
   var centers=[], path=[], drawing=false;
   var mode='login', firstDraw=null, lockUI=false;
@@ -8248,7 +8259,7 @@ if('serviceWorker' in navigator){
   function storedPattern(){return localStorage.getItem(KEY)||'';}
   function vib(p){try{if(navigator.vibrate)navigator.vibrate(p);}catch(e){}}
 
-  /* ── בניית ה-SVG: 9 נקודות + קווים ── */
+  /* ── בניית ה-SVG: 16 נקודות (4x4) + קווים ── */
   function buildSvg(){
     var ns='http://www.w3.org/2000/svg';
     svg.innerHTML='';
@@ -8259,15 +8270,15 @@ if('serviceWorker' in navigator){
     var live=document.createElementNS(ns,'line');
     live.setAttribute('class','pl-line');live.id='pl-live';live.style.display='none';
     svg.appendChild(live);
-    for(var r=0;r<3;r++)for(var c=0;c<3;c++){
-      var i=r*3+c, x=GRID[c], y=GRID[r];
+    for(var r=0;r<N;r++)for(var c=0;c<N;c++){
+      var i=r*N+c, x=GRID[c], y=GRID[r];
       centers.push({x:x,y:y});
       var halo=document.createElementNS(ns,'circle');
-      halo.setAttribute('cx',x);halo.setAttribute('cy',y);halo.setAttribute('r',22);
+      halo.setAttribute('cx',x);halo.setAttribute('cy',y);halo.setAttribute('r',18);
       halo.setAttribute('class','pl-halo');halo.setAttribute('data-i',i);
       svg.appendChild(halo);
       var dot=document.createElementNS(ns,'circle');
-      dot.setAttribute('cx',x);dot.setAttribute('cy',y);dot.setAttribute('r',7);
+      dot.setAttribute('cx',x);dot.setAttribute('cy',y);dot.setAttribute('r',6.5);
       dot.setAttribute('class','pl-dot');dot.setAttribute('data-i',i);
       svg.appendChild(dot);
     }
@@ -8279,7 +8290,7 @@ if('serviceWorker' in navigator){
     return {x:(ev.clientX-rect.left)*scale, y:(ev.clientY-rect.top)*scale};
   }
   function hitTest(p){
-    for(var i=0;i<9;i++){
+    for(var i=0;i<DOTS;i++){
       var dx=p.x-centers[i].x, dy=p.y-centers[i].y;
       if(dx*dx+dy*dy<=HIT_R*HIT_R) return i;
     }
@@ -8301,19 +8312,27 @@ if('serviceWorker' in navigator){
   function addDot(i){
     if(path.indexOf(i)>=0)return;
     if(path.length){
-      /* התנהגות אנדרואיד: מעבר מעל נקודה באמצע — נכללת אוטומטית */
+      /* התנהגות אנדרואיד: מעבר מעל נקודות באמצע — נכללות אוטומטית.
+         UX-R2: ברשת 4x4 קפיצה יכולה לדלג מעל עד שתי נקודות בקו ישר,
+         לכן ההכללה מוכללת דרך GCD של הפרשי שורה/עמודה (לא רק נקודת אמצע). */
       var a=path[path.length-1];
-      var r1=Math.floor(a/3),c1=a%3,r2=Math.floor(i/3),c2=i%3;
-      if((r1+r2)%2===0&&(c1+c2)%2===0){
-        var m=((r1+r2)/2)*3+(c1+c2)/2;
-        if(m!==a&&m!==i&&path.indexOf(m)<0)pushDot(m);
+      var r1=Math.floor(a/N),c1=a%N,r2=Math.floor(i/N),c2=i%N;
+      var dr=r2-r1,dc=c2-c1;
+      var g=_gcd(Math.abs(dr),Math.abs(dc));
+      if(g>1){
+        var sr=dr/g,sc=dc/g;
+        for(var s=1;s<g;s++){
+          var m=(r1+sr*s)*N+(c1+sc*s);
+          if(m!==a&&m!==i&&path.indexOf(m)<0)pushDot(m);
+        }
       }
     }
     pushDot(i);
   }
+  function _gcd(a,b){while(b){var t=a%b;a=b;b=t;}return a;}
   function resetPath(){
     path=[];drawing=false;
-    for(var i=0;i<9;i++)markDot(i,false);
+    for(var i=0;i<DOTS;i++)markDot(i,false);
     var l=$('pl-line');if(l)l.setAttribute('points','');
     var lv=$('pl-live');if(lv)lv.style.display='none';
   }
@@ -8368,7 +8387,8 @@ if('serviceWorker' in navigator){
     if(!path.length)return;
     var key=path.join('-');
     if(mode==='login'){
-      if(key===storedPattern())loginSuccess();
+      /* UX-R2: השוואה מול הפורמט המוסמן (v4:) */
+      if(PAT_VER+key===storedPattern())loginSuccess();
       else patternError('סימון שגוי — נסה שוב');
     }else if(mode==='setup1'){
       if(path.length<MIN_DOTS){patternError('נדרשות לפחות '+MIN_DOTS+' נקודות');return;}
@@ -8377,7 +8397,7 @@ if('serviceWorker' in navigator){
       setTimeout(resetPath,350);
     }else if(mode==='setup2'){
       if(key===firstDraw){
-        localStorage.setItem(KEY,key);
+        localStorage.setItem(KEY,PAT_VER+key);
         setMsg('הסימון נשמר ✔','ok');
         mode='login';firstDraw=null;updateSetupLabel();
         setTimeout(function(){resetPath();setMsg('צייר את הסימון לכניסה');},900);
@@ -8442,6 +8462,11 @@ if('serviceWorker' in navigator){
     pwMode=$('pw-mode');setupLink=$('pl-setup-link');
     setupErr=$('pl-setup-err');toPwBtn=$('pl-to-pw');
     if(!wrap||!svg||!pwMode)return;
+    /* UX-R2: מיגרציה — סימון ישן מרשת ה-3x3 (ללא קידומת v4:) אינו תואם
+       לגיאומטריה החדשה ונמחק. המשתמש יתבקש להגדיר סימון חדש; ה-vault
+       של הסוד (sp_secret_vault) נשמר ואינו נמחק. */
+    var _sp=localStorage.getItem(KEY);
+    if(_sp&&_sp.indexOf(PAT_VER)!==0)localStorage.removeItem(KEY);
     buildSvg();
 
     svg.addEventListener('pointerdown',onDown);
