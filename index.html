@@ -3140,22 +3140,13 @@ function filterPosts(){
     const anyAp=fb==='מאושר'||tg==='מאושר'||ig==='מאושר'||gs==='מאושר'||gs==='Approved';
 
     // Status filter
-    if(st==='draft'&&(anyPub||anyAp))return false;
-    if(st==='published'&&!anyPub)return false;
-    // v29: "approved" + "fb" → COL_G contains "מאושר" AND no date in col E
-    if(st==='approved'){
-      if(ch==='fb'){
-        // For Facebook: approved = COL_G (STATUS) = "מאושר" AND no date in E
-        const colGApproved=gs==='מאושר'||gs==='Approved';
-        if(!colGApproved)return false;
-        if(p._dateE)return false; // already scheduled → not pending approval
-      } else {
-        // For other channels: any approved status, no platform date
-        if(!anyAp)return false;
-        if(ch==='tg'&&p._dateTG)return false;
-        if(ch==='ig'&&p._dateIG)return false;
-      }
-    }
+    // v31: לוגיקה משולשת — עמודה E היא הטריגר העליון:
+    // יש נתון ב-E = פורסם | E ריקה + G מכילה "מאושר" = מאושר | E ריקה + G מכילה "טיוטה" = טיוטה
+    const hasE=String(gc(p,COL.COL_E)||'').trim()!=='';
+    const gStat=String(gs||'').trim();
+    if(st==='published'&&!hasE)return false;
+    if(st==='approved'&&(hasE||!gStat.includes('מאושר')))return false;
+    if(st==='draft'&&(hasE||!gStat.includes('טיוטה')))return false;
 
     // Platform filter — must have a date in the platform's column (unless filtering approved)
     if(st!=='approved'){
@@ -3191,7 +3182,12 @@ function renderTableRows(rows){
   return rows.map(p=>{
     const img=gc(p,COL.IMG),fb=gc(p,COL.FB_S),tg=gc(p,COL.TG_S),ig=gc(p,COL.IG_S),gs=gc(p,COL.STATUS);
     const anyPub=fb==='פורסם'||tg==='פורסם'||ig==='פורסם',anyAp=fb==='מאושר'||tg==='מאושר'||ig==='מאושר';
-    const badge=anyPub?'<span class="badge bpub">✓ פורסם</span>':anyAp?'<span class="badge bap">✅ מאושר</span>':`<span class="badge bd">${esc(gs)||'—'}</span>`;
+    // v31: badge לפי הלוגיקה המשולשת — בדיוק כמו הסינון:
+    // יש נתון ב-E → "פורסם" | E ריקה + G "מאושר" → "מאושר" | E ריקה + G "טיוטה" → תגית טיוטה בעיצוב המקורי
+    const hasE=String(gc(p,COL.COL_E)||'').trim()!=='';
+    const badge=hasE?'<span class="badge bpub">✓ פורסם</span>'
+      :String(gs||'').includes('מאושר')?'<span class="badge bap">✅ מאושר</span>'
+      :`<span class="badge bd">${esc(gs)||'—'}</span>`;
     const row=p.row;
     const uid=p.uid||'';
     return`<tr>
@@ -3670,6 +3666,9 @@ function openEditModal(rowNum){
     : `<button class="btn sec" onclick="closeModal()">ביטול</button>
        <button id="edit-save-btn" class="btn grn" onclick="saveEdit(${row})">💾 שמור בשיטס</button>`;
   openModal('✏️ עריכת פוסט — שורה '+rowNum+navStr,body,footerBtns);
+  // v30: נעילת המודל של עריכת פוסט בלבד — לחיצה על הרקע לא סוגרת אותו.
+  // openModal() מגדיר מחדש את root.onclick בכל פתיחה, כך ששאר המודלים לא מושפעים.
+  document.getElementById('modal-root').onclick=null;
 }
 
 // ── כפתור "אשר הכל": מעדכן G, P, R, T לאותו ערך ───────────────────
