@@ -3213,8 +3213,12 @@ function renderTableRows(rows){
       </div></td>
     </tr>`;}).join('');
 }
+var G_keepTableView=false; // v_scrollfix: דגל חד-פעמי לשימור כמות השורות הטעונות
 function renderTable(){
   const ps=G.filtered;
+  // v_scrollfix: אם התבקש שימור תצוגה (אחרי שמירת עריכה) — שמור את כמות השורות שכבר נטענו
+  const keepCount=G_keepTableView?Math.max(TABLE_PAGE,G_tableOffset):TABLE_PAGE;
+  G_keepTableView=false;
   G_tableOffset=0;
   // reset bulk selection whenever table re-renders
   var btn=document.getElementById('bulk-delete-btn');if(btn)btn.style.display='none';
@@ -3224,8 +3228,8 @@ function renderTable(){
   const tbody=document.getElementById('ptbody');
   if(!ps.length){tbody.innerHTML=`<tr><td colspan="8"><div class="empty">🔍 אין תוצאות</div></td></tr>`;
     const lm=document.getElementById('tbl-load-more');if(lm)lm.style.display='none';return;}
-  // v24: render only first 50 rows — instant paint
-  const rowsToRender=ps.slice(0,TABLE_PAGE);
+  // v24: render only first page — but keep loaded count after save-edit (v_scrollfix)
+  const rowsToRender=ps.slice(0,keepCount);
   G_tableOffset=rowsToRender.length;
   tbody.innerHTML=renderTableRows(rowsToRender);
   // Show/hide "load more" footer
@@ -3745,7 +3749,16 @@ async function saveEdit(rowNum){
     // v_radar: אם הגענו מרשימת הרענון — בצע רענון אוטומטי ופתח מחדש את מודאל הרדאר
     const _wasFromRadar = radarNavigationState.active;
     radarNavigationState = { active: false };
+    // v_scrollfix: שמירת מיקום הגלילה + שימור השורות הטעונות לפני רענון התצוגה
+    const _scrollY=window.scrollY||window.pageYOffset||0;
+    const _mainEl=document.querySelector('.main');
+    const _mainScroll=_mainEl?_mainEl.scrollTop:0;
+    G_keepTableView=true;
     closeModal();toast('✅ נשמר!','ok');renderDash();filterPosts();renderCal();
+    requestAnimationFrame(function(){
+      window.scrollTo(0,_scrollY);
+      if(_mainEl)_mainEl.scrollTop=_mainScroll;
+    });
     if(_wasFromRadar){
       await refreshRadarPost(rowNum);
       openFullRadarModal();
