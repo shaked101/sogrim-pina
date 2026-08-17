@@ -1674,6 +1674,12 @@ body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--a
                 <option value="">כל הקטגוריות</option>
               </select>
             </div>
+            <!-- v-STORY2: חיפוש משולב — עובד יחד עם פילטרי הפלטפורמה והקטגוריה -->
+            <div style="display:flex;align-items:center;gap:7px">
+              <label style="font-size:11px;font-weight:800;color:var(--t2);white-space:nowrap">🔍 חיפוש:</label>
+              <input type="text" id="ws-search" class="fsel" oninput="_wsSearchInput()" placeholder="שם מוצר..."
+                style="cursor:text;min-width:140px" autocomplete="off">
+            </div>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;font-weight:800;color:var(--t2);white-space:nowrap;user-select:none;padding:5px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:6px">
               <input type="checkbox" id="ws-all-products" onchange="_wsFilter()" style="width:14px;height:14px;cursor:pointer;accent-color:var(--acc)">
               הצג את כלל המוצרים
@@ -7130,6 +7136,31 @@ function _wsSlotLimit(){ return _wsMode === 'collage6' ? 6 : 8; }
 // ── כל פוסטי השבוע המסוננים (מאגר) ─────────────────────────────
 var _wsFiltered = [];
 
+// v-STORY2: הרשימה המסוננת לפי שבוע/פלטפורמה/קטגוריה — לפני החלת החיפוש.
+// מאפשר הקלדה בשדה החיפוש בלי לאפס את הגריד (רק _wsFilter מאפס slots).
+var _wsBaseFiltered = [];
+
+// v-STORY2: החלת טקסט החיפוש על רשימת בסיס — AND עם שאר הפילטרים
+function _wsApplySearch(baseArr){
+  var inp = document.getElementById('ws-search');
+  var q = inp ? inp.value.trim().toLowerCase() : '';
+  if(!q) return baseArr.slice();
+  return baseArr.filter(function(p){
+    var heb = gc(p, COL.HEB).toLowerCase();
+    var eng = gc(p, COL.ENG).toLowerCase();
+    return heb.indexOf(q) !== -1 || eng.indexOf(q) !== -1;
+  });
+}
+
+// v-STORY2: הקלדה בשדה החיפוש — מרנדר מחדש את המאגר בלבד, בלי לאפס גריד/משבצת
+function _wsSearchInput(){
+  _wsFiltered = _wsApplySearch(_wsBaseFiltered);
+  var cnt = document.getElementById('ws-count');
+  var showAll = !!(document.getElementById('ws-all-products')||{}).checked;
+  if(cnt) cnt.textContent = _wsFiltered.length+' פוסטים'+(showAll?' (כלל המוצרים)':'');
+  _wsRenderPool();
+}
+
 // ── כיתובי מיקום לכל slot ──────────────────────────────────────
 // 0-2: שורה עליונה (שמאל/מרכז/ימין)
 // 3-5: שורה תחתונה (שמאל/מרכז/ימין)
@@ -7233,12 +7264,16 @@ function _wsFilter(){
       }
       return true;
     });
+    // v-STORY2: החיפוש מוחל על התוצאה המסוננת (AND עם פלטפורמה+קטגוריה)
+    _wsBaseFiltered = _wsFiltered;
+    _wsFiltered = _wsApplySearch(_wsBaseFiltered);
     if(cnt) cnt.textContent = _wsFiltered.length+' פוסטים (כלל המוצרים)';
     _wsRenderPool();
     return;
   }
 
   if(!sunNum){
+    _wsBaseFiltered = [];
     _wsFiltered = [];
     if(cnt) cnt.textContent = 'בחר שבוע';
     _wsRenderPool();
@@ -7260,6 +7295,10 @@ function _wsFilter(){
     }
     return true;
   });
+
+  // v-STORY2: החיפוש מוחל על התוצאה המסוננת (AND עם שבוע+פלטפורמה+קטגוריה)
+  _wsBaseFiltered = _wsFiltered;
+  _wsFiltered = _wsApplySearch(_wsBaseFiltered);
 
   if(cnt) cnt.textContent = _wsFiltered.length+' פוסטים';
 
@@ -7306,7 +7345,7 @@ function _wsRenderPool(){
           +'onchange="_wsToggleTrack('+idx+',\''+kind+'\',this)" '
           +'style="width:11px;height:11px;cursor:pointer;accent-color:var(--acc);margin:0">'
         +emoji+' '+label
-        +(on && dateStr ? '<span style="font-size:8px;font-weight:700;color:var(--t2);background:var(--s2);border:1px solid var(--b1);border-radius:3px;padding:0 3px">פורסם ב-'+esc(dateStr)+'</span>' : '')
+        +(on && dateStr ? '<span onclick="event.preventDefault();event.stopPropagation();_wsEditTrackDate('+idx+',\''+kind+'\')" title="לחץ לעריכת התאריך" style="font-size:8px;font-weight:700;color:var(--t2);background:var(--s2);border:1px solid var(--b1);border-radius:3px;padding:0 3px;cursor:pointer">פורסם ב-'+esc(dateStr)+'</span>' : '')
       +'</label>';
     }
 
@@ -7763,6 +7802,22 @@ async function _wsGenerateCollage(){
       _wsLastImageUrl = finalUrl;
       _wsUpdateTelegramBtn();
       toast(_wsMode === 'single' ? '✅ תמונת הסטורי מוכנה!' : '✅ הקולאז׳ מוכן!','ok');
+
+      // v-STORY2: סימון "סיכום שבועי 📝" אוטומטי לכל המוצרים שבגריד/במשבצת —
+      // רק אחרי ייצור מוצלח. רץ ברצף (await) כדי לא להציף את Apps Script
+      // בקריאות מקביליות; idempotent למוצרים שכבר מסומנים.
+      var _markList = (_wsMode === 'single')
+        ? (_wsSingle ? [_wsSingle] : [])
+        : _wsSlots.slice(0, _wsSlotLimit()).filter(Boolean);
+      var _marked = 0;
+      for(var mi = 0; mi < _markList.length; mi++){
+        try{
+          var _wasOn = _wsIsTrue(gc(_markList[mi], COL.WEEKLY_CB));
+          var _okM = await _wsAutoMark(_markList[mi], 'weekly');
+          if(_okM && !_wasOn) _marked++;
+        }catch(_e){}
+      }
+      if(_marked > 0) toast('📝 '+_marked+' מוצרים סומנו אוטומטית בסיכום שבועי ('+_wsTodayStr()+')','inf');
     }else{
       toast('Make לא החזיר URL תקין: '+text.slice(0,80),'err');
     }
@@ -7847,6 +7902,42 @@ async function _wsSendTelegram(){
 // כתיבה דרך writeSheet הקיים (uid מעמודה K → אין Index Shifting)
 // ════════════════════════════════════════════════
 
+// v-STORY2: תאריך היום בפורמט DD.MM.YY
+function _wsTodayStr(){
+  var d = new Date();
+  return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+String(d.getFullYear()).slice(2);
+}
+
+// v-STORY2: "17.08.26" / "17.08.2026" / ISO → "YYYY-MM-DD" עבור input[type=date]
+function _wsTrackDateToIso(v){
+  v = String(v||'').trim();
+  var m = v.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if(m){
+    var yy = m[3].length === 2 ? '20'+m[3] : m[3];
+    return yy+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');
+  }
+  var d = new Date(v);
+  if(!isNaN(d)){
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  return '';
+}
+
+// v-STORY2: סימון אוטומטי של ערוץ (story/weekly) עם תאריך היום — אם טרם מסומן.
+// idempotent: אם כבר מסומן — לא נוגע ברשת ולא ב-UI. מרנדר את המאגר בסיום.
+async function _wsAutoMark(p, kind){
+  if(!p) return false;
+  var cbCol = (kind==='story') ? COL.STORY_CB : COL.WEEKLY_CB;
+  if(_wsIsTrue(gc(p, cbCol))) return true; // כבר מסומן — אין מה לעשות
+  var dateStr = _wsTodayStr();
+  var updates = {};
+  if(kind==='story'){ updates[30] = true; updates[31] = dateStr; }  // AD, AE (1-based)
+  else              { updates[32] = true; updates[33] = dateStr; }  // AF, AG (1-based)
+  var ok = await writeSheet(p.row, updates); // uid מעמודה K נשלף בתוך writeSheet
+  if(ok) _wsRenderPool(); // עדכון הצ'קבוקס והתאריך ב-UI
+  return ok;
+}
+
 // TRUE מגיע מהגיליון כ-boolean/מחרוזת — נרמול אחיד
 function _wsIsTrue(v){
   v = String(v||'').trim().toLowerCase();
@@ -7863,7 +7954,7 @@ function _wsFmtTrackDate(v){
   return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+String(d.getFullYear()).slice(2);
 }
 
-// לחיצה על צ'קבוקס: סימון → דיאלוג תאריך | ביטול סימון → ניקוי העמודות
+// לחיצה על צ'קבוקס: סימון → דיאלוג תאריך | ביטול סימון → confirm ואז ניקוי
 function _wsToggleTrack(poolIdx, kind, cbEl){
   var p = _wsFiltered[poolIdx];
   if(!p) return;
@@ -7871,16 +7962,31 @@ function _wsToggleTrack(poolIdx, kind, cbEl){
   var isOn  = _wsIsTrue(gc(p, cbCol));
 
   if(isOn){
-    // המשתמש ביטל סימון → ניקוי שקט
+    // v-STORY2: הגנה מביטול בטעות — אישור דפדפן לפני מחיקת התיעוד
+    if(!confirm('האם אתה בטוח שברצונך לבטל את הסימון ולמחוק את התיעוד?')){
+      // המשתמש התחרט — מחזירים את הצ'קבוקס למסומן, בלי רשת ובלי שינוי UI נוסף
+      if(cbEl) cbEl.checked = true;
+      return;
+    }
     _wsClearTrack(poolIdx, kind);
     return;
   }
 
   // מחזירים את הצ'קבוקס למצב לא-מסומן עד שהתאריך יאושר וישמר
   if(cbEl) cbEl.checked = false;
+  _wsOpenTrackDialog(poolIdx, kind, null);
+}
 
-  var today = new Date();
-  var iso = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+// v-STORY2: דיאלוג בחירת תאריך משותף — לסימון חדש (presetIso=null → היום)
+// ולעריכת תאריך קיים (presetIso=התאריך השמור)
+function _wsOpenTrackDialog(poolIdx, kind, presetIso){
+  var p = _wsFiltered[poolIdx];
+  if(!p) return;
+  var iso = presetIso;
+  if(!iso){
+    var today = new Date();
+    iso = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  }
   var label = (kind==='story') ? '📱 סטורי' : '📝 סיכום שבועי';
   var name  = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
 
@@ -7892,6 +7998,15 @@ function _wsToggleTrack(poolIdx, kind, cbEl){
     '<button class="btn" onclick="_wsConfirmTrack('+poolIdx+',\''+kind+'\')">✅ אישור ושמירה</button>'
     +'<button class="btn sec" onclick="closeModal()">ביטול</button>'
   );
+}
+
+// v-STORY2: לחיצה על תווית התאריך — פתיחת הדיאלוג עם התאריך השמור לעריכה
+function _wsEditTrackDate(poolIdx, kind){
+  var p = _wsFiltered[poolIdx];
+  if(!p) return;
+  var dateCol = (kind==='story') ? COL.STORY_DATE : COL.WEEKLY_DATE;
+  var iso = _wsTrackDateToIso(gc(p, dateCol));
+  _wsOpenTrackDialog(poolIdx, kind, iso || null);
 }
 
 // אישור התאריך → המרה ל-DD.MM.YY → fetch שקט דרך writeSheet (לפי uid)
@@ -7933,6 +8048,11 @@ async function _wsClearTrack(poolIdx, kind){
 async function _wsShareStory(){
   var p = _wsSingle;
   if(!p){ toast('שבץ מוצר במשבצת הסטורי תחילה','err'); return; }
+
+  // v-STORY2: סימון סטורי אוטומטי ברגע הלחיצה — אם טרם סומן.
+  // fire-and-forget (ללא await) כדי לא לשבור את ה-user gesture הנדרש
+  // ל-clipboard ול-navigator.share בספארי/iOS. idempotent אם כבר מסומן.
+  _wsAutoMark(p, 'story').catch(function(){});
 
   // שלב 1: העתקת קישור השותפים (עמודה D) ללוח
   var link = gc(p, COL.LINK);
