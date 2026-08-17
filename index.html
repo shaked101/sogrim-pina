@@ -3583,29 +3583,41 @@ function viewModalCopyPost(rowNum){
 //   דסקטופ → העתקת טקסט + הנגשת קישור התמונה, ללא שום כתיבה לגיליון.
 // ════════════════════════════════════════════════
 
-// זיהוי מכשיר רב-שכבתי — לא מסתמך על UA בלבד:
-//  1. userAgentData.mobile — המקור המהימן ביותר (Chrome/Edge/Android)
-//  2. iPadOS 13+ מתחזה ל-Macintosh, ומזוהה לפי maxTouchPoints
-//  3. UA regex — לספארי/פיירפוקס שאין בהם userAgentData
-//  4. pointer:coarse + hover:none — מסך מגע ללא עכבר
+// v-FBFLOW2: זיהוי מכשיר מוקשח — "deny-first". ברירת המחדל היא דסקטופ,
+// וכל ספק נופל לדסקטופ. מסך מגע לבדו לעולם אינו מספיק כדי לסווג כמובייל,
+// כי לפטופים של Windows/Mac עם מסך מגע היו מסווגים בטעות כנייד.
+// ⚠️ הוסרה במכוון בדיקת (pointer:coarse) — היא הייתה מקור לזיהוי שגוי.
 function _fbIsMobileDevice(){
+  var ua = String(navigator.userAgent || '');
+
+  // ── שלב 1: וטו מוחלט — מערכות הפעלה שולחניות מוכרזות ──────────
+  // מנצח כל אינדיקציה אחרת, גם מסך מגע וגם userAgentData.
+  if(/Windows NT/i.test(ua))  return false; // כולל לפטופים עם מסך מגע
+  if(/CrOS/i.test(ua))        return false; // ChromeOS
+  if(/X11/.test(ua) && !/Android/i.test(ua)) return false; // לינוקס שולחני
+
+  // ── שלב 2: חיוב ודאי לפי UA של מכשיר נייד אמיתי ───────────────
+  if(/Android|iPhone|iPod|iPad|Windows Phone|IEMobile|BlackBerry|Opera Mini/i.test(ua)) return true;
+
+  // ── שלב 3: iPadOS 13+ מתחזה ל-Macintosh ────────────────────────
+  // שלושה תנאים מצטברים, וגם וטו על דפדפני דסקטופ:
+  // אייפד מריץ אך ורק מנוע ספארי (אין בו Chrome/Firefox/Edge אמיתיים),
+  // ולכן מק עם מסך מגע חיצוני שרץ בכרום ייפסל כאן ויסווג כדסקטופ.
+  if(/Macintosh/.test(ua)
+     && !/Chrome|Chromium|Edg\/|Firefox|OPR\//i.test(ua)
+     && (navigator.maxTouchPoints || 0) > 1
+     && typeof window.ontouchend !== 'undefined') return true;
+
+  // מק רגיל — דסקטופ, נקודה. מסך מגע לא משנה זאת.
+  if(/Macintosh|Mac OS X/.test(ua)) return false;
+
+  // ── שלב 4: userAgentData כגיבוי חיובי בלבד ─────────────────────
+  // משמש רק כדי לאשר מובייל, לעולם לא כדי לשלול דסקטופ שכבר נקבע.
   try{
-    if(navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean'){
-      return navigator.userAgentData.mobile;
-    }
+    if(navigator.userAgentData && navigator.userAgentData.mobile === true) return true;
   }catch(e){}
 
-  var ua = navigator.userAgent || '';
-
-  // iPad מודרני מדווח על עצמו כ-Macintosh — מסך מגע מסגיר אותו
-  if(/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1) return true;
-
-  if(/Android|iPhone|iPad|iPod|Windows Phone|IEMobile|BlackBerry|Opera Mini|Mobile Safari/i.test(ua)) return true;
-
-  try{
-    if(window.matchMedia && window.matchMedia('(pointer: coarse) and (hover: none)').matches) return true;
-  }catch(e){}
-
+  // ── ברירת מחדל: ספק → דסקטופ ───────────────────────────────────
   return false;
 }
 
@@ -3694,10 +3706,18 @@ function _fbRefreshDateCache(p){
   }catch(e){}
 }
 
-// עדכון שקט (fire-and-forget) של עמודה E לתאריך ולשעה של עכשיו.
+// עדכון שקט (fire-and-forget) של עמודה E לתאריך של היום.
 // אין await בצד הקורא — כדי לא לבזבז את ה-user gesture הנדרש ל-navigator.share.
+//
+// v-FBFLOW2 — שער קשיח אחרון לפני הרשת:
+// גם אם מסלול כלשהו בקוד יקרא לפונקציה הזו בטעות מדסקטופ, הכתיבה תיחסם כאן.
+// זו שכבת הגנה שנייה ובלתי תלויה בתנאי שב-copyPostToFB.
 function _fbStampPublishDate(p){
   if(!p) return;
+  if(!_fbIsMobileDevice()){
+    console.warn('[v-FBFLOW2] חסימה: ניסיון עדכון עמודה E מדסקטופ — לא נשלחה שום קריאה.');
+    return; // דסקטופ → אפס קריאות שרת, אפס עדכון מטמון
+  }
   var updates = {};
   updates[COL.COL_E + 1] = _fbNowStamp(); // COL_E=4 (0-based) → עמודה 5 = E
   writeSheet(p.row, updates)
@@ -3743,7 +3763,7 @@ async function _hybridFetchImageBlob(url){
 // v-FBFLOW: מחזירה true אך ורק כאשר navigator.share הסתיים בהצלחה
 // (המשתמש בחר אפליקציה והשלים את השיתוף). ביטול, סגירת החלונית,
 // כישלון CORS או היעדר תמיכה → false, ואז לא תיכתב חותמת בעמודה E.
-async function _hybridShareProductImage(p){
+async function _hybridShareProductImage(p, onShared){
   try{
     if(!p) return false;
     var imgUrl = gc(p, COL.IMG); // עמודה M — תמונת המוצר המקורית
@@ -3760,12 +3780,23 @@ async function _hybridShareProductImage(p){
     var file = new File([blob], base + '.' + ext, { type: blob.type });
 
     if(!navigator.canShare({ files:[file] })) return false;
+
     // שיתוף הקובץ בלבד — בלי text/url. צירוף טקסט גורם לחלק מהאפליקציות
     // להתעלם מהתמונה, וזו בדיוק החסימה שהפיצ'ר בא לעקוף.
+    //
+    // v-FBFLOW2: onShared נקרא אך ורק בשורה שאחרי ש-navigator.share
+    // התממש בפועל (resolve). כל דחייה קופצת ישירות ל-catch ומדלגת עליו —
+    // אין שום מסלול שבו onShared ירוץ אחרי ביטול או שגיאה.
     await navigator.share({ files:[file] });
-    return true; // הובטח: המשתמש השלים את השיתוף
+
+    // ⬇️ מכאן והלאה: השיתוף הושלם ודאית
+    if(typeof onShared === 'function'){
+      try{ onShared(); }catch(_e){ console.warn('[v-FBFLOW2] onShared:', _e && _e.message); }
+    }
+    return true;
   }catch(e){
-    if(e && e.name === 'AbortError') return false; // המשתמש סגר/ביטל
+    // ביטול / סגירת החלונית / כשל רשת → onShared לעולם לא נקרא
+    if(e && e.name === 'AbortError') return false;
     console.warn('[v-HYBRID] share skipped:', e && e.message);
     return false;
   }
@@ -8538,23 +8569,25 @@ document.addEventListener('DOMContentLoaded',function(){
       doFallbackCopy();
     }
 
-    // v-FBFLOW: פיצול מסלולים לפי סוג המכשיר
-    if(_fbIsMobileDevice()){
-      // 📱 מובייל: שיתוף נייטיבי של התמונה. נקרא ללא await לפניו כדי לא
-      // לבזבז את ה-user gesture שספארי/iOS דורשים ל-navigator.share.
-      // החותמת בעמודה E נכתבת אך ורק אם השיתוף הושלם בפועל (resolved).
-      _hybridShareProductImage(p)
-        .then(function(shared){
-          if(shared) _fbStampPublishDate(p);
-          // ביטול/סגירה/כישלון → לא נכתבת חותמת ולא מתעדכן המטמון
-        })
-        .catch(function(){ /* נבלע בתוך הפונקציה — לעולם לא אמור להגיע לכאן */ });
-    } else {
-      // 💻 דסקטופ: הנגשת קישור התמונה לחיתוך ידני.
-      // ללא כתיבה כלשהי לגיליון — לא לעמודה E ולא לעמודה G —
-      // כי פוסטים מהמחשב מיועדים לתזמון עתידי ולא לפרסום מיידי.
+    // ══ v-FBFLOW2: פיצול מסלולים לפי סוג המכשיר ══
+    var _isMob = _fbIsMobileDevice();
+    console.log('[v-FBFLOW2] copyPostToFB | isMobile =', _isMob, '| uid =', p.uid || '(אין)');
+
+    // 💻 מסלול דסקטופ — יציאה מוקדמת מוחלטת.
+    // אין כאן שום קריאה ל-writeSheet, ל-_fbStampPublishDate או ל-navigator.share.
+    // אפס קריאות שרת, אפס נגיעה בעמודה E ובעמודה G.
+    if(!_isMob){
       _fbDesktopImageHelper(p);
+      return; // ⛔ סוף התהליך בדסקטופ
     }
+
+    // 📱 מסלול מובייל בלבד.
+    // הכתיבה לעמודה E מועברת כ-callback שרץ אך ורק בשורה שאחרי
+    // ש-navigator.share התממש (resolve) — ראה _hybridShareProductImage.
+    // ללא await לפניו, כדי לא לבזבז את ה-user gesture של ספארי/iOS.
+    _hybridShareProductImage(p, function onShareCompleted(){
+      _fbStampPublishDate(p);
+    }).catch(function(){ /* נבלע בפנים — לעולם לא אמור להגיע לכאן */ });
   };
 
   // ── Global Search ───────────────────────────────
@@ -8719,6 +8752,11 @@ document.addEventListener('DOMContentLoaded',function(){
 
 </script>
 <script>
+/* ── סימון גרסה: מאפשר לוודא בקונסול שנטענה הגרסה החדשה ולא מטמון ישן ── */
+var APP_BUILD = 'v-FBFLOW2';
+console.log('%c[BUILD] ' + APP_BUILD + ' — copyPostToFB: desktop=אפס כתיבה | mobile=כתיבה רק אחרי share מוצלח',
+            'background:#111;color:#0f0;padding:2px 6px;border-radius:3px;font-weight:bold');
+
 /* ── PWA: Service Worker Registration ── */
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
