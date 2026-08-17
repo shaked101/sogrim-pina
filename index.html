@@ -3578,6 +3578,87 @@ function viewModalCopyPost(rowNum){
 }
 
 // ════════════════════════════════════════════════
+// v-FBFLOW: הפרדת התנהגות מובייל / דסקטופ בכפתור "העתק פוסט לפייסבוק"
+//   מובייל  → העתקת טקסט + Web Share, וחותמת בעמודה E רק אם השיתוף הושלם.
+//   דסקטופ → העתקת טקסט + הנגשת קישור התמונה, ללא שום כתיבה לגיליון.
+// ════════════════════════════════════════════════
+
+// זיהוי מכשיר רב-שכבתי — לא מסתמך על UA בלבד:
+//  1. userAgentData.mobile — המקור המהימן ביותר (Chrome/Edge/Android)
+//  2. iPadOS 13+ מתחזה ל-Macintosh, ומזוהה לפי maxTouchPoints
+//  3. UA regex — לספארי/פיירפוקס שאין בהם userAgentData
+//  4. pointer:coarse + hover:none — מסך מגע ללא עכבר
+function _fbIsMobileDevice(){
+  try{
+    if(navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean'){
+      return navigator.userAgentData.mobile;
+    }
+  }catch(e){}
+
+  var ua = navigator.userAgent || '';
+
+  // iPad מודרני מדווח על עצמו כ-Macintosh — מסך מגע מסגיר אותו
+  if(/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1) return true;
+
+  if(/Android|iPhone|iPad|iPod|Windows Phone|IEMobile|BlackBerry|Opera Mini|Mobile Safari/i.test(ua)) return true;
+
+  try{
+    if(window.matchMedia && window.matchMedia('(pointer: coarse) and (hover: none)').matches) return true;
+  }catch(e){}
+
+  return false;
+}
+
+// מחזיק את קישור התמונה עבור כפתור ההעתקה במודאל הדסקטופ
+var _FB_DESKTOP_IMG_URL = '';
+
+// העתקת קישור התמונה ללוח — מוחלפת בכוונה על טקסט הפוסט רק בלחיצה מפורשת
+function _fbCopyDesktopImgUrl(){
+  var url = _FB_DESKTOP_IMG_URL;
+  if(!url) return;
+  function fallback(){
+    var ta = document.createElement('textarea');
+    ta.value = url;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast('🖼️ קישור התמונה הועתק (טקסט הפוסט הוחלף בלוח)','ok'); }
+    catch(e){ toast('שגיאה בהעתקת הקישור','err'); }
+    ta.remove();
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url)
+      .then(function(){ toast('🖼️ קישור התמונה הועתק (טקסט הפוסט הוחלף בלוח)','ok'); })
+      .catch(fallback);
+  } else fallback();
+}
+
+// מסלול דסקטופ: הנגשת תמונת המוצר לחיתוך והעלאה ידנית.
+// טקסט הפוסט נשאר בלוח; הקישור מועתק רק אם המשתמש לוחץ על הכפתור.
+function _fbDesktopImageHelper(p){
+  if(!p) return;
+  var imgUrl = gc(p, COL.IMG); // עמודה M
+  if(!imgUrl){ return; }        // אין תמונה — הודעת ההעתקה כבר הוצגה
+  _FB_DESKTOP_IMG_URL = imgUrl;
+  var name = gc(p, COL.HEB) || gc(p, COL.ENG) || 'מוצר';
+
+  openModal('🖼️ תמונת המוצר — ' + esc(name),
+    '<div style="font-size:12px;color:var(--t2);font-weight:700;margin-bottom:10px">'
+      + '✅ טקסט הפוסט כבר נמצא בלוח. התמונה למטה — לחיתוך והעלאה לפוסט המתוזמן.</div>'
+    + '<img src="' + esc(imgUrl) + '" alt="' + esc(name) + '" '
+      + 'style="width:100%;max-height:300px;object-fit:contain;border-radius:9px;border:1px solid var(--b1);background:var(--s2);cursor:zoom-in" '
+      + 'onclick="openImageLightbox(this.src)" onerror="this.style.display=\'none\'">'
+    + '<input type="text" readonly value="' + esc(imgUrl) + '" onclick="this.select()" '
+      + 'style="width:100%;box-sizing:border-box;margin-top:10px;padding:8px 10px;font-size:11px;font-family:monospace;direction:ltr;'
+      + 'background:var(--s2);border:1px solid var(--b1);border-radius:6px;color:var(--t2)">'
+    + '<div style="font-size:10px;color:var(--t3);margin-top:8px;font-weight:700">'
+      + 'ℹ️ במחשב לא מתבצע עדכון בגיליון — הפוסט מיועד לתזמון עתידי.</div>',
+    '<button class="btn" onclick="_fbCopyDesktopImgUrl()">🔗 העתק קישור תמונה</button>'
+    + '<button class="btn sec" onclick="window.open(_FB_DESKTOP_IMG_URL,\'_blank\')">↗️ פתח בטאב חדש</button>'
+    + '<button class="btn sec" onclick="closeModal()">סגור</button>'
+  );
+}
+
+// ════════════════════════════════════════════════
 // v-FBDATE: חותמת פרסום אוטומטית בעמודה E ("תאריך פרסום ושעה")
 // נקראת בלחיצה על "העתק פוסט לפייסבוק" — שקטה, ללא await חוסם.
 // כותבת אך ורק לעמודה E, אך ורק בשורת המוצר שנלחץ:
@@ -3659,15 +3740,18 @@ async function _hybridFetchImageBlob(url){
 
 // שיתוף תמונת המוצר בתפריט הנייטיבי. כישלון כלשהו = שקט מוחלט:
 // הודעת ה-Toast של העתקת הטקסט כבר הוצגה, והפיצ'ר המקורי לא נשבר.
+// v-FBFLOW: מחזירה true אך ורק כאשר navigator.share הסתיים בהצלחה
+// (המשתמש בחר אפליקציה והשלים את השיתוף). ביטול, סגירת החלונית,
+// כישלון CORS או היעדר תמיכה → false, ואז לא תיכתב חותמת בעמודה E.
 async function _hybridShareProductImage(p){
   try{
-    if(!p) return;
+    if(!p) return false;
     var imgUrl = gc(p, COL.IMG); // עמודה M — תמונת המוצר המקורית
-    if(!imgUrl) return;
-    if(!navigator.share || !navigator.canShare) return; // דסקטופ ללא תמיכה
+    if(!imgUrl) return false;
+    if(!navigator.share || !navigator.canShare) return false; // אין תמיכה
 
     var blob = await _hybridFetchImageBlob(imgUrl);
-    if(!blob) return;
+    if(!blob) return false;
 
     var ext = blob.type.indexOf('png')  !== -1 ? 'png'
             : blob.type.indexOf('webp') !== -1 ? 'webp' : 'jpg';
@@ -3675,13 +3759,15 @@ async function _hybridShareProductImage(p){
       .replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 40) || 'product';
     var file = new File([blob], base + '.' + ext, { type: blob.type });
 
-    if(!navigator.canShare({ files:[file] })) return;
+    if(!navigator.canShare({ files:[file] })) return false;
     // שיתוף הקובץ בלבד — בלי text/url. צירוף טקסט גורם לחלק מהאפליקציות
     // להתעלם מהתמונה, וזו בדיוק החסימה שהפיצ'ר בא לעקוף.
     await navigator.share({ files:[file] });
+    return true; // הובטח: המשתמש השלים את השיתוף
   }catch(e){
-    if(e && e.name === 'AbortError') return; // המשתמש סגר את תפריט השיתוף
+    if(e && e.name === 'AbortError') return false; // המשתמש סגר/ביטל
     console.warn('[v-HYBRID] share skipped:', e && e.message);
+    return false;
   }
 }
 
@@ -8452,14 +8538,23 @@ document.addEventListener('DOMContentLoaded',function(){
       doFallbackCopy();
     }
 
-    // v-FBDATE: חותמת פרסום שקטה בעמודה E — רק לשורת המוצר הזה (לפי uid).
-    // fire-and-forget: לא ממתינים לתשובה כדי לא לעכב את פתיחת תפריט השיתוף.
-    _fbStampPublishDate(p);
-
-    // v-HYBRID: מיד אחרי ההעתקה — פתיחת תפריט השיתוף עם תמונת המוצר.
-    // ללא await לפניו, כדי לא לבזבז את ה-user gesture שנדרש ל-navigator.share
-    // בספארי/iOS. כישלון נבלע בתוך הפונקציה — הודעת ההעתקה כבר הוצגה.
-    _hybridShareProductImage(p);
+    // v-FBFLOW: פיצול מסלולים לפי סוג המכשיר
+    if(_fbIsMobileDevice()){
+      // 📱 מובייל: שיתוף נייטיבי של התמונה. נקרא ללא await לפניו כדי לא
+      // לבזבז את ה-user gesture שספארי/iOS דורשים ל-navigator.share.
+      // החותמת בעמודה E נכתבת אך ורק אם השיתוף הושלם בפועל (resolved).
+      _hybridShareProductImage(p)
+        .then(function(shared){
+          if(shared) _fbStampPublishDate(p);
+          // ביטול/סגירה/כישלון → לא נכתבת חותמת ולא מתעדכן המטמון
+        })
+        .catch(function(){ /* נבלע בתוך הפונקציה — לעולם לא אמור להגיע לכאן */ });
+    } else {
+      // 💻 דסקטופ: הנגשת קישור התמונה לחיתוך ידני.
+      // ללא כתיבה כלשהי לגיליון — לא לעמודה E ולא לעמודה G —
+      // כי פוסטים מהמחשב מיועדים לתזמון עתידי ולא לפרסום מיידי.
+      _fbDesktopImageHelper(p);
+    }
   };
 
   // ── Global Search ───────────────────────────────
