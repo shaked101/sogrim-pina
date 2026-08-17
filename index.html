@@ -3577,6 +3577,67 @@ function viewModalCopyPost(rowNum){
   else doFallback();
 }
 
+// ════════════════════════════════════════════════
+// v-HYBRID: שיתוף היברידי — טקסט ללוח + תמונת המוצר המקורית ל-Web Share
+// עוקף את חסימת ההדבקה המשולבת (קובץ+טקסט) של אפליקציית פייסבוק במובייל.
+// מקור התמונה: עמודה M (COL.IMG / אינדקס 12) — תמונת המוצר המקורית,
+// בשונה מלשונית "סיכום שבועי" שם קיימת תמונת Cloudinary מוכנה.
+// ════════════════════════════════════════════════
+
+// משיכת התמונה כ-Blob. חשוב: _origFetch ולא apiFetch —
+// apiFetch מזריק כותרת X-App-Secret, שהופכת בקשה חוצת-מקור ל-non-simple
+// ומפעילה preflight שה-CDN של עלי אקספרס לא עונה עליו → חסימה ודאית.
+async function _hybridFetchImageBlob(url){
+  // ניסיון 1: משיכה ישירה כבקשה "פשוטה" (ללא כותרות מותאמות → ללא preflight)
+  try{
+    var r = await _origFetch(url, { mode:'cors', credentials:'omit' });
+    if(r.ok){
+      var b = await r.blob();
+      if(b && b.type.indexOf('image/') === 0) return b;
+    }
+  }catch(e){ /* CORS/רשת — ממשיכים לניסיון הבא */ }
+
+  // ניסיון 2: פרוקסי תמונות אופציונלי ב-Vercel (/api/img).
+  // אם הקובץ לא הותקן — הבקשה תיכשל בשקט והפיצ'ר יתדרדר בחן להעתקת טקסט בלבד.
+  try{
+    var r2 = await _origFetch('/api/img?url=' + encodeURIComponent(url));
+    if(r2.ok){
+      var b2 = await r2.blob();
+      if(b2 && b2.type.indexOf('image/') === 0) return b2;
+    }
+  }catch(e){ /* אין פרוקסי — נופלים חזרה להעתקת טקסט בלבד */ }
+
+  return null;
+}
+
+// שיתוף תמונת המוצר בתפריט הנייטיבי. כישלון כלשהו = שקט מוחלט:
+// הודעת ה-Toast של העתקת הטקסט כבר הוצגה, והפיצ'ר המקורי לא נשבר.
+async function _hybridShareProductImage(p){
+  try{
+    if(!p) return;
+    var imgUrl = gc(p, COL.IMG); // עמודה M — תמונת המוצר המקורית
+    if(!imgUrl) return;
+    if(!navigator.share || !navigator.canShare) return; // דסקטופ ללא תמיכה
+
+    var blob = await _hybridFetchImageBlob(imgUrl);
+    if(!blob) return;
+
+    var ext = blob.type.indexOf('png')  !== -1 ? 'png'
+            : blob.type.indexOf('webp') !== -1 ? 'webp' : 'jpg';
+    var base = (gc(p, COL.HEB) || gc(p, COL.ENG) || 'product')
+      .replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 40) || 'product';
+    var file = new File([blob], base + '.' + ext, { type: blob.type });
+
+    if(!navigator.canShare({ files:[file] })) return;
+    // שיתוף הקובץ בלבד — בלי text/url. צירוף טקסט גורם לחלק מהאפליקציות
+    // להתעלם מהתמונה, וזו בדיוק החסימה שהפיצ'ר בא לעקוף.
+    await navigator.share({ files:[file] });
+  }catch(e){
+    if(e && e.name === 'AbortError') return; // המשתמש סגר את תפריט השיתוף
+    console.warn('[v-HYBRID] share skipped:', e && e.message);
+  }
+}
+
 function openEditModal(rowNum){
   const p=G.posts.find(x=>x.row===rowNum);if(!p)return;
   const row=rowNum;
@@ -8343,6 +8404,11 @@ document.addEventListener('DOMContentLoaded',function(){
     } else {
       doFallbackCopy();
     }
+
+    // v-HYBRID: מיד אחרי ההעתקה — פתיחת תפריט השיתוף עם תמונת המוצר.
+    // ללא await לפניו, כדי לא לבזבז את ה-user gesture שנדרש ל-navigator.share
+    // בספארי/iOS. כישלון נבלע בתוך הפונקציה — הודעת ההעתקה כבר הוצגה.
+    _hybridShareProductImage(p);
   };
 
   // ── Global Search ───────────────────────────────
