@@ -1727,6 +1727,13 @@ body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--a
             <!-- משבצת תמונה בודדת לסטורי (מוצגת רק במצב "תמונה בודדת") -->
             <div id="ws-single-wrap" style="display:none;margin-bottom:12px"></div>
 
+            <!-- v-STORY: כפתור העתק קישור ושתף לסטורי (מוצג רק במצב "תמונה בודדת") -->
+            <button id="ws-share-story-btn" onclick="_wsShareStory()"
+              style="display:none;width:100%;padding:10px;border-radius:9px;border:none;background:linear-gradient(45deg,#833ab4,#c13584,#e1306c,#fd1d1d);color:#fff;font-size:12px;font-weight:900;cursor:pointer;margin-bottom:8px;transition:opacity .15s"
+              onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+              📱 העתק קישור ושתף לסטורי
+            </button>
+
             <!-- כפתור ייצר קולאז' -->
             <button id="ws-collage-btn" onclick="_wsGenerateCollage()"
               style="width:100%;padding:10px;border-radius:9px;border:none;background:var(--acc);color:#fff;font-size:12px;font-weight:900;cursor:pointer;transition:opacity .15s;margin-bottom:8px"
@@ -1874,7 +1881,7 @@ body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--a
 // ════════════════════════════════════════════════
 // COLUMN MAP
 // ════════════════════════════════════════════════
-const COL={HEB:0,ENG:1,PRICE:2,LINK:3,COL_E:4,CAT:5,STATUS:6,BOUGHT:7,TAGS:8,CONTENT:9,MSGID:10,COL_L:11,IMG:12,COL_N:13,RATING:14,TG_S:15,COL_Q:16,FB_S:17,COL_S:18,IG_S:19,COL_IG_D:20,REVIEWED_DATE:27}; // AB=index 27 (0-based), col 28 (1-based)
+const COL={HEB:0,ENG:1,PRICE:2,LINK:3,COL_E:4,CAT:5,STATUS:6,BOUGHT:7,TAGS:8,CONTENT:9,MSGID:10,COL_L:11,IMG:12,COL_N:13,RATING:14,TG_S:15,COL_Q:16,FB_S:17,COL_S:18,IG_S:19,COL_IG_D:20,REVIEWED_DATE:27,STORY_CB:29,STORY_DATE:30,WEEKLY_CB:31,WEEKLY_DATE:32}; // AB=27 | v-STORY: AD=29,AE=30,AF=31,AG=32 (0-based)
 
 // ════════════════════════════════════════════════
 // COMMUNITY — תחרות הפניות
@@ -7284,6 +7291,25 @@ function _wsRenderPool(){
     var inSlot = (_wsMode === 'single')
       ? !!(_wsSingle && _wsSingle.row === p.row)
       : _wsSlots.some(function(s){ return s && s.row===p.row; });
+
+    // v-STORY: מצב הצ'קבוקסים + תאריכים מעמודות AD-AG
+    var storyOn   = _wsIsTrue(gc(p, COL.STORY_CB));
+    var weeklyOn  = _wsIsTrue(gc(p, COL.WEEKLY_CB));
+    var storyDate = _wsFmtTrackDate(gc(p, COL.STORY_DATE));
+    var weeklyDate= _wsFmtTrackDate(gc(p, COL.WEEKLY_DATE));
+
+    function trackCb(kind, on, dateStr, label, emoji){
+      return '<label onclick="event.stopPropagation()" '
+        +'style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;font-size:9px;font-weight:800;color:'+(on?'var(--acc)':'var(--t3)')+';user-select:none;white-space:nowrap">'
+        +'<input type="checkbox" '+(on?'checked ':'')
+          +'onclick="event.stopPropagation()" '
+          +'onchange="_wsToggleTrack('+idx+',\''+kind+'\',this)" '
+          +'style="width:11px;height:11px;cursor:pointer;accent-color:var(--acc);margin:0">'
+        +emoji+' '+label
+        +(on && dateStr ? '<span style="font-size:8px;font-weight:700;color:var(--t2);background:var(--s2);border:1px solid var(--b1);border-radius:3px;padding:0 3px">פורסם ב-'+esc(dateStr)+'</span>' : '')
+      +'</label>';
+    }
+
     // כל שורה היא draggable כשאינה כבר בגריד
     return '<div'
       +(!inSlot ? ' draggable="true" ondragstart="_wsDragStartPool(event,'+idx+')" ondragend="_wsDragEnd(event)"' : '')
@@ -7295,10 +7321,15 @@ function _wsRenderPool(){
       +(img
         ?'<img src="'+esc(img)+'" style="width:36px;height:36px;border-radius:5px;object-fit:cover;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();openViewModal('+p.row+')" title="צפה בפרטים" onerror="this.style.display=\'none\'">'
         :'<div style="width:36px;height:36px;border-radius:5px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();openViewModal('+p.row+')" title="צפה בפרטים">📦</div>')
-      // טקסט
+      // טקסט + צ'קבוקסים
       +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:11px;font-weight:800;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(name)+'</div>'
         +(price?'<div style="font-size:10px;color:var(--acc);font-family:monospace;font-weight:700">'+esc(price)+'$</div>':'')
+        // v-STORY: שורת מעקב פרסום — בין שם המוצר לכפתור "הוסף"
+        +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:3px">'
+          +trackCb('story',  storyOn,  storyDate,  'סטורי', '📱')
+          +trackCb('weekly', weeklyOn, weeklyDate, 'סיכום שבועי', '📝')
+        +'</div>'
       +'</div>'
       // כפתור
       +'<button class="btn'+(inSlot?' sec':'')+' sm" '
@@ -7554,9 +7585,15 @@ function _wsSetMode(mode){
     if(title) title.textContent = '📱 תמונה בודדת (סטורי)';
     if(btn)   btn.innerHTML     = '✨ ייצר תמונת סטורי';
     _wsRenderSingle();
+    // v-STORY: כפתור השיתוף מוצג רק במצב תמונה בודדת
+    var shareBtn = document.getElementById('ws-share-story-btn');
+    if(shareBtn) shareBtn.style.display = 'block';
   } else {
     if(gridWrap)   gridWrap.style.display   = 'block';
     if(singleWrap) singleWrap.style.display = 'none';
+    // v-STORY: הסתרת כפתור השיתוף במצבי קולאז'
+    var shareBtn2 = document.getElementById('ws-share-story-btn');
+    if(shareBtn2) shareBtn2.style.display = 'none';
     if(title) title.textContent = mode === 'collage6' ? "🖼️ גריד קולאז' (6 משבצות)" : "🖼️ גריד קולאז' (8 משבצות)";
     if(btn)   btn.innerHTML     = "✨ ייצר קולאז'";
     if(mode === 'collage6'){
@@ -7802,6 +7839,142 @@ async function _wsSendTelegram(){
       _wsUpdateTelegramBtn();
     }
   }
+}
+
+// ════════════════════════════════════════════════
+// v-STORY: מעקב פרסום סטורי/סיכום שבועי + שיתוף לאינסטגרם
+// עמודות: AD(30)=סטורי TRUE | AE(31)=תאריך | AF(32)=סיכום TRUE | AG(33)=תאריך
+// כתיבה דרך writeSheet הקיים (uid מעמודה K → אין Index Shifting)
+// ════════════════════════════════════════════════
+
+// TRUE מגיע מהגיליון כ-boolean/מחרוזת — נרמול אחיד
+function _wsIsTrue(v){
+  v = String(v||'').trim().toLowerCase();
+  return v==='true' || v==='v' || v==='✓' || v==='כן';
+}
+
+// תאריך לתצוגה: תומך גם ב-"17.08.26" וגם ב-ISO שחוזר מ-Sheets אם התא הומר לתאריך
+function _wsFmtTrackDate(v){
+  v = String(v||'').trim();
+  if(!v) return '';
+  if(/^\d{1,2}\.\d{1,2}\.\d{2,4}$/.test(v)) return v; // כבר בפורמט שלנו
+  var d = new Date(v);
+  if(isNaN(d)) return v;
+  return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+String(d.getFullYear()).slice(2);
+}
+
+// לחיצה על צ'קבוקס: סימון → דיאלוג תאריך | ביטול סימון → ניקוי העמודות
+function _wsToggleTrack(poolIdx, kind, cbEl){
+  var p = _wsFiltered[poolIdx];
+  if(!p) return;
+  var cbCol = (kind==='story') ? COL.STORY_CB : COL.WEEKLY_CB;
+  var isOn  = _wsIsTrue(gc(p, cbCol));
+
+  if(isOn){
+    // המשתמש ביטל סימון → ניקוי שקט
+    _wsClearTrack(poolIdx, kind);
+    return;
+  }
+
+  // מחזירים את הצ'קבוקס למצב לא-מסומן עד שהתאריך יאושר וישמר
+  if(cbEl) cbEl.checked = false;
+
+  var today = new Date();
+  var iso = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var label = (kind==='story') ? '📱 סטורי' : '📝 סיכום שבועי';
+  var name  = gc(p, COL.HEB)||gc(p, COL.ENG)||'מוצר';
+
+  openModal('📅 תאריך פרסום — '+label,
+    '<div style="font-size:12px;color:var(--t2);margin-bottom:10px;font-weight:700">'+esc(name)+'</div>'
+    +'<label style="font-size:11px;font-weight:800;color:var(--t2);display:block;margin-bottom:6px">באיזה תאריך פורסם?</label>'
+    +'<input type="date" id="ws-track-date" value="'+iso+'" '
+      +'style="width:100%;box-sizing:border-box;padding:9px 11px;font-size:13px;background:var(--s2);border:1px solid var(--b1);border-radius:6px;color:var(--tx);font-family:inherit">',
+    '<button class="btn" onclick="_wsConfirmTrack('+poolIdx+',\''+kind+'\')">✅ אישור ושמירה</button>'
+    +'<button class="btn sec" onclick="closeModal()">ביטול</button>'
+  );
+}
+
+// אישור התאריך → המרה ל-DD.MM.YY → fetch שקט דרך writeSheet (לפי uid)
+async function _wsConfirmTrack(poolIdx, kind){
+  var p = _wsFiltered[poolIdx];
+  if(!p){ closeModal(); return; }
+  var inp = document.getElementById('ws-track-date');
+  var val = inp ? inp.value : '';
+  if(!val){ toast('בחר תאריך תחילה','err'); return; }
+  var parts = val.split('-'); // YYYY-MM-DD
+  var dateStr = parts[2]+'.'+parts[1]+'.'+parts[0].slice(2); // DD.MM.YY
+  closeModal();
+
+  var updates = {};
+  if(kind==='story'){ updates[30] = true; updates[31] = dateStr; }  // AD, AE
+  else              { updates[32] = true; updates[33] = dateStr; }  // AF, AG
+
+  var ok = await writeSheet(p.row, updates); // uid נשלף אוטומטית בתוך writeSheet
+  if(ok) toast('✅ נשמר: '+(kind==='story'?'סטורי 📱':'סיכום שבועי 📝')+' — '+dateStr,'ok');
+  _wsRenderPool(); // רענון תצוגה מ-p.data שעודכן מקומית ב-writeSheet
+}
+
+// ביטול סימון → ניקוי שתי העמודות של אותו ערוץ
+async function _wsClearTrack(poolIdx, kind){
+  var p = _wsFiltered[poolIdx];
+  if(!p) return;
+  var updates = {};
+  if(kind==='story'){ updates[30] = false; updates[31] = ''; }
+  else              { updates[32] = false; updates[33] = ''; }
+  var ok = await writeSheet(p.row, updates);
+  toast(ok ? 'הסימון הוסר' : 'שגיאה בהסרת הסימון', ok ? 'inf' : 'err');
+  _wsRenderPool();
+}
+
+// ────────────────────────────────────────────────
+// v-STORY: העתק קישור + שיתוף תמונת הסטורי (Web Share API)
+// ללא Graph API — שיתוף נייטיבי של קובץ התמונה שנוצרה ב-Make/Cloudinary
+// ────────────────────────────────────────────────
+async function _wsShareStory(){
+  var p = _wsSingle;
+  if(!p){ toast('שבץ מוצר במשבצת הסטורי תחילה','err'); return; }
+
+  // שלב 1: העתקת קישור השותפים (עמודה D) ללוח
+  var link = gc(p, COL.LINK);
+  if(link){
+    try{
+      await navigator.clipboard.writeText(link);
+      toast('🔗 הקישור הועתק ללוח — הדבק בסטיקר Link בסטורי','ok');
+    }catch(e){ toast('לא ניתן להעתיק את הקישור אוטומטית','warn'); }
+  }else{
+    toast('למוצר אין קישור שותפים (עמודה D)','warn');
+  }
+
+  // שלב 2: שיתוף תמונת הסטורי שנוצרה
+  if(!_wsLastImageUrl){
+    toast('צור קודם תמונת סטורי (✨ ייצר תמונת סטורי) ואז שתף','err');
+    return;
+  }
+
+  // הורדת התמונה כ-Blob ושיתוף כקובץ — _origFetch ולא apiFetch
+  // (אין להזריק X-App-Secret לבקשה חיצונית ל-Cloudinary — יגרום ל-preflight ודחייה)
+  try{
+    var resp = await _origFetch(_wsLastImageUrl);
+    var blob = await resp.blob();
+    var ext  = (blob.type||'').indexOf('png') !== -1 ? 'png' : 'jpg';
+    var file = new File([blob], 'sogrim-pina-story.'+ext, { type: blob.type || 'image/jpeg' });
+    if(navigator.canShare && navigator.canShare({ files:[file] })){
+      await navigator.share({ files:[file] });
+      return; // תפריט השיתוף נפתח — בחר אינסטגרם → סטורי
+    }
+  }catch(e){
+    if(e && e.name === 'AbortError') return; // המשתמש סגר את תפריט השיתוף — לא שגיאה
+  }
+
+  // Fallback 1: שיתוף URL (דפדפנים בלי תמיכה בקבצים)
+  if(navigator.share){
+    try{ await navigator.share({ url: _wsLastImageUrl }); return; }
+    catch(e){ if(e && e.name === 'AbortError') return; }
+  }
+
+  // Fallback 2: דסקטופ ללא Web Share — פתיחת התמונה בטאב חדש
+  window.open(_wsLastImageUrl, '_blank');
+  toast('נפתחה התמונה בטאב חדש — שמור ושתף ידנית (הקישור כבר בלוח)','inf');
 }
 
 // ────────────────────────────────────────────────
