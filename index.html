@@ -3578,6 +3578,53 @@ function viewModalCopyPost(rowNum){
 }
 
 // ════════════════════════════════════════════════
+// v-FBDATE: חותמת פרסום אוטומטית בעמודה E ("תאריך פרסום ושעה")
+// נקראת בלחיצה על "העתק פוסט לפייסבוק" — שקטה, ללא await חוסם.
+// כותבת אך ורק לעמודה E, אך ורק בשורת המוצר שנלחץ:
+// writeSheet שולח את p.uid (עמודה K) ו-Code.gs מאתר לפיו את השורה הפיזית,
+// כך שאין תלות במספר שורה שעלול לזוז אחרי מחיקות.
+// ════════════════════════════════════════════════
+
+// חותמת "היום" בפורמט המקובל במערכת: DD/MM/YYYY — תאריך נקי ללא שעות.
+// זהה בדיוק לפורמט שמודאל העריכה כותב לעמודה E, ונקרא ע"י parseDateIL.
+function _fbNowStamp(){
+  var d = new Date();
+  var pad = function(n){ return n < 10 ? '0' + n : '' + n; };
+  return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
+}
+
+// רענון המטמון המקומי אחרי כתיבה מוצלחת לעמודה E — רק עבור הפוסט שהשתנה,
+// כדי שהתאריך והצ'יפ של פייסבוק יתעדכנו בלי לחכות לרענון מלא של הגיליון.
+function _fbRefreshDateCache(p){
+  try{ p._dateE = parseDateIL(gc(p, COL.COL_E)); }catch(e){ p._dateE = null; }
+  // הוספה ל-dateMap דרך ה-helper הגלובלי — שומר על אינדקס ה-Set מסונכרן
+  try{ if(p._dateE) _dmAdd(p._dateE.num, 'fb', p); }catch(e){}
+  // רענון תצוגה בלי לאבד מיקום גלילה
+  try{
+    var _sy = window.scrollY || window.pageYOffset || 0;
+    var _m  = document.querySelector('.main');
+    var _ms = _m ? _m.scrollTop : 0;
+    G_keepTableView = true;
+    renderDash(); filterPosts(); renderCal();
+    requestAnimationFrame(function(){
+      window.scrollTo(0, _sy);
+      if(_m) _m.scrollTop = _ms;
+    });
+  }catch(e){}
+}
+
+// עדכון שקט (fire-and-forget) של עמודה E לתאריך ולשעה של עכשיו.
+// אין await בצד הקורא — כדי לא לבזבז את ה-user gesture הנדרש ל-navigator.share.
+function _fbStampPublishDate(p){
+  if(!p) return;
+  var updates = {};
+  updates[COL.COL_E + 1] = _fbNowStamp(); // COL_E=4 (0-based) → עמודה 5 = E
+  writeSheet(p.row, updates)
+    .then(function(ok){ if(ok) _fbRefreshDateCache(p); })
+    .catch(function(e){ console.warn('[v-FBDATE] stamp failed:', e && e.message); });
+}
+
+// ════════════════════════════════════════════════
 // v-HYBRID: שיתוף היברידי — טקסט ללוח + תמונת המוצר המקורית ל-Web Share
 // עוקף את חסימת ההדבקה המשולבת (קובץ+טקסט) של אפליקציית פייסבוק במובייל.
 // מקור התמונה: עמודה M (COL.IMG / אינדקס 12) — תמונת המוצר המקורית,
@@ -8404,6 +8451,10 @@ document.addEventListener('DOMContentLoaded',function(){
     } else {
       doFallbackCopy();
     }
+
+    // v-FBDATE: חותמת פרסום שקטה בעמודה E — רק לשורת המוצר הזה (לפי uid).
+    // fire-and-forget: לא ממתינים לתשובה כדי לא לעכב את פתיחת תפריט השיתוף.
+    _fbStampPublishDate(p);
 
     // v-HYBRID: מיד אחרי ההעתקה — פתיחת תפריט השיתוף עם תמונת המוצר.
     // ללא await לפניו, כדי לא לבזבז את ה-user gesture שנדרש ל-navigator.share
