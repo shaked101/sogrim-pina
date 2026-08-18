@@ -140,6 +140,10 @@ input[type=number].ifield::-webkit-outer-spin-button{opacity:1;height:28px;curso
 .chart-lbl{font-size:9px;font-weight:800;color:var(--t2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
 .ptab{background:var(--s2);border:1px solid var(--b1);border-radius:5px;padding:4px 11px;font-size:11px;font-weight:700;cursor:pointer;color:var(--t2);font-family:inherit}
 .ptab.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.sortable-th{cursor:pointer;user-select:none;-webkit-user-select:none;white-space:nowrap;transition:color .15s}
+.sortable-th:hover{color:var(--acc)}
+.sortable-th.act{color:var(--acc)}
+.ap-badge{border-radius:4px;padding:1px 6px;font-weight:800;font-size:10px;white-space:nowrap;display:inline-block}
 .csv-drop{background:var(--s2);border:2px dashed var(--b2);border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:14px}
 .csv-drop:hover{border-color:var(--acc);background:#fef9f7}
 .idea-card{background:var(--s1);border:1px solid var(--b1);border-radius:11px;padding:14px;cursor:pointer;transition:all .2s}
@@ -1231,13 +1235,18 @@ body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--a
               </div>
             </div>
             <div class="tw">
-              <div style="padding:10px 13px;border-bottom:1px solid var(--b1)"><div class="slbl2">מוצרים נמכרים ביותר</div></div>
+              <div style="padding:10px 13px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                <div class="slbl2">מוצרים נמכרים ביותר</div>
+                <button class="btn sec sm" id="all-prods-btn" type="button">📋 הצג את כל המוצרים</button>
+              </div>
               <div class="tscroll">
                 <table style="table-layout:fixed">
                   <thead><tr>
                     <th style="width:26px">#</th><th>מוצר</th>
-                    <th style="width:55px">כמות</th>
-                    <th style="width:70px">מכירות</th><th style="width:60px">עמלה</th><th style="width:45px">%</th>
+                    <th id="tsth-count" class="sortable-th" style="width:55px" title="מיון לפי כמות יחידות">כמות<span id="tsar-count"></span></th>
+                    <th id="tsth-sales" class="sortable-th" style="width:70px" title="מיון לפי מכירות">מכירות<span id="tsar-sales"></span></th>
+                    <th id="tsth-commission" class="sortable-th" style="width:60px" title="מיון לפי עמלה">עמלה<span id="tsar-commission"></span></th>
+                    <th id="tsth-pct" class="sortable-th" style="width:48px" title="מיון לפי אחוז עמלה">%<span id="tsar-pct"></span></th>
                   </tr></thead>
                   <tbody id="top-tbody"></tbody>
                 </table>
@@ -4934,8 +4943,10 @@ function aliDetectCols(cols){
   ],[commission,commissionAlt,incentive]);
 
   return{
-    __v:55,
+    __v:56,
     date:date,dateAlt:dateAlt,
+    // v56: "y" = a product I published myself, "n" = it was already in the buyer's cart
+    isAff:aliPick(cols,[re(/^isaffproduct$/),re(/isaffproduct/),re(/isaff$/),re(/affiliateproduct|isaffiliate/),re(/isaff/)]),
     product:aliPick(cols,[re(/^producttitle$/),re(/producttitle|productname|itemtitle|itemname/),re(/title/),re(/^product$/),function(n){return /product/.test(n)&&!/id$|url|category|image/.test(n);}]),
     url:aliPick(cols,[re(/^producturl$/),re(/producturl|productdetailurl|itemurl|productlink/),re(/url|link/)]),
     price:price,priceAlt:priceAlt,
@@ -4949,7 +4960,7 @@ function aliDetectCols(cols){
 function aliEnsureCols(rows){
   rows=rows||G.csvRaw||[];
   var ac=G.aliCols||{};
-  if(ac.__v===55){G.aliDayFirst=aliDetectDayFirst(rows,ac.date);return ac;}
+  if(ac.__v===56){G.aliDayFirst=aliDetectDayFirst(rows,ac.date);return ac;}
   var seen={},list=[],lim=Math.min(rows.length,50);
   for(var i=0;i<lim;i++){for(var k in rows[i]){if(!seen[k]){seen[k]=1;list.push(k);}}}
   var det=aliDetectCols(list);
@@ -4983,6 +4994,16 @@ function aliRowComm(r,ac){
   var inc=ac.incentive?aliNum(r[ac.incentive]):0;
   if(!inc&&ac.incentiveAlt)inc=aliNum(r[ac.incentiveAlt]);
   return base+inc;
+}
+// v56: which bucket a row belongs to — 'y' mine, 'n' from the buyer's cart, '?' unknown
+function aliRowAff(r,ac){
+  ac=ac||G.aliCols||{};
+  if(!ac.isAff)return '?';
+  var v=String(r[ac.isAff]===undefined||r[ac.isAff]===null?'':r[ac.isAff]).trim().toLowerCase();
+  if(!v)return '?';
+  if(v==='y'||v==='yes'||v==='1'||v==='true'||v==='t')return 'y';
+  if(v==='n'||v==='no'||v==='0'||v==='false'||v==='f')return 'n';
+  return '?';
 }
 // default range built from real Date objects (min/max), local time
 function aliInitDateRange(){
@@ -5104,8 +5125,12 @@ function renderStatsDash(){
     prodMap[pn].commission+=aliRowComm(r,ac);
     prodMap[pn].count++;
   });
-  renderStatDiag(raw,filteredData,ac,outOfRange,noDate);
-  const topProds=Object.entries(prodMap).sort((a,b)=>b[1].sales-a[1].sales).slice(0,10);
+  renderStatDiag(raw);
+  // v56: keep the full aggregated list so the table can be re-sorted without a full re-render
+  G._statProds=Object.keys(prodMap).map(function(k){
+    var d=prodMap[k];
+    return{name:k,sales:d.sales,commission:d.commission,count:d.count,url:d.url,cr:d.cr};
+  });
 
   // KPIs from filteredData
   document.getElementById('stat-kpis').innerHTML=`
@@ -5205,47 +5230,210 @@ function renderStatsDash(){
     }
   });
 
-  // Top products from filteredData
-  document.getElementById('top-tbody').innerHTML=topProds.map(([name,d],i)=>{
-    const pct=d.sales?((d.commission/d.sales)*100).toFixed(1):0;
-    const crDisplay=d.cr?d.cr:'';
+  // Top products from filteredData — rendered (and re-sortable) by renderTopProducts
+  renderTopProducts();
+}
+
+// ════════════════════════════════════════════════════════════════
+// v56 — sortable "top products" table
+// ════════════════════════════════════════════════════════════════
+function statSortVal(d,key){
+  if(key==='count')return d.count||0;
+  if(key==='sales')return d.sales||0;
+  if(key==='commission')return d.commission||0;
+  if(key==='pct')return d.sales?(d.commission/d.sales*100):0;
+  return 0;
+}
+function setTopSort(key){
+  var st=G.topSort||{key:'sales',dir:'desc'};
+  if(st.key===key)st.dir=(st.dir==='desc'?'asc':'desc');
+  else{st.key=key;st.dir='desc';}
+  G.topSort=st;
+  renderTopProducts();
+}
+function renderTopProducts(){
+  const tb=document.getElementById('top-tbody');if(!tb)return;
+  const st=G.topSort||(G.topSort={key:'sales',dir:'desc'});
+  const list=(G._statProds||[]).slice().sort(function(a,b){
+    const va=statSortVal(a,st.key),vb=statSortVal(b,st.key);
+    if(va===vb)return (b.sales||0)-(a.sales||0);
+    return st.dir==='asc'?va-vb:vb-va;
+  });
+  ['count','sales','commission','pct'].forEach(function(k){
+    const ar=document.getElementById('tsar-'+k);
+    if(ar)ar.textContent=(st.key===k)?(st.dir==='asc'?' ▲':' ▼'):'';
+    const th=document.getElementById('tsth-'+k);
+    if(th)th.classList.toggle('act',st.key===k);
+  });
+  tb.innerHTML=list.slice(0,10).map(function(d,i){
+    const pct=d.sales?((d.commission/d.sales)*100).toFixed(1):'0.0';
+    const crTitle=d.cr?('שיעור עמלה בקובץ: '+d.cr):'';
     return`<tr>
       <td style="font-weight:800;color:var(--acc);font-size:11px">${i+1}</td>
-      <td style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px">
-        ${d.url?`<a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;font-weight:700">${esc(name)}</a>`:esc(name)}
+      <td style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px" title="${esc(d.name)}">
+        ${d.url?`<a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;font-weight:700">${esc(d.name)}</a>`:esc(d.name)}
       </td>
       <td style="font-size:11px;text-align:center"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 5px;font-weight:800">×${d.count}</span></td>
       <td style="font-family:monospace;font-weight:700;font-size:11px">$${d.sales.toFixed(2)}</td>
       <td style="font-family:monospace;color:var(--grn);font-size:11px">$${d.commission.toFixed(2)}</td>
-      <td style="font-size:11px;color:var(--t2)">${crDisplay||pct+'%'}</td>
-    </tr>`;}).join('');
+      <td style="font-size:11px;color:var(--t2)" title="${esc(crTitle)}">${pct}%</td>
+    </tr>`;}).join('')||'<tr><td colspan="6" style="padding:12px;text-align:center;color:var(--t3);font-size:11px">אין נתונים בטווח</td></tr>';
 }
 
-// v55: transparency panel — shows exactly how many rows were read, how many
-// are counted, and why any row is outside the range. Nothing is filtered by status.
-function renderStatDiag(raw,filteredData,ac,outOfRange,noDate){
+// ════════════════════════════════════════════════════════════════
+// v56 — full product list modal + "מוצרים שלי / מסל הקניות" analysis
+// ════════════════════════════════════════════════════════════════
+function buildAllProdList(){
+  const ac=G.aliCols||{},data=G._statFiltered||G.csvRaw||[];
+  const map={};
+  data.forEach(function(r){
+    const name=(((ac.product&&r[ac.product])||'')+'').trim()||'לא ידוע';
+    const aff=aliRowAff(r,ac);
+    const key=aff+'||'+name;
+    if(!map[key])map[key]={name:name,aff:aff,url:'',sales:0,commission:0,count:0};
+    if(!map[key].url&&ac.url&&r[ac.url])map[key].url=r[ac.url];
+    map[key].sales+=aliRowSales(r,ac);
+    map[key].commission+=aliRowComm(r,ac);
+    map[key].count++;
+  });
+  return Object.keys(map).map(function(k){return map[k];});
+}
+function setAllProdTab(t){G.allProdTab=t;renderAllProds();}
+function setAllProdQuery(q){G.allProdQ=q;renderAllProds();}
+function setAllProdSort(key){
+  var st=G.allProdSort||{key:'sales',dir:'desc'};
+  if(st.key===key)st.dir=(st.dir==='desc'?'asc':'desc');
+  else{st.key=key;st.dir=(key==='name'?'asc':'desc');}
+  G.allProdSort=st;
+  renderAllProds();
+}
+function apAffBadge(aff){
+  if(aff==='y')return'<span class="ap-badge" style="background:#dcfce7;color:#15803d">שלי</span>';
+  if(aff==='n')return'<span class="ap-badge" style="background:#ffedd5;color:#c2410c">מהסל</span>';
+  return'<span class="ap-badge" style="background:var(--s2);color:var(--t3)">—</span>';
+}
+function renderAllProds(){
+  const wrap=document.getElementById('ap-table-wrap');if(!wrap)return;
+  const all=G._allProds||[];
+  const st=G.allProdSort||(G.allProdSort={key:'sales',dir:'desc'});
+  const tab=G.allProdTab||'all';
+  const q=((G.allProdQ||'')+'').trim().toLowerCase();
+
+  // summary over the WHOLE list (independent of the active tab)
+  const sum={y:{p:0,c:0,comm:0,sales:0},n:{p:0,c:0,comm:0,sales:0},'?':{p:0,c:0,comm:0,sales:0}};
+  all.forEach(function(d){const b=sum[d.aff]||sum['?'];b.p++;b.c+=d.count;b.comm+=d.commission;b.sales+=d.sales;});
+  const card=function(ttl,clr,bg,b){
+    return`<div style="background:${bg};border-radius:9px;padding:9px 11px">
+      <div style="font-size:11px;font-weight:800;color:${clr}">${ttl}</div>
+      <div style="font-size:17px;font-weight:900;color:var(--tx);margin-top:2px">${b.p} מוצרים</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">${b.c} רכישות · עמלה <b style="color:var(--grn)">$${b.comm.toFixed(2)}</b></div>
+    </div>`;};
+  const sumEl=document.getElementById('ap-summary');
+  if(sumEl){
+    sumEl.innerHTML=card('🟢 המוצרים שלי (y)','#15803d','#f0fdf4',sum.y)
+      +card('🟠 מסל הקניות (n)','#c2410c','#fff7ed',sum.n)
+      +(sum['?'].p?card('⚪ ללא סיווג','#64748b','var(--s2)',sum['?']):'');
+  }
+  const tabsRoot=document.getElementById('ap-tabs');
+  if(tabsRoot){
+    const btns=tabsRoot.querySelectorAll('[data-ap]');
+    for(var i=0;i<btns.length;i++)btns[i].classList.toggle('on',btns[i].getAttribute('data-ap')===tab);
+  }
+
+  let list=all.filter(function(d){
+    if(tab!=='all'&&d.aff!==tab)return false;
+    if(q&&d.name.toLowerCase().indexOf(q)===-1)return false;
+    return true;
+  });
+  list.sort(function(a,b){
+    if(st.key==='name'){
+      const c=a.name.localeCompare(b.name,'he');
+      return st.dir==='asc'?c:-c;
+    }
+    if(st.key==='aff'){
+      const c=a.aff.localeCompare(b.aff);
+      if(c!==0)return st.dir==='asc'?c:-c;
+      return b.sales-a.sales;
+    }
+    const va=statSortVal(a,st.key),vb=statSortVal(b,st.key);
+    if(va===vb)return b.sales-a.sales;
+    return st.dir==='asc'?va-vb:vb-va;
+  });
+  const tSales=list.reduce(function(s2,d){return s2+d.sales;},0);
+  const tComm=list.reduce(function(s2,d){return s2+d.commission;},0);
+  const tCount=list.reduce(function(s2,d){return s2+d.count;},0);
+  const arrow=function(k){return st.key===k?(st.dir==='asc'?' ▲':' ▼'):'';};
+  const th=function(k,lbl,extra){
+    return`<th class="sortable-th${st.key===k?' act':''}" onclick="setAllProdSort('${k}')" style="padding:7px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800;background:var(--s2);${extra||''}">${lbl}${arrow(k)}</th>`;};
+
+  wrap.innerHTML=`
+  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:560px">
+    <thead><tr>
+      <th style="padding:7px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800;background:var(--s2);width:28px">#</th>
+      ${th('name','מוצר')}
+      ${th('aff','סוג','width:60px;text-align:center')}
+      ${th('count','כמות','width:58px;text-align:center')}
+      ${th('sales','מכירות','width:78px')}
+      ${th('commission','עמלה','width:72px')}
+      ${th('pct','%','width:52px')}
+    </tr></thead>
+    <tbody>
+    ${list.map(function(d,i){
+      const pct=d.sales?((d.commission/d.sales)*100).toFixed(1):'0.0';
+      return`<tr style="border-bottom:1px solid rgba(226,232,240,.5)">
+        <td style="padding:7px 8px;color:var(--acc);font-weight:800">${i+1}</td>
+        <td style="padding:7px 8px;font-weight:700;max-width:280px" title="${esc(d.name)}">
+          ${d.url?`<a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">${esc(d.name)}</a>`:esc(d.name)}
+        </td>
+        <td style="padding:7px 8px;text-align:center">${apAffBadge(d.aff)}</td>
+        <td style="padding:7px 8px;text-align:center"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 6px;font-weight:800">×${d.count}</span></td>
+        <td style="padding:7px 8px;font-family:monospace;font-weight:700;color:var(--acc)">$${d.sales.toFixed(2)}</td>
+        <td style="padding:7px 8px;font-family:monospace;color:var(--grn)">$${d.commission.toFixed(2)}</td>
+        <td style="padding:7px 8px;color:var(--t2)">${pct}%</td>
+      </tr>`;}).join('')||'<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--t3)">לא נמצאו מוצרים לסינון הנוכחי</td></tr>'}
+    </tbody>
+    ${list.length?`<tfoot><tr style="background:var(--s2);font-weight:900">
+      <td style="padding:8px"></td>
+      <td style="padding:8px">סה״כ ${list.length} מוצרים</td>
+      <td style="padding:8px"></td>
+      <td style="padding:8px;text-align:center">×${tCount}</td>
+      <td style="padding:8px;font-family:monospace;color:var(--acc)">$${tSales.toFixed(2)}</td>
+      <td style="padding:8px;font-family:monospace;color:var(--grn)">$${tComm.toFixed(2)}</td>
+      <td style="padding:8px;color:var(--t2)">${tSales?((tComm/tSales)*100).toFixed(1):'0.0'}%</td>
+    </tr></tfoot>`:''}
+  </table>`;
+}
+function openAllProductsModal(){
+  if(!G.csvRaw||!G.csvRaw.length){toast('לא נטענו נתוני CSV','err');return;}
+  G._allProds=buildAllProdList();
+  G.allProdSort={key:'sales',dir:'desc'};
+  G.allProdTab='all';
+  G.allProdQ='';
+  const hasAff=!!(G.aliCols&&G.aliCols.isAff);
+  const body=`
+    <div id="ap-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px;margin-bottom:11px"></div>
+    ${hasAff?'':'<div style="background:#fff7ed;color:#c2410c;border-radius:8px;padding:7px 10px;font-size:11px;margin-bottom:9px">לא נמצאה עמודת <b>IsAffProduct</b> בקובץ — כל המוצרים מוצגים ללא סיווג.</div>'}
+    <div id="ap-tabs" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <button class="ptab on" type="button" data-ap="all" onclick="setAllProdTab('all')">כל המוצרים</button>
+      <button class="ptab" type="button" data-ap="y" onclick="setAllProdTab('y')">🟢 המוצרים שלי</button>
+      <button class="ptab" type="button" data-ap="n" onclick="setAllProdTab('n')">🟠 מסל הקניות</button>
+      <input id="ap-search" class="ifield" placeholder="🔎 חיפוש מוצר…" style="flex:1;min-width:130px" oninput="setAllProdQuery(this.value)">
+    </div>
+    <div id="ap-table-wrap" style="overflow:auto;max-height:50vh;border:1px solid var(--b1);border-radius:9px"></div>`;
+  openModal('📋 כל המוצרים',body,'<button class="btn sec" onclick="closeModal()">סגור</button>');
+  const box=document.querySelector('#modal-root > div');
+  if(box)box.style.maxWidth='900px';
+  const mb=document.getElementById('mc-body');
+  if(mb)mb.style.maxHeight='76vh';
+  renderAllProds();
+}
+
+// v56: one clean line — how many rows were read from the file. Nothing else.
+function renderStatDiag(raw){
   const box=document.getElementById('stat-diag');
   if(!box)return;
-  const statusMap={};
-  if(ac.status){raw.forEach(r=>{const st=(r[ac.status]||'—').trim()||'—';statusMap[st]=(statusMap[st]||0)+1;});}
-  const stTxt=Object.keys(statusMap).sort((a,b)=>statusMap[b]-statusMap[a])
-    .map(k=>`${esc(k)} <b>${statusMap[k]}</b>`).join(' · ');
-  const colTxt=[
-    ['תאריך',ac.date||'—'],['תאריך חלופי',ac.dateAlt||'—'],['סכום',ac.price||'—'],
-    ['עמלה',ac.commission||'—'],['עמלה חלופית',ac.commissionAlt||'—'],
-    ['תמריץ',ac.incentive||ac.incentiveAlt||'—'],['סטטוס',ac.status||'—']
-  ].map(p=>`${p[0]}: <span style="font-family:monospace">${esc(p[1])}</span>`).join(' | ');
-  box.innerHTML=`
-  <details style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--t2)">
-    <summary style="cursor:pointer;font-weight:800;color:var(--t2)">
-      🔍 נקראו <b>${raw.length}</b> שורות · נספרות <b>${filteredData.length}</b>${outOfRange?` · מחוץ לטווח התאריכים <b>${outOfRange}</b>`:''}${noDate?` · ללא תאריך תקין <b>${noDate}</b> (נספרות בכל זאת)`:''}
-    </summary>
-    <div style="margin-top:7px;line-height:1.7">
-      <div>אין סינון לפי סטטוס — כל שורה בקובץ נספרת.${outOfRange?' כדי לראות את כולן, נקה או הרחב את שדות התאריך.':''}</div>
-      ${stTxt?`<div style="margin-top:4px">פילוח סטטוסים בקובץ: ${stTxt}</div>`:''}
-      <div style="margin-top:4px;color:var(--t3)">עמודות שזוהו — ${colTxt}</div>
-    </div>
-  </details>`;
+  const n=(raw&&raw.length)||0;
+  box.innerHTML=`<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 11px;font-size:12px;font-weight:700;color:var(--t2)">📄 סה״כ שורות שנקראו מהקובץ: <b style="color:var(--tx)">${n}</b></div>`;
 }
 
 // Fix 9+10 (v14): Pie chart drill-down — grouped, table layout, product images from G.posts, toFixed(2)
@@ -5325,6 +5513,7 @@ function openCatDrillDown(catName){
 
 function resetCSV(){
   G.csvRaw=[];G.aliCols={};G.aliDayFirst=true;
+  G._statProds=[];G._allProds=[];G._statFiltered=[];
   const diagEl=document.getElementById('stat-diag');if(diagEl)diagEl.innerHTML='';
   try{localStorage.removeItem('sp_statsData');}catch(e){}
   if(G.salesChart){G.salesChart.destroy();G.salesChart=null;}
@@ -8738,6 +8927,8 @@ document.addEventListener('DOMContentLoaded',function(){
   }
   on('apply-filter-btn','click',renderStatsDash);
   on('reset-csv-btn','click',resetCSV);
+  on('all-prods-btn','click',openAllProductsModal);
+  ['count','sales','commission','pct'].forEach(function(k){on('tsth-'+k,'click',function(){setTopSort(k);});});
   document.querySelectorAll('.ptab[data-p]').forEach(function(tab){
     tab.addEventListener('click',function(){
       document.querySelectorAll('.ptab').forEach(function(t){t.classList.remove('on');});
@@ -9042,7 +9233,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script>
 /* ── סימון גרסה: מאפשר לוודא בקונסול שנטענה הגרסה החדשה ולא מטמון ישן ── */
-var APP_BUILD = 'v-FBFLOW2 + CSV55';
+var APP_BUILD = 'v-FBFLOW2 + CSV56';
 console.log('%c[BUILD] ' + APP_BUILD + ' — copyPostToFB: desktop=אפס כתיבה | mobile=כתיבה רק אחרי share מוצלח',
             'background:#111;color:#0f0;padding:2px 6px;border-radius:3px;font-weight:bold');
 
