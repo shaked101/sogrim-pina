@@ -1987,6 +1987,20 @@ const COL={HEB:0,ENG:1,PRICE:2,LINK:3,COL_E:4,CAT:5,STATUS:6,BOUGHT:7,TAGS:8,CON
 // COMMUNITY — תחרות הפניות
 // ════════════════════════════════════════════════
 const COMMUNITY_GAS_URL = '/api/community'; // v-SEC1: proxied via Vercel Serverless (env: GOOGLE_SCRIPT_COMMUNITY_URL)
+
+/* ═══════════════════════════════════════════════════════════
+   v63 — STATS DIRECT CHANNEL
+   The Vercel proxy could not carry the stats POST: Google answers the
+   /exec call with a 302 to script.googleusercontent.com, and the hop
+   from a server-side fetch came back as an HTML page (and a 504 on the
+   read). The statistics module — and ONLY the statistics module — now
+   talks to Apps Script straight from the browser.
+
+   Everything else (posts, Telegram, Facebook, images, raffles,
+   followers, competition) keeps going through the Vercel proxy exactly
+   as before. Nothing about apiFetch or those routes changed.
+═══════════════════════════════════════════════════════════ */
+const STATS_GAS_URL = 'https://script.google.com/macros/s/AKfycbxak322tQEglS1uJHmRlKi3JL3asOSFxP3CqFcmZCewb_QGn-f4A2-BAa4tKBR5DPkOtw/exec';
 const REFERRAL_GOAL = 7; // מספר הפניות לזכאות לפרס
 
 // ════════════════════════════════════════════════
@@ -2288,6 +2302,69 @@ function _statsIsPacked(cols,rows){
 // kept for backward compatibility with anything still calling it
 function _statsSlimRows(rows,ac){return _statsPackRows(rows,ac);}
 
+/* ── v63: direct transport — the two rules that make CORS a non-issue ──────
+   ① Content-Type is text/plain. It is a CORS-safelisted value, so the browser
+      sends the POST straight away with no OPTIONS preflight — which is exactly
+      what Apps Script cannot answer. The BODY is still JSON, and _spReadBody_
+      on the server parses e.postData.contents as JSON, so nothing changes there.
+   ② Not one custom header. No X-App-Secret, no Accept — a single custom header
+      re-arms the preflight and puts us back at square one. That is why these
+      helpers call _origFetch and never apiFetch.
+   redirect:'follow' lets the browser walk the 302 to googleusercontent.com,
+   which is where Google puts Access-Control-Allow-Origin: *.
+────────────────────────────────────────────────────────────────────────── */
+async function _statsDirectPost(payload){
+  var out={ok:false,status:0,raw:'',json:null,error:''};
+  try{
+    var resp=await _origFetch(STATS_GAS_URL,{
+      method:'POST',
+      mode:'cors',
+      redirect:'follow',
+      credentials:'omit',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},   // ← no preflight
+      body:JSON.stringify(payload)
+    });
+    out.status=resp.status;
+    out.raw=await resp.text();
+    if(!resp.ok){out.error='HTTP '+resp.status;return out;}
+    try{out.json=JSON.parse(out.raw);}catch(e){out.error='התשובה מהשרת אינה JSON';return out;}
+    out.ok=(out.json&&out.json.ok!==false);
+    if(!out.ok)out.error=(out.json&&out.json.error)||'השרת החזיר ok:false';
+    return out;
+  }catch(e){out.error=e.message||'שגיאת רשת';return out;}
+}
+
+async function _statsDirectGet(action,extra){
+  var qs='?action='+encodeURIComponent(action)+'&_t='+Date.now();
+  if(extra)for(var k in extra)qs+='&'+encodeURIComponent(k)+'='+encodeURIComponent(extra[k]);
+  try{
+    // no headers at all → a plain simple request, no preflight
+    var resp=await _origFetch(STATS_GAS_URL+qs,{
+      method:'GET',mode:'cors',redirect:'follow',credentials:'omit'
+    });
+    if(!resp.ok)return{ok:false,error:'HTTP '+resp.status};
+    var txt=await resp.text();
+    try{return JSON.parse(txt);}catch(e){return{ok:false,error:'התשובה מהשרת אינה JSON'};}
+  }catch(e){
+    return{ok:false,error:e.message||'שגיאת רשת'};
+  }
+}
+
+// cold Apps Script deployments answer the first call slowly — retry, don't fail
+async function _statsDirectGetRetry(action,extra,tries){
+  tries=tries||3;
+  var r=null;
+  for(var i=0;i<tries;i++){
+    r=await _statsDirectGet(action,extra);
+    if(r&&r.ok!==false)return r;
+    if(i<tries-1){
+      console.log('[v63 stats] '+action+' — ניסיון '+(i+1)+' נכשל ('+((r&&r.error)||'—')+'), מנסה שוב…');
+      await new Promise(function(res){setTimeout(res,900*(i+1));});
+    }
+  }
+  return r||{ok:false,error:'no response'};
+}
+
 // Save stats to cloud when CSV is uploaded — and CONFIRM it actually landed
 async function saveStatsCloud(){
   if(!G.csvRaw||!G.csvRaw.length)return false;
@@ -2303,7 +2380,8 @@ async function saveStatsCloud(){
   var payload={action:'saveStats',cols:meta,rows:packed,savedAt:meta.__savedAt};
   var bytes=encodeURIComponent(JSON.stringify(payload)).length;
 
-  console.log('%c[v61 saveStatsCloud] שולח לענן','color:#d4541a;font-weight:bold');
+  console.log('%c[v63 saveStatsCloud] שולח ישירות ל-Apps Script','color:#d4541a;font-weight:bold');
+  console.log('   יעד          :',STATS_GAS_URL.slice(0,64)+'…');
   console.log('   שורות        :',packed.length,'מתוך',G.csvRaw.length);
   console.log('   גודל payload :',bytes,'תווים (~'+Math.round(bytes/1024)+'KB) אחרי קידוד');
   console.log('   שורה לדוגמה  :',JSON.stringify(packed[0]||{}));
@@ -2317,31 +2395,31 @@ async function saveStatsCloud(){
     bytes=b2;
   }
 
-  var res=await _cloudPostRaw(payload);
+  var res=await _statsDirectPost(payload);   // v63: browser → Google, no proxy
   console.log('   סטטוס HTTP   :',res.status||'—');
   console.log('   תשובת השרת   :',(res.raw||'').slice(0,300)||'(ריק)');
   if(!res.ok){
-    console.error('[v61 saveStatsCloud] ❌ השמירה נכשלה:',res.error);
+    console.error('[v63 saveStatsCloud] ❌ השמירה נכשלה:',res.error);
     G._lastStatsSaveError=res.error;
     return false;
   }
 
   // ── verification read-back: the only proof that the server really kept it ──
-  var back=await _cloudGetRetry('getStats',null,3);
+  var back=await _statsDirectGetRetry('getStats',null,3);
   var got=(back&&back.rows&&back.rows.length)||0;
   console.log('   אימות קריאה  :',got,'שורות חזרו מהענן (נשלחו '+packed.length+')');
   if(!got){
-    G._lastStatsSaveError='השרת קיבל את הבקשה אך לא שמר דבר — ייתכן שפעולת saveStats חסרה ב-Code.gs';
-    console.error('[v61 saveStatsCloud] ❌',G._lastStatsSaveError);
+    G._lastStatsSaveError='השרת קיבל את הבקשה אך לא שמר דבר — בדוק שהפריסה של Code.gs מעודכנת (action=ping)';
+    console.error('[v63 saveStatsCloud] ❌',G._lastStatsSaveError);
     return false;
   }
   if(got<packed.length){
     G._lastStatsSaveError='נשמרו רק '+got+' מתוך '+packed.length+' שורות';
-    console.warn('[v61 saveStatsCloud] ⚠️',G._lastStatsSaveError);
+    console.warn('[v63 saveStatsCloud] ⚠️',G._lastStatsSaveError);
     return false;
   }
   G._lastStatsSaveError='';
-  console.log('[v61 saveStatsCloud] ✅ נשמר ואומת בענן —',got,'שורות');
+  console.log('[v63 saveStatsCloud] ✅ נשמר ואומת בענן —',got,'שורות');
   return true;
 }
 
@@ -2354,16 +2432,16 @@ async function clearStatsCloud(){
   try{localStorage.setItem('sp_statsCleared',String(Date.now()));}catch(e){}
   // 'clearStats' for backends that implement it; the empty 'saveStats' payload
   // is the guaranteed path — it overwrites whatever is stored with nothing.
-  var a=await _cloudPost({action:'clearStats',cols:{},rows:[]});
-  var b=await _cloudPost({action:'saveStats',cols:{},rows:[]});
+  var a=await _statsDirectPost({action:'clearStats',cols:{},rows:[]});
+  var b=await _statsDirectPost({action:'saveStats',cols:{},rows:[],savedAt:Date.now()});
   var ok=!!((a&&a.ok)||(b&&b.ok));
-  console.log('[v58 clearStatsCloud] clearStats:',a&&a.ok,'saveStats(empty):',b&&b.ok);
+  console.log('[v63 clearStatsCloud] clearStats:',a&&a.ok,'| saveStats(empty):',b&&b.ok);
   return ok;
 }
 
 // Load stats from cloud on boot
 async function loadStatsCloud(){
-  var r=await _cloudGetRetry('getStats',null,3);
+  var r=await _statsDirectGetRetry('getStats',null,3);   // v63: direct, no proxy
   // v57: the boot-time cloud fetch resolves asynchronously. If the user already
   // dropped a CSV in this session, that file wins — otherwise the stale cloud
   // copy would replace it and drag the date filter back to old dates.
@@ -2386,7 +2464,7 @@ async function loadStatsCloud(){
       return false;
     }
   }
-  console.log('%c[v61 loadStatsCloud] מה חזר מהענן','color:#0369a1;font-weight:bold');
+  console.log('%c[v63 loadStatsCloud] מה חזר מהענן (ערוץ ישיר)','color:#0369a1;font-weight:bold');
   console.log('   ok           :',r&&r.ok,'| שגיאה:',(r&&r.error)||'—');
   console.log('   שורות        :',(r&&r.rows&&r.rows.length)||0);
   console.log('   cols         :',JSON.stringify((r&&r.cols)||{}).slice(0,220));
@@ -2406,7 +2484,7 @@ async function loadStatsCloud(){
     G.csvRaw=_rows;
     G._qtyLogPending=true;            // v61: log the unit maths for this data
     try{localStorage.setItem('sp_statsData',JSON.stringify({cols:G.aliCols,rows:G.csvRaw}));}catch(e){}
-    console.log('[v61 loadStatsCloud] ☁️ נטענו',_rows.length,'שורות מהענן');
+    console.log('[v63 loadStatsCloud] ☁️ נטענו',_rows.length,'שורות מהענן');
     _showStatsDash();
     return true;
   }
@@ -2420,7 +2498,7 @@ async function loadStatsCloud(){
         if(_statsIsPacked(lc,lr)){lr=_statsUnpackRows(lr);lc={};}
         G.aliCols=lc;G.csvRaw=lr;
         G._qtyLogPending=true;
-        console.log('[v61 loadStatsCloud] 💾 נטענו',lr.length,'שורות מהאחסון המקומי');
+        console.log('[v63 loadStatsCloud] 💾 נטענו',lr.length,'שורות מהאחסון המקומי');
         _showStatsDash();return true;
       }
     }
@@ -9931,7 +10009,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script>
 /* ── סימון גרסה: מאפשר לוודא בקונסול שנטענה הגרסה החדשה ולא מטמון ישן ── */
-var APP_BUILD = 'v-FBFLOW2 + CSV62';
+var APP_BUILD = 'v-FBFLOW2 + CSV63';
 console.log('%c[BUILD] ' + APP_BUILD + ' — copyPostToFB: desktop=אפס כתיבה | mobile=כתיבה רק אחרי share מוצלח',
             'background:#111;color:#0f0;padding:2px 6px;border-radius:3px;font-weight:bold');
 
