@@ -1190,7 +1190,7 @@ body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--a
         <div class="csv-drop" id="csv-drop">
           <div style="font-size:26px">📂</div>
           <p style="font-size:13px;color:var(--t2);margin-top:7px">גרור CSV של אלי אקספרס לכאן או לחץ לבחירה</p>
-          <p style="font-size:11px;color:var(--t3);margin-top:3px">עמודות: CompletedPaymentsTime · ProductTitle · CompletedPaymentsAmount · EstimatedPaymentsCommission</p>
+          <p style="font-size:11px;color:var(--t3);margin-top:3px">זיהוי עמודות אוטומטי · כל השורות והסטטוסים נספרים · עמלה = עמלת תשלום + עמלת תמריץ</p>
           <input type="file" id="csv-input" accept=".csv" style="display:none">
         </div>
         <div id="stats-dash" style="display:none">
@@ -1212,6 +1212,7 @@ body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--a
             <button class="btn sec sm" id="reset-csv-btn">🗑️ נקה</button>
           </div>
           <div class="sgrid4" id="stat-kpis" style="margin-bottom:14px"></div>
+          <div id="stat-diag" style="margin-bottom:12px"></div>
           <div style="display:flex;gap:8px;margin-bottom:10px">
             <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2)"><span style="width:9px;height:9px;border-radius:2px;background:#d4541a;display:inline-block"></span>מכירות</span>
             <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2)"><span style="width:9px;height:9px;border-radius:2px;background:#15803d;display:inline-block"></span>עמלות</span>
@@ -1931,7 +1932,7 @@ let G={
   posts:[],filtered:[],
   dateMap:{},        // v18: {num -> {fb:[],tg:[],ig:[]}} built once in loadData
   calY:new Date().getFullYear(),calM:new Date().getMonth(),
-  csvRaw:[],aliCols:{},period:'day',
+  csvRaw:[],aliCols:{},period:'day',aliDayFirst:true,
   salesChart:null,catChart:null,
   sortDateAsc:false,
   ideaAll:[],ideaShown:[],ideaPageSize:20,ideaOffset:0,activeCat:null,
@@ -2099,15 +2100,9 @@ function _showStatsDash(){
   var dashEl=document.getElementById('stats-dash');
   if(dropEl)dropEl.style.display='none';
   if(dashEl)dashEl.style.display='block';
-  var dates=G.csvRaw.map(function(r){return r[G.aliCols.date];}).filter(Boolean).sort();
-  if(dates.length){
-    try{
-      var fd=new Date(dates[0]),ld=new Date(dates[dates.length-1]);
-      var fromEl=document.getElementById('stat-from'),toEl=document.getElementById('stat-to');
-      if(!isNaN(fd)&&fromEl)fromEl.value=fd.toISOString().slice(0,10);
-      if(!isNaN(ld)&&toEl)toEl.value=ld.toISOString().slice(0,10);
-    }catch(e){}
-  }
+  // v55: re-detect columns (also repairs legacy/cloud-cached mappings) and
+  // build the default range from REAL parsed dates — never from a string sort.
+  try{aliEnsureCols(G.csvRaw);aliInitDateRange();}catch(e){console.warn('[v55 stats range]',e);}
   setTimeout(renderStatsDash,100);
 }
 function saveCats(){localStorage.setItem('sp_cats',JSON.stringify(G.cats));}
@@ -4720,16 +4715,289 @@ function saveCatEdits(){
 // ════════════════════════════════════════════════
 // STATS — BUG 3 FIX: KPIs computed from filteredData (after date filter)
 // ════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// v55 CSV ENGINE — stats tab only. Fixes "disappearing" AliExpress rows.
+// Root causes addressed:
+//   (a) line-based parser broke records whose quoted fields contain commas
+//       or embedded newlines  ->  full RFC-4180 state machine below
+//   (b) the default date range was built with a LEXICOGRAPHIC string sort
+//       (and toISOString/UTC), so non-ISO dates produced a bogus window
+//       that silently filtered legitimate orders out  ->  aliInitDateRange
+//   (c) commission read a single column, ignoring incentive commission and
+//       ignoring orders whose settlement columns are still empty
+//       (Paid / Shipped / Payment-Completed)  ->  aliRowComm / aliRowSales
+// No order status is filtered anywhere: every record in the file is counted.
+// ════════════════════════════════════════════════════════════════
 function parseCSV(text){
-  const lines=text.trim().split(/\r?\n/);if(lines.length<2)return{cols:[],rows:[]};
-  const parseRow=line=>{const res=[];let cur='',inQ=false;
-    for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){res.push(cur.trim().replace(/^"|"$/g,''));cur='';}else cur+=ch;}
-    res.push(cur.trim().replace(/^"|"$/g,''));return res;};
-  const cols=parseRow(lines[0]);
-  // BUG 1 FIX: filter empty CSV rows too
-  const rows=lines.slice(1).map(l=>{const vals=parseRow(l);const obj={};cols.forEach((c,i)=>obj[c]=vals[i]||'');return obj;})
-    .filter(r=>{const keys=Object.keys(r);return keys.some(k=>r[k].trim()!=='');});
-  return{cols,rows};
+  if(text===null||text===undefined)return{cols:[],rows:[]};
+  var s=String(text).replace(/^\uFEFF/,'');
+  if(!s.trim())return{cols:[],rows:[]};
+
+  // -- delimiter auto-detect from the header record (quotes respected) --
+  var headerLine='',hq=false,i;
+  for(i=0;i<s.length;i++){
+    var hc=s[i];
+    if(hc==='"'){hq=!hq;headerLine+=hc;continue;}
+    if(!hq&&(hc==='\n'||hc==='\r'))break;
+    headerLine+=hc;
+  }
+  var delim=',',best=-1;
+  [',',';','\t','|'].forEach(function(d){
+    var n=headerLine.split(d).length-1;
+    if(n>best){best=n;delim=d;}
+  });
+  if(best<=0)delim=',';
+
+  // -- RFC-4180 state machine: quoted fields may hold the delimiter,
+  //    newlines, and "" escaped quotes --
+  var recs=[],row=[],cur='',inQ=false;
+  for(i=0;i<s.length;i++){
+    var ch=s[i];
+    if(inQ){
+      if(ch==='"'){
+        if(s[i+1]==='"'){cur+='"';i++;}
+        else inQ=false;
+      }else cur+=ch;
+      continue;
+    }
+    if(ch==='"'){inQ=true;continue;}
+    if(ch===delim){row.push(cur);cur='';continue;}
+    if(ch==='\r'){if(s[i+1]==='\n')i++;row.push(cur);recs.push(row);row=[];cur='';continue;}
+    if(ch==='\n'){row.push(cur);recs.push(row);row=[];cur='';continue;}
+    cur+=ch;
+  }
+  if(cur!==''||row.length){row.push(cur);recs.push(row);}
+
+  // -- header (blank / duplicate names made unique so no column is lost) --
+  var head=(recs.shift()||[]).map(function(h){return String(h).replace(/^\uFEFF/,'').trim();});
+  var cols=[],seen={};
+  head.forEach(function(h,idx){
+    var name=h||('col'+(idx+1));
+    if(seen[name]!==undefined){seen[name]++;name=name+'_'+seen[name];}else seen[name]=0;
+    cols.push(name);
+  });
+
+  // -- rows: only a completely blank record is dropped --
+  var rows=[];
+  recs.forEach(function(vals){
+    var nonEmpty=false;
+    for(var k=0;k<vals.length;k++){if(String(vals[k]).trim()!==''){nonEmpty=true;break;}}
+    if(!nonEmpty)return;
+    var obj={};
+    cols.forEach(function(c,ci){
+      var v=vals[ci];
+      obj[c]=(v===undefined||v===null)?'':String(v).trim();
+    });
+    rows.push(obj);
+  });
+  return{cols:cols,rows:rows};
+}
+
+// ── numbers: tolerates $ ₪ USD, thousands separators, EU decimals, (1.23) ──
+function aliNum(v){
+  if(v===null||v===undefined)return 0;
+  if(typeof v==='number')return isFinite(v)?v:0;
+  var s=String(v).trim();
+  if(!s)return 0;
+  var neg=/^\(.*\)$/.test(s)||/^\s*-/.test(s);
+  s=s.replace(/[^0-9.,]/g,'');
+  if(!s)return 0;
+  var lastC=s.lastIndexOf(','),lastD=s.lastIndexOf('.');
+  if(lastC>-1&&lastD>-1){
+    if(lastC>lastD)s=s.replace(/\./g,'').replace(/,/g,'.');   // 1.234,56
+    else s=s.replace(/,/g,'');                                 // 1,234.56
+  }else if(lastC>-1){
+    var after=s.length-lastC-1;
+    if(s.indexOf(',')===lastC&&after>0&&after<=2)s=s.replace(/,/g,'.');
+    else s=s.replace(/,/g,'');
+  }
+  var n=parseFloat(s);
+  if(isNaN(n))return 0;
+  return neg?-n:n;
+}
+
+// ── dates: ISO, D/M/Y, M/D/Y, D.M.Y, "15 Aug 2025", "Aug 15, 2025", epoch ──
+var ALI_MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function aliMkDate(y,mo,d,h,mi,se){
+  if(y<100)y+=2000;
+  var dt=new Date(y,(mo||1)-1,d||1,h||0,mi||0,se||0);
+  return isNaN(dt.getTime())?null:dt;
+}
+function aliParseDate(v,dayFirst){
+  if(v===null||v===undefined)return null;
+  if(v instanceof Date)return isNaN(v.getTime())?null:v;
+  var s=String(v).trim();
+  if(!s)return null;
+  if(/^\d{13}$/.test(s)){var e1=new Date(parseInt(s,10));return isNaN(e1.getTime())?null:e1;}
+  if(/^\d{10}$/.test(s)){var e2=new Date(parseInt(s,10)*1000);return isNaN(e2.getTime())?null:e2;}
+  var m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:[T ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(m)return aliMkDate(+m[1],+m[2],+m[3],+(m[4]||0),+(m[5]||0),+(m[6]||0));
+  m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})(?:[T ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(m){
+    var a=+m[1],b=+m[2],y=+m[3],dd,mm;
+    if(a>12){dd=a;mm=b;}
+    else if(b>12){dd=b;mm=a;}
+    else if(dayFirst===false){dd=b;mm=a;}
+    else{dd=a;mm=b;}
+    return aliMkDate(y,mm,dd,+(m[4]||0),+(m[5]||0),+(m[6]||0));
+  }
+  m=s.match(/^(\d{1,2})\s+([A-Za-z]{3,})\.?,?\s+(\d{4})/);
+  if(m){var m1=ALI_MON[m[2].slice(0,3).toLowerCase()];if(m1!==undefined)return aliMkDate(+m[3],m1+1,+m[1],0,0,0);}
+  m=s.match(/^([A-Za-z]{3,})\.?\s+(\d{1,2}),?\s+(\d{4})/);
+  if(m){var m2=ALI_MON[m[1].slice(0,3).toLowerCase()];if(m2!==undefined)return aliMkDate(+m[3],m2+1,+m[2],0,0,0);}
+  var nd=new Date(s);
+  return isNaN(nd.getTime())?null:nd;
+}
+// local YYYY-MM-DD (never toISOString — that shifts the day by the TZ offset)
+function aliYMD(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function aliDetectDayFirst(rows,col){
+  if(!col||!rows||!rows.length)return true;
+  for(var i=0;i<rows.length;i++){
+    var m=String(rows[i][col]||'').trim().match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/);
+    if(!m)continue;
+    if(+m[1]>12)return true;
+    if(+m[2]>12)return false;
+  }
+  return true;
+}
+
+// ── column detection (space/underscore/case insensitive) ──
+function aliNormHdr(h){return String(h===undefined||h===null?'':h).toLowerCase().replace(/[^a-z0-9]/g,'');}
+function aliPick(cols,tests,exclude){
+  exclude=exclude||[];
+  for(var t=0;t<tests.length;t++){
+    for(var i=0;i<cols.length;i++){
+      if(!cols[i])continue;
+      if(exclude.indexOf(cols[i])>-1)continue;
+      try{if(tests[t](aliNormHdr(cols[i])))return cols[i];}catch(e){}
+    }
+  }
+  return '';
+}
+function aliDetectCols(cols){
+  cols=cols||[];
+  var re=function(r){return function(n){return r.test(n);};};
+  var isBaseComm=function(n){return /commission/.test(n)&&!/rate/.test(n)&&!/incentive/.test(n);};
+  var isIncComm =function(n){return /commission/.test(n)&&!/rate/.test(n)&&/incentive/.test(n);};
+
+  var date=aliPick(cols,[
+    re(/^completedpaymentstime$/),
+    re(/completedpayment.*time/),
+    re(/^paidtime$/),
+    re(/paidtime|paymenttime|paymentdate|paiddate/),
+    re(/ordertime|orderdate|createtime|createdtime|placedtime/),
+    re(/time$|date$/),
+    re(/time|date/)
+  ]);
+  // fallback date for orders that are not settled yet (empty settlement time)
+  var dateAlt=aliPick(cols,[
+    re(/^paidtime$/),
+    re(/paidtime|paymenttime|paiddate|paymentdate/),
+    re(/ordertime|orderdate|createtime|createdtime/),
+    re(/time|date/)
+  ],[date]);
+
+  var price=aliPick(cols,[
+    re(/^completedpaymentsamount$/),
+    re(/completedpayment.*amount/),
+    re(/^paidamount$/),
+    function(n){return /(orderamount|paidamount|totalamount|customerpaid|settle.*amount)/.test(n)&&!/commission/.test(n);},
+    function(n){return /amount/.test(n)&&!/commission/.test(n);}
+  ]);
+  var priceAlt=aliPick(cols,[
+    re(/^paidamount$/),
+    function(n){return /(paidamount|orderamount|customerpaid|totalamount)/.test(n)&&!/commission/.test(n);},
+    function(n){return /amount/.test(n)&&!/commission/.test(n);}
+  ],[price]);
+
+  var commission=aliPick(cols,[
+    function(n){return n==='estimatedpaymentscommission';},
+    function(n){return /payment/.test(n)&&isBaseComm(n);},
+    isBaseComm
+  ]);
+  var commissionAlt=aliPick(cols,[
+    function(n){return n==='estimatedpaidcommission';},
+    function(n){return /paid/.test(n)&&isBaseComm(n);},
+    isBaseComm
+  ],[commission]);
+  var incentive=aliPick(cols,[
+    function(n){return n==='estimatedpaymentsincentivecommission';},
+    function(n){return /payment/.test(n)&&isIncComm(n);},
+    isIncComm
+  ],[commission,commissionAlt]);
+  var incentiveAlt=aliPick(cols,[
+    function(n){return n==='estimatedpaidincentivecommission';},
+    function(n){return /paid/.test(n)&&isIncComm(n);},
+    isIncComm
+  ],[commission,commissionAlt,incentive]);
+
+  return{
+    __v:55,
+    date:date,dateAlt:dateAlt,
+    product:aliPick(cols,[re(/^producttitle$/),re(/producttitle|productname|itemtitle|itemname/),re(/title/),re(/^product$/),function(n){return /product/.test(n)&&!/id$|url|category|image/.test(n);}]),
+    url:aliPick(cols,[re(/^producturl$/),re(/producturl|productdetailurl|itemurl|productlink/),re(/url|link/)]),
+    price:price,priceAlt:priceAlt,
+    commission:commission,commissionAlt:commissionAlt,
+    incentive:incentive,incentiveAlt:incentiveAlt,
+    commRate:aliPick(cols,[re(/^commissionrate$/),function(n){return /commission/.test(n)&&/rate/.test(n)&&!/incentive/.test(n);},function(n){return /commission/.test(n)&&/rate/.test(n);}]),
+    status:aliPick(cols,[re(/^orderstatus$/),re(/orderstatus|paymentstatus/),re(/status/)])
+  };
+}
+// rebuild the mapping for data that arrived from cloud/localStorage under an older schema
+function aliEnsureCols(rows){
+  rows=rows||G.csvRaw||[];
+  var ac=G.aliCols||{};
+  if(ac.__v===55){G.aliDayFirst=aliDetectDayFirst(rows,ac.date);return ac;}
+  var seen={},list=[],lim=Math.min(rows.length,50);
+  for(var i=0;i<lim;i++){for(var k in rows[i]){if(!seen[k]){seen[k]=1;list.push(k);}}}
+  var det=aliDetectCols(list);
+  ['date','product','url','price','commission','commRate'].forEach(function(key){
+    if(!det[key]&&ac[key])det[key]=ac[key];
+  });
+  G.aliCols=det;
+  G.aliDayFirst=aliDetectDayFirst(rows,det.date);
+  return det;
+}
+
+// ── per-row getters: no status filtering, settlement columns fall back ──
+function aliRowDate(r,ac){
+  ac=ac||G.aliCols||{};
+  var d=ac.date?aliParseDate(r[ac.date],G.aliDayFirst):null;
+  if(!d&&ac.dateAlt)d=aliParseDate(r[ac.dateAlt],G.aliDayFirst);
+  return d;
+}
+function aliRowSales(r,ac){
+  ac=ac||G.aliCols||{};
+  var v=ac.price?aliNum(r[ac.price]):0;
+  if(!v&&ac.priceAlt)v=aliNum(r[ac.priceAlt]);
+  return v;
+}
+// commission = base payment commission (or the "paid" estimate when the
+// settlement column is still empty) + incentive commission when present
+function aliRowComm(r,ac){
+  ac=ac||G.aliCols||{};
+  var base=ac.commission?aliNum(r[ac.commission]):0;
+  if(!base&&ac.commissionAlt)base=aliNum(r[ac.commissionAlt]);
+  var inc=ac.incentive?aliNum(r[ac.incentive]):0;
+  if(!inc&&ac.incentiveAlt)inc=aliNum(r[ac.incentiveAlt]);
+  return base+inc;
+}
+// default range built from real Date objects (min/max), local time
+function aliInitDateRange(){
+  var rows=G.csvRaw||[];
+  var fromEl=document.getElementById('stat-from'),toEl=document.getElementById('stat-to');
+  if(!fromEl||!toEl)return;
+  var min=null,max=null;
+  for(var i=0;i<rows.length;i++){
+    var d=aliRowDate(rows[i],G.aliCols);
+    if(!d)continue;
+    if(!min||d<min)min=d;
+    if(!max||d>max)max=d;
+  }
+  fromEl.value=min?aliYMD(min):'';
+  toEl.value=max?aliYMD(max):'';
 }
 
 function processAliCSV(file){
@@ -4738,28 +5006,17 @@ function processAliCSV(file){
   reader.onload=e=>{
     const{cols,rows}=parseCSV(e.target.result);
     if(!rows.length){toast('לא נמצאו נתונים','err');return;}
-    const findCol=pattern=>{const re=new RegExp(pattern,'i');return cols.find(c=>re.test(c))||'';};
-    G.aliCols={
-      date:findCol('CompletedPayments.*Time|payment.*date|date'),
-      product:findCol('ProductTitle|product.*title|title'),
-      url:findCol('ProductUrl|product.*url|url'),
-      price:findCol('CompletedPaymentsAmount|payments.*amount|amount'),
-      commission:findCol('EstimatedPayments.*Commission|commission.*amount(?!.*rate)|commission(?!.*rate)'),
-      commRate:findCol('CommissionRate|commission.*rate'),
-    };
+    // v55: tolerant auto-mapping (headers with spaces/underscores, incentive
+    // commission, settlement-vs-paid columns). No status column is filtered.
+    G.aliCols=aliDetectCols(cols);
+    G.aliDayFirst=aliDetectDayFirst(rows,G.aliCols.date);
     G.csvRaw=rows;
     // v54: save to cloud so mobile can see stats too
     saveStatsCloud(); // async, fire and forget
     document.getElementById('csv-drop').style.display='none';
     document.getElementById('stats-dash').style.display='block';
-    const dates=rows.map(r=>r[G.aliCols.date]).filter(Boolean).sort();
-    if(dates.length){
-      try{const fd=new Date(dates[0]),ld=new Date(dates[dates.length-1]);
-        if(!isNaN(fd))document.getElementById('stat-from').value=fd.toISOString().slice(0,10);
-        if(!isNaN(ld))document.getElementById('stat-to').value=ld.toISOString().slice(0,10);
-      }catch(e){}
-    }
-    renderStatsDash();toast(`✅ ${rows.length} שורות`,'ok');
+    aliInitDateRange();
+    renderStatsDash();toast(`✅ נטענו ${rows.length} עסקאות`,'ok');
   };
   reader.readAsText(file,'UTF-8');
 }
@@ -4815,41 +5072,45 @@ function weekKeyToRange(key){
 }
 function renderStatsDash(){
   const raw=G.csvRaw;if(!raw.length)return;
-  const ac=G.aliCols;
+  const ac=aliEnsureCols(raw);           // v55: repairs legacy/cloud mappings
   const fromEl=document.getElementById('stat-from');
   const toEl=document.getElementById('stat-to');
-  const fromD=fromEl.value?new Date(fromEl.value):null;
-  const toD=toEl.value?new Date(new Date(toEl.value).getTime()+86400000):null;
+  const fromV=(fromEl&&fromEl.value)||'';
+  const toV=(toEl&&toEl.value)||'';
 
-  // BUG 3 FIX: filteredData is the filtered subset used for ALL KPIs and charts
+  // v55: compare LOCAL calendar days as YYYY-MM-DD strings (inclusive on both
+  // ends). A row whose date can't be parsed is kept, never silently dropped.
+  let outOfRange=0,noDate=0;
   const filteredData=raw.filter(r=>{
-    if(!ac.date||!r[ac.date])return true;
-    const d=new Date(r[ac.date]);if(isNaN(d))return true;
-    if(fromD&&d<fromD)return false;
-    if(toD&&d>=toD)return false;
+    const d=aliRowDate(r,ac);
+    if(!d){noDate++;return true;}
+    const k=aliYMD(d);
+    if(fromV&&k<fromV){outOfRange++;return false;}
+    if(toV&&k>toV){outOfRange++;return false;}
     return true;
   });
 
   // BUG 3 FIX: ALL calculations use filteredData, not raw
-  const total=filteredData.reduce((s,r)=>s+safeNum(r[ac.price]),0);
-  const totalComm=filteredData.reduce((s,r)=>s+safeNum(r[ac.commission]),0);
+  const total=filteredData.reduce((s,r)=>s+aliRowSales(r,ac),0);
+  const totalComm=filteredData.reduce((s,r)=>s+aliRowComm(r,ac),0);
   const avgOrder=filteredData.length?total/filteredData.length:0;
   const prodMap={};
   filteredData.forEach(r=>{
     const pn=(ac.product&&r[ac.product])||'לא ידוע';
     const pUrl=(ac.url&&r[ac.url])||'';
-    const cr=r[ac.commRate]||'';
+    const cr=(ac.commRate&&r[ac.commRate])||'';
     if(!prodMap[pn])prodMap[pn]={sales:0,commission:0,count:0,url:pUrl,cr};
-    prodMap[pn].sales+=safeNum(r[ac.price]);
-    prodMap[pn].commission+=safeNum(r[ac.commission]);
+    prodMap[pn].sales+=aliRowSales(r,ac);
+    prodMap[pn].commission+=aliRowComm(r,ac);
     prodMap[pn].count++;
   });
+  renderStatDiag(raw,filteredData,ac,outOfRange,noDate);
   const topProds=Object.entries(prodMap).sort((a,b)=>b[1].sales-a[1].sales).slice(0,10);
 
   // KPIs from filteredData
   document.getElementById('stat-kpis').innerHTML=`
-    <div class="scard" style="--cc:var(--acc)"><div class="slbl">סה״כ מכירות</div><div class="sval">$${Math.round(total).toLocaleString()}</div><div class="ssub">${filteredData.length} עסקאות בטווח</div></div>
-    <div class="scard" style="--cc:var(--grn)"><div class="slbl">סה״כ עמלות</div><div class="sval">$${Math.round(totalComm).toLocaleString()}</div><div class="ssub">${total?Math.round(totalComm/total*100):0}% מהמכירות</div></div>
+    <div class="scard" style="--cc:var(--acc)"><div class="slbl">סה״כ מכירות</div><div class="sval">$${Math.round(total).toLocaleString()}</div><div class="ssub">${filteredData.length} עסקאות מתוך ${raw.length} שורות</div></div>
+    <div class="scard" style="--cc:var(--grn)"><div class="slbl">סה״כ עמלות</div><div class="sval">$${totalComm.toFixed(2)}</div><div class="ssub">כולל עמלות תמריץ · ${total?Math.round(totalComm/total*100):0}% מהמכירות</div></div>
     <div class="scard" style="--cc:var(--blue)"><div class="slbl">ממוצע הזמנה</div><div class="sval">$${Math.round(avgOrder)}</div><div class="ssub">לכל עסקה בטווח</div></div>
     <div class="scard" style="--cc:#d97706"><div class="slbl">מוצרים שונים</div><div class="sval">${Object.keys(prodMap).length}</div><div class="ssub">בטווח הנבחר</div></div>
   `;
@@ -4857,15 +5118,15 @@ function renderStatsDash(){
   // Chart data from filteredData
   const pMap={};
   filteredData.forEach(r=>{
-    const d=ac.date?new Date(r[ac.date]):null;let key='לא ידוע';
-    if(d&&!isNaN(d)){
+    const d=aliRowDate(r,ac);let key='לא ידוע';
+    if(d){
       if(G.period==='day'){const _d=String(d.getDate()).padStart(2,'0'),_m=String(d.getMonth()+1).padStart(2,'0'),_y=String(d.getFullYear()).slice(-2);key=_d+'/'+_m+'/'+_y;}
       else if(G.period==='week')key=`${d.getFullYear()}-W${String(getStatWeek(d)).padStart(2,'0')}`;
-      else key=d.toISOString().slice(0,7);
+      else key=aliYMD(d).slice(0,7);
     }
     if(!pMap[key])pMap[key]={sales:0,commission:0};
-    pMap[key].sales+=safeNum(r[ac.price]);
-    pMap[key].commission+=safeNum(r[ac.commission]);
+    pMap[key].sales+=aliRowSales(r,ac);
+    pMap[key].commission+=aliRowComm(r,ac);
   });
   const sortedKeys=Object.keys(pMap).filter(k=>k!=='לא ידוע').sort();
   // v39: For weekly view, convert keys to date-range labels
@@ -4888,7 +5149,7 @@ function renderStatsDash(){
 
   // Category chart from filteredData
   const catMap={};
-  filteredData.forEach(r=>{const cat=categorizeStat(ac.product?r[ac.product]:'');catMap[cat]=(catMap[cat]||0)+safeNum(r[ac.price]);});
+  filteredData.forEach(r=>{const cat=categorizeStat(ac.product?r[ac.product]:'');catMap[cat]=(catMap[cat]||0)+aliRowSales(r,ac);});
   const catLabels=Object.keys(catMap),catVals=catLabels.map(k=>Math.round(catMap[k]));
   const clrs=['#d4541a','#15803d','#1d4ed8','#d97706','#0369a1','#9d174d','#64748b','#7c3aed','#0f766e'];
   if(G.catChart){G.catChart.destroy();G.catChart=null;}
@@ -4960,6 +5221,33 @@ function renderStatsDash(){
     </tr>`;}).join('');
 }
 
+// v55: transparency panel — shows exactly how many rows were read, how many
+// are counted, and why any row is outside the range. Nothing is filtered by status.
+function renderStatDiag(raw,filteredData,ac,outOfRange,noDate){
+  const box=document.getElementById('stat-diag');
+  if(!box)return;
+  const statusMap={};
+  if(ac.status){raw.forEach(r=>{const st=(r[ac.status]||'—').trim()||'—';statusMap[st]=(statusMap[st]||0)+1;});}
+  const stTxt=Object.keys(statusMap).sort((a,b)=>statusMap[b]-statusMap[a])
+    .map(k=>`${esc(k)} <b>${statusMap[k]}</b>`).join(' · ');
+  const colTxt=[
+    ['תאריך',ac.date||'—'],['תאריך חלופי',ac.dateAlt||'—'],['סכום',ac.price||'—'],
+    ['עמלה',ac.commission||'—'],['עמלה חלופית',ac.commissionAlt||'—'],
+    ['תמריץ',ac.incentive||ac.incentiveAlt||'—'],['סטטוס',ac.status||'—']
+  ].map(p=>`${p[0]}: <span style="font-family:monospace">${esc(p[1])}</span>`).join(' | ');
+  box.innerHTML=`
+  <details style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--t2)">
+    <summary style="cursor:pointer;font-weight:800;color:var(--t2)">
+      🔍 נקראו <b>${raw.length}</b> שורות · נספרות <b>${filteredData.length}</b>${outOfRange?` · מחוץ לטווח התאריכים <b>${outOfRange}</b>`:''}${noDate?` · ללא תאריך תקין <b>${noDate}</b> (נספרות בכל זאת)`:''}
+    </summary>
+    <div style="margin-top:7px;line-height:1.7">
+      <div>אין סינון לפי סטטוס — כל שורה בקובץ נספרת.${outOfRange?' כדי לראות את כולן, נקה או הרחב את שדות התאריך.':''}</div>
+      ${stTxt?`<div style="margin-top:4px">פילוח סטטוסים בקובץ: ${stTxt}</div>`:''}
+      <div style="margin-top:4px;color:var(--t3)">עמודות שזוהו — ${colTxt}</div>
+    </div>
+  </details>`;
+}
+
 // Fix 9+10 (v14): Pie chart drill-down — grouped, table layout, product images from G.posts, toFixed(2)
 function openCatDrillDown(catName){
   const ac=G.aliCols;const data=G._statFiltered||[];
@@ -4970,8 +5258,8 @@ function openCatDrillDown(catName){
   items.forEach(r=>{
     const name=((ac.product?r[ac.product]:'')||'לא ידוע').trim();
     const url=(ac.url?r[ac.url]:'')||'';
-    const price=safeNum(r[ac.price]);
-    const comm=safeNum(r[ac.commission]);
+    const price=aliRowSales(r,ac);
+    const comm=aliRowComm(r,ac);
     if(!grouped[name]){grouped[name]={name,url,totalSales:0,totalComm:0,count:0};}
     grouped[name].totalSales+=price;
     grouped[name].totalComm+=comm;
@@ -5036,7 +5324,8 @@ function openCatDrillDown(catName){
 
 
 function resetCSV(){
-  G.csvRaw=[];G.aliCols={};
+  G.csvRaw=[];G.aliCols={};G.aliDayFirst=true;
+  const diagEl=document.getElementById('stat-diag');if(diagEl)diagEl.innerHTML='';
   try{localStorage.removeItem('sp_statsData');}catch(e){}
   if(G.salesChart){G.salesChart.destroy();G.salesChart=null;}
   if(G.catChart){G.catChart.destroy();G.catChart=null;}
@@ -8753,7 +9042,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script>
 /* ── סימון גרסה: מאפשר לוודא בקונסול שנטענה הגרסה החדשה ולא מטמון ישן ── */
-var APP_BUILD = 'v-FBFLOW2';
+var APP_BUILD = 'v-FBFLOW2 + CSV55';
 console.log('%c[BUILD] ' + APP_BUILD + ' — copyPostToFB: desktop=אפס כתיבה | mobile=כתיבה רק אחרי share מוצלח',
             'background:#111;color:#0f0;padding:2px 6px;border-radius:3px;font-weight:bold');
 
