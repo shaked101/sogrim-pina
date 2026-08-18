@@ -31,6 +31,48 @@ body{background:#FAF9F6!important;color:var(--tx);direction:rtl}
 .sdot{width:6px;height:6px;border-radius:50%;background:var(--grn);animation:bl 2s infinite}
 @keyframes bl{0%,100%{opacity:1}50%{opacity:.3}}
 .tbtn{background:var(--s2);border:1px solid var(--b1);border-radius:6px;padding:5px 11px;font-size:11px;font-weight:700;color:var(--t2);cursor:pointer;font-family:inherit;transition:all .15s}
+/* ── v60: HEADER HAMBURGER MENU ─────────────────────────────────────────── */
+.hdr-actions{position:relative;display:flex;align-items:center}
+.hdr-burger{width:38px;height:38px;display:flex;align-items:center;justify-content:center;background:var(--s2);border:1px solid var(--b1);border-radius:9px;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s,transform .12s;padding:0}
+.hdr-burger:hover{background:var(--s3);border-color:var(--b2)}
+.hdr-burger:active{transform:scale(.94)}
+.hdr-burger.on{background:var(--acc);border-color:var(--acc)}
+.hb-lines{display:flex;flex-direction:column;justify-content:center;gap:4px;width:17px}
+.hb-lines i{display:block;height:2px;width:100%;border-radius:2px;background:var(--t2);transition:transform .22s ease,opacity .18s ease,background .15s}
+.hdr-burger:hover .hb-lines i{background:var(--tx)}
+.hdr-burger.on .hb-lines i{background:#fff}
+.hdr-burger.on .hb-lines i:nth-child(1){transform:translateY(6px) rotate(45deg)}
+.hdr-burger.on .hb-lines i:nth-child(2){opacity:0}
+.hdr-burger.on .hb-lines i:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
+.hdr-menu{position:absolute;top:calc(100% + 9px);left:0;right:auto;min-width:236px;background:var(--s1);border:1px solid var(--b1);border-radius:13px;box-shadow:0 10px 34px rgba(30,41,59,.16);padding:6px;z-index:70;opacity:0;visibility:hidden;transform:translateY(-7px) scale(.97);transform-origin:top left;transition:opacity .17s ease,transform .17s ease,visibility .17s}
+.hdr-menu.on{opacity:1;visibility:visible;transform:translateY(0) scale(1)}
+.hdr-mi{display:flex;align-items:center;gap:10px;width:100%;background:transparent;border:none;border-radius:9px;padding:9px 10px;cursor:pointer;font-family:inherit;text-align:right;transition:background .13s;color:var(--tx)}
+.hdr-mi:hover{background:var(--s2)}
+.hdr-mi:active{background:var(--s3)}
+.hdr-mi-ic{font-size:16px;line-height:1;width:22px;text-align:center;flex-shrink:0}
+.hdr-mi-tx{display:flex;flex-direction:column;gap:1px;min-width:0}
+.hdr-mi-tx b{font-size:12.5px;font-weight:800;color:var(--tx)}
+.hdr-mi-tx small{font-size:10px;color:var(--t3);font-weight:600;line-height:1.3}
+.hdr-mi.danger b{color:#c2410c}
+.hdr-mi.danger:hover{background:#fff1e9}
+.hdr-sep{height:1px;background:var(--b1);margin:5px 8px}
+.hdr-mi.busy{opacity:.55;pointer-events:none}
+body.dark-mode .hdr-burger{background:#333333;border-color:#555}
+body.dark-mode .hdr-burger:hover{background:#3d3d3d}
+body.dark-mode .hdr-burger.on{background:var(--acc);border-color:var(--acc)}
+body.dark-mode .hb-lines i{background:#e5e5ea}
+body.dark-mode .hdr-menu{background:#2c2c2e;border-color:#3a3a3c;box-shadow:0 10px 34px rgba(0,0,0,.5)}
+body.dark-mode .hdr-mi{color:#eeeeee}
+body.dark-mode .hdr-mi:hover{background:#3a3a3c}
+body.dark-mode .hdr-mi-tx b{color:#eeeeee}
+body.dark-mode .hdr-mi.danger b{color:#ff9f6b}
+body.dark-mode .hdr-mi.danger:hover{background:#3d2e26}
+body.dark-mode .hdr-sep{background:#3a3a3c}
+@media(max-width:480px){
+  .hdr-burger{width:34px;height:34px;border-radius:8px}
+  .hb-lines{width:15px;gap:3.5px}
+  .hdr-menu{min-width:214px}
+}
 .tbtn:hover{background:var(--s3);color:var(--tx)}
 .layout{display:grid;grid-template-columns:185px 1fr;min-height:calc(100vh - 52px)}
 .sidebar{background:#FAF9F6!important;border-left:1px solid var(--b1);padding:12px 0;position:sticky;top:52px;height:calc(100vh - 52px);overflow-y:auto}
@@ -951,11 +993,31 @@ body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--a
       <button class="gsearch-clear" id="gsearch-clear" type="button">✕</button>
       <div class="gsearch-drop" id="gsearch-drop"></div>
     </div>
-    <div style="display:flex;align-items:center;gap:6px">
-      <button class="tbtn" id="refresh-btn">🔄</button>
-      <button class="tbtn" id="darkmode-btn" onclick="toggleDarkMode()" title="מצב לילה">🌙</button>
-      <button class="tbtn" id="top-settings-btn">⚙️</button>
-      <button class="tbtn" id="logout-btn">יציאה</button>
+    <!-- v60: every top-bar action now lives inside one hamburger menu.
+         The button IDs are unchanged, so all existing wiring keeps working. -->
+    <div class="hdr-actions" id="hdr-actions">
+      <button class="hdr-burger" id="hdr-menu-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="תפריט" title="תפריט">
+        <span class="hb-lines"><i></i><i></i><i></i></span>
+      </button>
+      <div class="hdr-menu" id="hdr-menu" role="menu" aria-labelledby="hdr-menu-btn">
+        <button class="hdr-mi" id="refresh-btn" type="button" role="menuitem">
+          <span class="hdr-mi-ic">🔄</span>
+          <span class="hdr-mi-tx"><b>רענון עמוק</b><small>ניקוי מטמון וסנכרון מלא מהענן</small></span>
+        </button>
+        <button class="hdr-mi" id="top-settings-btn" type="button" role="menuitem">
+          <span class="hdr-mi-ic">⚙️</span>
+          <span class="hdr-mi-tx"><b>הגדרות</b></span>
+        </button>
+        <button class="hdr-mi" id="darkmode-btn" type="button" role="menuitem" onclick="toggleDarkMode()">
+          <span class="hdr-mi-ic" id="darkmode-ico">🌙</span>
+          <span class="hdr-mi-tx"><b id="darkmode-lbl">מצב לילה</b></span>
+        </button>
+        <div class="hdr-sep"></div>
+        <button class="hdr-mi danger" id="logout-btn" type="button" role="menuitem">
+          <span class="hdr-mi-ic">🚪</span>
+          <span class="hdr-mi-tx"><b>יציאה</b></span>
+        </button>
+      </div>
     </div>
   </div>
   <div class="layout">
@@ -2104,6 +2166,10 @@ function _statsSlimRows(rows,ac){
   ['date','dateAlt','qty','itemId','product','url','price','priceAlt',
    'commission','commissionAlt','incentive','incentiveAlt','commRate','status']
   .forEach(function(k){var c=ac[k];if(c&&keys.indexOf(c)===-1)keys.push(c);});
+  // v60: ALWAYS carry every header that looks like a quantity, even when the
+  // current mapping didn't pick one. Stripping it here is what left the cloud
+  // copy with no way to count units on the receiving device.
+  aliQtyCandidates(aliRowKeys(rows)).forEach(function(c){if(keys.indexOf(c)===-1)keys.push(c);});
   if(!keys.length)return rows;                       // mapping failed — send as-is
   return rows.map(function(r){
     var o={};
@@ -2378,17 +2444,108 @@ function _priceKeyStep(el,e){
 }
 
 // ── v53: Dark mode ───────────────────────────────
+// v60: the toggle now lives inside the hamburger menu, so the icon and the
+// label are separate nodes — writing textContent on the button would delete
+// them both. _paintDarkBtn touches only the icon (falling back to the old
+// behaviour if the icon span isn't there).
+function _paintDarkBtn(isDark){
+  var ico=document.getElementById('darkmode-ico');
+  var lbl=document.getElementById('darkmode-lbl');
+  if(ico)ico.textContent=isDark?'☀️':'🌙';
+  if(lbl)lbl.textContent=isDark?'מצב יום':'מצב לילה';
+  if(!ico){
+    var btn=document.getElementById('darkmode-btn');
+    if(btn)btn.textContent=isDark?'☀️':'🌙';
+  }
+}
+// ════════════════════════════════════════════════
+// v60 — HEADER MENU + DEEP REFRESH
+// ════════════════════════════════════════════════
+function closeHdrMenu(){
+  var m=document.getElementById('hdr-menu'),b=document.getElementById('hdr-menu-btn');
+  if(m)m.classList.remove('on');
+  if(b){b.classList.remove('on');b.setAttribute('aria-expanded','false');}
+}
+function toggleHdrMenu(){
+  var m=document.getElementById('hdr-menu'),b=document.getElementById('hdr-menu-btn');
+  if(!m||!b)return;
+  var willOpen=!m.classList.contains('on');
+  m.classList.toggle('on',willOpen);
+  b.classList.toggle('on',willOpen);
+  b.setAttribute('aria-expanded',willOpen?'true':'false');
+}
+
+// Deep refresh / global sync — built for the phone, where a Service Worker
+// happily serves a months-old index.html and the stats look "stuck".
+// 1. every Cache Storage bucket the Service Worker owns is emptied
+// 2. the Service Worker registration is told to go look for a new build
+// 3. the cloud data is pulled again (loadStatsCloud + followers + competition)
+// 4. the page is reloaded against a cache-busting URL, so the HTML itself is
+//    refetched from the network rather than replayed from the old cache
+// sessionStorage survives the reload, so this never logs anybody out.
+async function deepRefresh(){
+  var item=document.getElementById('refresh-btn');
+  if(item&&item.classList.contains('busy'))return;   // already running
+  if(item)item.classList.add('busy');
+  closeHdrMenu();
+  toast('🔄 מנקה מטמון ומסנכרן מהענן...','inf');
+
+  // ── 1. wipe every Service Worker cache ──
+  var cleared=0;
+  try{
+    if(typeof caches!=='undefined'&&caches.keys){
+      var names=await caches.keys();
+      for(var i=0;i<names.length;i++){
+        try{if(await caches.delete(names[i]))cleared++;}catch(e){}
+      }
+    }
+  }catch(e){console.warn('[v60 deepRefresh] caches',e&&e.message);}
+
+  // ── 2. nudge the Service Worker to fetch a new build ──
+  try{
+    if(navigator.serviceWorker&&navigator.serviceWorker.getRegistrations){
+      var regs=await navigator.serviceWorker.getRegistrations();
+      for(var j=0;j<regs.length;j++){try{await regs[j].update();}catch(e){}}
+    }
+  }catch(e){console.warn('[v60 deepRefresh] sw',e&&e.message);}
+
+  // ── 3. pull the cloud copy again ──
+  // clearing _csvUploadedAt lets the cloud stats win over this session's flag,
+  // which is the whole point of asking for a global sync.
+  try{
+    G._csvUploadedAt=0;
+    await Promise.all([
+      loadStatsCloud().catch(function(){return false;}),
+      loadFollowers().catch(function(){}),
+      loadCompState().catch(function(){})
+    ]);
+    if(G.csvRaw&&G.csvRaw.length)renderStatsDash();
+    renderFCards();
+  }catch(e){console.warn('[v60 deepRefresh] cloud',e&&e.message);}
+
+  console.log('[v60 deepRefresh] מטמונים שנוקו:',cleared,'| שורות סטטיסטיקה:',(G.csvRaw||[]).length);
+  toast('✅ נוקו '+cleared+' מטמונים — טוען מחדש...','ok');
+
+  // ── 4. reload against a cache-busting URL (keeps any existing params) ──
+  try{sessionStorage.setItem('sp_deepRefresh','1');}catch(e){}
+  setTimeout(function(){
+    try{
+      var u=new URL(location.href);
+      u.searchParams.set('_r',String(Date.now()));
+      location.replace(u.toString());
+    }catch(e){location.reload();}
+  },800);
+}
+
 function toggleDarkMode(){
   var isDark=document.body.classList.toggle('dark-mode');
-  var btn=document.getElementById('darkmode-btn');
-  if(btn)btn.textContent=isDark?'☀️':'🌙';
+  _paintDarkBtn(isDark);
   try{localStorage.setItem('sp_dark',isDark?'1':'0');}catch(e){}
 }
 (function initDarkMode(){
   try{if(localStorage.getItem('sp_dark')==='1'){
     document.body.classList.add('dark-mode');
-    var btn=document.getElementById('darkmode-btn');
-    if(btn)btn.textContent='☀️';
+    _paintDarkBtn(true);
   }}catch(e){}
 })();
 
@@ -2499,6 +2656,13 @@ function bootApp(){
     _renderCompTimer();
     _renderDashCompWidget();
     console.log('[v54] Cloud sync complete');
+    // v60: close the loop on a deep refresh that was started before the reload
+    try{
+      if(sessionStorage.getItem('sp_deepRefresh')==='1'){
+        sessionStorage.removeItem('sp_deepRefresh');
+        toast('✅ סנכרון עמוק הושלם — הנתונים עדכניים','ok');
+      }
+    }catch(e){}
   }).catch(function(e){
     console.warn('[v54] Cloud sync partial failure:',e.message);
   });
@@ -4983,6 +5147,39 @@ function aliPick(cols,tests,exclude){
   }
   return '';
 }
+// ── v60: the ONE place that decides which headers look like a quantity ──────
+// Shared by aliDetectCols (fresh CSV) and aliFinalizeCols (data that arrived
+// from the cloud / localStorage), so a stale stored mapping can never hide the
+// column again. Order matters — the first match wins.
+function aliQtyCandidates(cols){
+  cols=cols||[];
+  var tests=[
+    function(n){return n==='productcount';},
+    function(n){return n==='itemcount';},
+    function(n){return n==='productamount';},
+    function(n){return n==='quantity';},
+    function(n){return n==='productquantity'||n==='itemquantity';},
+    function(n){return n==='qty'||n==='itemnum'||n==='productnum';},
+    function(n){return /(productcount|itemcount|productquantity|itemquantity|buyquantity|purchasequantity|orderquantity)/.test(n);},
+    function(n){return /(productamount|itemamount)/.test(n);},
+    function(n){return /(quantity|qty)/.test(n)&&!/rate|price|amountusd/.test(n);}
+  ];
+  var out=[];
+  tests.forEach(function(t){
+    for(var i=0;i<cols.length;i++){
+      if(!cols[i])continue;
+      var nm=aliNormHdr(cols[i]);
+      if(t(nm)&&out.indexOf(cols[i])===-1)out.push(cols[i]);
+    }
+  });
+  return out;
+}
+// every distinct header present in the rows (not just the first row)
+function aliRowKeys(rows){
+  var seen={},keys=[],lim=Math.min((rows||[]).length,50);
+  for(var i=0;i<lim;i++)for(var k in rows[i])if(!seen[k]){seen[k]=1;keys.push(k);}
+  return keys;
+}
 function aliDetectCols(cols){
   cols=cols||[];
   var re=function(r){return function(n){return r.test(n);};};
@@ -5006,30 +5203,9 @@ function aliDetectCols(cols){
     re(/time|date/)
   ],[date]);
 
-  // v59: units bought in the transaction — a row is NOT always one unit.
-  // The four headers the AliExpress export actually uses come first, in the
-  // order requested: Product count / Item Count / Product Amount / Quantity.
-  // The first header that matches WINS — no value-based sanity check any more
-  // (the old one rejected the correct column and fell back to counting rows).
+  // v60: units bought in the transaction — a row is NOT always one unit.
   // Detected BEFORE price so a quantity column can never be mistaken for money.
-  var qtyTests=[
-    function(n){return n==='productcount';},
-    function(n){return n==='itemcount';},
-    function(n){return n==='productamount';},
-    function(n){return n==='quantity';},
-    function(n){return n==='productquantity'||n==='itemquantity';},
-    function(n){return n==='qty'||n==='itemnum'||n==='productnum';},
-    function(n){return /(productcount|itemcount|productquantity|itemquantity|buyquantity|purchasequantity|orderquantity)/.test(n);},
-    function(n){return /(productamount|itemamount)/.test(n);},
-    function(n){return /(quantity|qty)/.test(n)&&!/rate|price|amountusd/.test(n);}
-  ];
-  var qtyCandidates=[];
-  qtyTests.forEach(function(t){
-    for(var i=0;i<cols.length;i++){
-      var nm=aliNormHdr(cols[i]);
-      if(t(nm)&&qtyCandidates.indexOf(cols[i])===-1)qtyCandidates.push(cols[i]);
-    }
-  });
+  var qtyCandidates=aliQtyCandidates(cols);
   var qty=qtyCandidates[0]||'';
   var qEx=qtyCandidates.slice();
   var price=aliPick(cols,[
@@ -5105,22 +5281,33 @@ function aliEnsureCols(rows){
   return G.aliCols;
 }
 
-// ── v59: NO sanity check — first matching header wins ──────────────────────
-// The v58 scorer demanded that 80% of the values be whole numbers in 1..999,
-// and the real Product-count column failed that test, so every row silently
-// counted as a single unit. The column is now taken purely from its header and
-// each value is read with parseInt(val,10)||1.
+// ── v60: the quantity column is re-derived from the headers that are ACTUALLY
+// present in the rows in front of us — never from a stored mapping.
+// That stored mapping is exactly what kept breaking the count: a cloud copy
+// saved by v58 carried qty:'' (its sanity check had rejected the real column),
+// and every later render inherited that empty value, so each row scored 1 unit
+// and the totals looked like a transaction count. Now the headers win, always.
 function aliFinalizeCols(rows){
   var ac=G.aliCols||{};
   rows=rows||G.csvRaw||[];
   if(!rows.length)return ac;
-  var cands=(ac.qtyCandidates&&ac.qtyCandidates.length)?ac.qtyCandidates:(ac.qty?[ac.qty]:[]);
+  var keys=aliRowKeys(rows);
+  var cands=aliQtyCandidates(keys);
+  // last resort: honour a stored mapping only if that column really exists here
+  if(!cands.length&&ac.qtyCandidates&&ac.qtyCandidates.length)
+    cands=ac.qtyCandidates.filter(function(c){return keys.indexOf(c)>-1;});
+  if(!cands.length&&ac.qty&&keys.indexOf(ac.qty)>-1)cands=[ac.qty];
   var chosen=cands[0]||'';
+  ac.qtyCandidates=cands;
   ac.qty=chosen;
   G.aliCols=ac;
-  console.log('%c[v59 CSV] עמודות שזוהו','color:#d4541a;font-weight:bold');
-  console.log('   כותרות בקובץ :',Object.keys(rows[0]||{}).join(' | '));
+  // units vs rows, so the difference is visible at a glance in the console
+  var units=0;
+  for(var u=0;u<rows.length;u++)units+=aliRowQty(rows[u],ac);
+  console.log('%c[v60 CSV] עמודות שזוהו','color:#d4541a;font-weight:bold');
+  console.log('   כותרות בקובץ :',keys.join(' | '));
   console.log('   עמודת כמות   :',chosen||'לא נמצאה — כל שורה תיספר כיחידה אחת');
+  console.log('   ספירה        :',units,'יחידות מתוך',rows.length,'שורות');
   if(cands.length>1)console.log('   מועמדים נוספים:',cands.slice(1).join(' • '));
   console.log('   מזהה מוצר    :',ac.itemId||'(נגזר מ-ProductUrl)','| כותרת:',ac.product||'—','| סכום:',ac.price||'—');
   console.log('   עמלה         :',ac.commission||ac.commissionAlt||'—','| תמריץ:',ac.incentive||ac.incentiveAlt||'—','| שיעור:',ac.commRate||'—');
@@ -5620,18 +5807,17 @@ function renderAllProds(){
 
   const hasInc=list.some(function(d){return d.incentive>0;});
   const tInc=list.reduce(function(s2,d){return s2+d.incentive;},0);
-  const cols=hasInc?8:7;
+  const cols=hasInc?7:6;
   wrap.innerHTML=`
-  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:${hasInc?600:540}px">
+  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:${hasInc?550:490}px">
     <thead><tr>
       <th style="padding:7px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800;background:var(--s2);width:28px">#</th>
       ${th('name','מוצר')}
-      ${th('count','יחידות','width:58px;text-align:center')}
-      ${th('orders','עסקאות','width:58px;text-align:center')}
+      ${th('count','יחידות','width:64px;text-align:center')}
       ${th('sales','מכירות','width:78px')}
       ${th('commission','עמלה','width:72px')}
       ${hasInc?th('incentive','תמריץ','width:66px'):''}
-      ${th('pct','% מהקובץ','width:66px')}
+      ${th('pct','אחוז עמלה','width:72px')}
     </tr></thead>
     <tbody>
     ${list.map(function(d,i){
@@ -5641,8 +5827,7 @@ function renderAllProds(){
           ${d.url?`<a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">${esc(d.name)}</a>`:esc(d.name)}
           ${d.itemId?`<div style="font-size:9px;color:var(--t3);font-family:monospace">ID ${esc(d.itemId)}</div>`:''}
         </td>
-        <td style="padding:7px 8px;text-align:center"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 6px;font-weight:800">×${d.count}</span></td>
-        <td style="padding:7px 8px;text-align:center;color:var(--t2)">${d.orders}</td>
+        <td style="padding:7px 8px;text-align:center" title="${d.count} יחידות מתוך ${d.orders} הזמנות"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 6px;font-weight:800">×${d.count}</span></td>
         <td style="padding:7px 8px;font-family:monospace;font-weight:700;color:var(--acc)">$${d.sales.toFixed(2)}</td>
         <td style="padding:7px 8px;font-family:monospace;color:var(--grn)">$${d.commission.toFixed(2)}</td>
         ${hasInc?`<td style="padding:7px 8px;font-family:monospace;color:#d97706">$${d.incentive.toFixed(2)}</td>`:''}
@@ -5652,8 +5837,7 @@ function renderAllProds(){
     ${list.length?`<tfoot><tr style="background:var(--s2);font-weight:900">
       <td style="padding:8px"></td>
       <td style="padding:8px">סה״כ ${list.length} מוצרים</td>
-      <td style="padding:8px;text-align:center">×${tCount}</td>
-      <td style="padding:8px;text-align:center">${tOrders}</td>
+      <td style="padding:8px;text-align:center" title="${tOrders} הזמנות">×${tCount}</td>
       <td style="padding:8px;font-family:monospace;color:var(--acc)">$${tSales.toFixed(2)}</td>
       <td style="padding:8px;font-family:monospace;color:var(--grn)">$${tComm.toFixed(2)}</td>
       ${hasInc?`<td style="padding:8px;font-family:monospace;color:#d97706">$${tInc.toFixed(2)}</td>`:''}
@@ -9100,8 +9284,21 @@ document.addEventListener('DOMContentLoaded',function(){
   on('login-btn','click',tryLogin);
   on('pw-in','keydown',function(e){if(e.key==='Enter')tryLogin();});
 
-  // ── Topbar ─────────────────────────────────────
-  on('refresh-btn','click',function(){toast('מרענן...','inf');loadData().then(()=>toast('✅ עודכן!','ok'));});
+  // ── Topbar (v60: all of these now sit inside the hamburger menu) ──
+  on('hdr-menu-btn','click',function(e){e.stopPropagation();toggleHdrMenu();});
+  // close on outside click, on Escape, and after any menu item is chosen
+  document.addEventListener('click',function(e){
+    var wrap=document.getElementById('hdr-actions');
+    if(wrap&&!wrap.contains(e.target))closeHdrMenu();
+  });
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeHdrMenu();});
+  var _hm=document.getElementById('hdr-menu');
+  if(_hm)_hm.addEventListener('click',function(e){
+    var mi=e.target.closest?e.target.closest('.hdr-mi'):null;
+    // the dark-mode item keeps the menu open so the change is visible at once
+    if(mi&&mi.id!=='darkmode-btn')setTimeout(closeHdrMenu,90);
+  });
+  on('refresh-btn','click',deepRefresh);
   on('top-settings-btn','click',function(){showPage('settings');});
   on('logout-btn','click',function(){sessionStorage.removeItem('sp_auth');sessionStorage.removeItem('sp_secret');location.reload();});
 
