@@ -2080,6 +2080,30 @@ async function _cloudPost(payload){
   }
 }
 
+// ── v61: Helper: POST that does NOT lie about the outcome ───────────────────
+// _cloudPost above swallows a non-JSON reply and answers {ok:true}. When Apps
+// Script rejects a request it replies with an HTML error page, so the stats
+// upload reported success while nothing was ever stored. This variant hands
+// back the raw response so the caller can judge for itself.
+async function _cloudPostRaw(payload){
+  var body='payload='+encodeURIComponent(JSON.stringify(payload));
+  var out={ok:false,status:0,raw:'',json:null,bytes:body.length,error:''};
+  try{
+    var resp=await apiFetch(COMMUNITY_GAS_URL,{
+      method:'POST',mode:'cors',redirect:'follow',
+      headers:{'Accept':'application/json','Content-Type':'application/x-www-form-urlencoded'},
+      body:body
+    });
+    out.status=resp.status;
+    out.raw=await resp.text();
+    if(!resp.ok){out.error='HTTP '+resp.status;return out;}
+    try{out.json=JSON.parse(out.raw);}catch(e){out.error='התשובה מהשרת אינה JSON';return out;}
+    out.ok=(out.json&&out.json.ok!==false);
+    if(!out.ok)out.error=(out.json&&out.json.error)||'השרת החזיר ok:false';
+    return out;
+  }catch(e){out.error=e.message||'שגיאת רשת';return out;}
+}
+
 // ── Helper: GET from community GAS ──────────────
 async function _cloudGet(action,extra){
   var qs='?action='+action+'&_t='+Date.now();
@@ -2155,49 +2179,140 @@ function _saveBonusLog(log){try{localStorage.setItem('sp_bonuslog',JSON.stringif
 
 // ══ ③ STATS (CSV data) ═════════════════════════
 
-// ── v59: CROSS-DEVICE STATS SYNC ───────────────────────────────────────────
-// Only the columns the stats engine actually reads are sent to the cloud. An
-// AliExpress export carries ~40 columns of which we use ~14, so the payload
-// shrinks by roughly 80% — that is what makes the POST fit inside the Apps
-// Script limit and lets the phone actually receive a file uploaded on a PC.
-function _statsSlimRows(rows,ac){
-  rows=rows||[];ac=ac||{};
-  var keys=[];
-  ['date','dateAlt','qty','itemId','product','url','price','priceAlt',
-   'commission','commissionAlt','incentive','incentiveAlt','commRate','status']
-  .forEach(function(k){var c=ac[k];if(c&&keys.indexOf(c)===-1)keys.push(c);});
-  // v60: ALWAYS carry every header that looks like a quantity, even when the
-  // current mapping didn't pick one. Stripping it here is what left the cloud
-  // copy with no way to count units on the receiving device.
-  aliQtyCandidates(aliRowKeys(rows)).forEach(function(c){if(keys.indexOf(c)===-1)keys.push(c);});
-  if(!keys.length)return rows;                       // mapping failed — send as-is
-  return rows.map(function(r){
+// ── v61: CROSS-DEVICE STATS SYNC — compact wire format + verified save ─────
+// v59 sent the original rows with their original headers. Every one of ~14
+// long header strings ("Estimated Payments Incentive Commission") was repeated
+// on EVERY row, then URL-encoded, which is what pushed the POST past what Apps
+// Script would accept. The wire format is now one-letter keys, and each row
+// carries the quantity ALREADY RESOLVED to a number — so the receiving device
+// can never fail to find the units column, whatever its own detection thinks.
+var _SP_KEYS={
+  d:'Completed Payments Time',
+  q:'Product count',
+  i:'Product ID',
+  t:'Product Title',
+  u:'Product URL',
+  p:'Completed Payments Amount',
+  c:'Estimated Payments Commission',
+  n:'Estimated Payments Incentive Commission',
+  r:'Commission Rate',
+  s:'Order Status'
+};
+function _spNum(v){
+  var n=Number(v)||0;
+  return n?String(Math.round(n*100)/100):'';
+}
+// pack: original rows → compact objects (titleMax lets us shrink further if a
+// first attempt comes back too large for the backend)
+function _statsPackRows(rows,ac,titleMax){
+  ac=ac||G.aliCols||{};
+  titleMax=titleMax||110;
+  return (rows||[]).map(function(r){
     var o={};
-    for(var i=0;i<keys.length;i++){
-      var v=r[keys[i]];
-      o[keys[i]]=(v===undefined||v===null)?'':v;
-    }
+    var dt=ac.date?r[ac.date]:'';
+    if((dt===undefined||dt===null||dt==='')&&ac.dateAlt)dt=r[ac.dateAlt];
+    var id=aliRowItemId(r,ac);
+    var ttl=String((ac.product&&r[ac.product])||'').trim();
+    if(ttl.length>titleMax)ttl=ttl.slice(0,titleMax);
+    var url=String((ac.url&&r[ac.url])||'').trim();
+    var inc=aliRowIncentive(r,ac);
+    var base=aliRowComm(r,ac)-inc;
+    var rate=aliRowRate(r,ac);
+    var st=ac.status?String(r[ac.status]||'').trim():'';
+    o.d=String(dt===undefined||dt===null?'':dt);
+    o.q=String(aliRowQty(r,ac));       // ← resolved HERE, at save time
+    if(id)o.i=id;
+    if(ttl)o.t=ttl;
+    if(url&&!id)o.u=url;               // with an id the URL is rebuildable
+    var pv=_spNum(aliRowSales(r,ac));if(pv)o.p=pv;
+    var cv=_spNum(base);if(cv)o.c=cv;
+    var nv=_spNum(inc);if(nv)o.n=nv;
+    if(rate)o.r=rate;
+    if(st)o.s=st;
     return o;
   });
 }
+// unpack: compact objects → rows with canonical headers our detector knows
+function _statsUnpackRows(rows){
+  return (rows||[]).map(function(o){
+    var out={};
+    for(var k in _SP_KEYS){
+      var v=o[k];
+      if(v!==undefined&&v!==null&&v!=='')out[_SP_KEYS[k]]=v;
+    }
+    if(!out['Product URL']&&out['Product ID'])
+      out['Product URL']='https://www.aliexpress.com/item/'+out['Product ID']+'.html';
+    // the units column must always exist, so a row can never silently become 1
+    if(out['Product count']===undefined)out['Product count']='1';
+    return out;
+  });
+}
+// is this payload in the compact format?
+function _statsIsPacked(cols,rows){
+  if(cols&&cols.__fmt==='sp1')return true;
+  var r0=rows&&rows[0];
+  if(!r0||typeof r0!=='object'||Array.isArray(r0))return false;
+  if('Product Title' in r0)return false;
+  return ('q' in r0)||('d' in r0&&'p' in r0);
+}
+// kept for backward compatibility with anything still calling it
+function _statsSlimRows(rows,ac){return _statsPackRows(rows,ac);}
 
-// Save stats to cloud when CSV is uploaded
+// Save stats to cloud when CSV is uploaded — and CONFIRM it actually landed
 async function saveStatsCloud(){
   if(!G.csvRaw||!G.csvRaw.length)return false;
   G.aliCols=G.aliCols||{};
-  // v59: the upload stamp travels inside `cols`, which the backend already
-  // stores and returns verbatim — no Apps Script change is needed for other
-  // devices to know how fresh this copy is.
   G.aliCols.__savedAt=Date.now();
-  // Persist locally first
+  // Persist locally first (offline safety net — always succeeds)
   try{localStorage.setItem('sp_statsData',JSON.stringify({cols:G.aliCols,rows:G.csvRaw}));}catch(e){}
-  // v58: a fresh upload lifts any previous delete tombstone
   try{localStorage.removeItem('sp_statsCleared');}catch(e){}
-  var slim=_statsSlimRows(G.csvRaw.slice(0,5000),G.aliCols);
-  var res=await _cloudPost({action:'saveStats',cols:G.aliCols,rows:slim,savedAt:G.aliCols.__savedAt});
-  var ok=!!(res&&res.ok!==false);
-  console.log('[v59 saveStatsCloud]',ok?'✅ נשמר בענן':'❌ שמירה בענן נכשלה',slim.length,'שורות');
-  return ok;
+
+  var src=G.csvRaw.slice(0,5000);
+  var packed=_statsPackRows(src,G.aliCols);
+  var meta={__v:61,__fmt:'sp1',__savedAt:G.aliCols.__savedAt,__rows:packed.length};
+  var payload={action:'saveStats',cols:meta,rows:packed,savedAt:meta.__savedAt};
+  var bytes=encodeURIComponent(JSON.stringify(payload)).length;
+
+  console.log('%c[v61 saveStatsCloud] שולח לענן','color:#d4541a;font-weight:bold');
+  console.log('   שורות        :',packed.length,'מתוך',G.csvRaw.length);
+  console.log('   גודל payload :',bytes,'תווים (~'+Math.round(bytes/1024)+'KB) אחרי קידוד');
+  console.log('   שורה לדוגמה  :',JSON.stringify(packed[0]||{}));
+
+  // Too big for Apps Script? shrink the titles and try that instead.
+  if(bytes>700000){
+    packed=_statsPackRows(src,G.aliCols,45);
+    payload.rows=packed;
+    var b2=encodeURIComponent(JSON.stringify(payload)).length;
+    console.warn('[v61] payload גדול מדי — כותרות קוצרו:',bytes,'→',b2);
+    bytes=b2;
+  }
+
+  var res=await _cloudPostRaw(payload);
+  console.log('   סטטוס HTTP   :',res.status||'—');
+  console.log('   תשובת השרת   :',(res.raw||'').slice(0,300)||'(ריק)');
+  if(!res.ok){
+    console.error('[v61 saveStatsCloud] ❌ השמירה נכשלה:',res.error);
+    G._lastStatsSaveError=res.error;
+    return false;
+  }
+
+  // ── verification read-back: the only proof that the server really kept it ──
+  var back=await _cloudGet('getStats');
+  var got=(back&&back.rows&&back.rows.length)||0;
+  console.log('   אימות קריאה  :',got,'שורות חזרו מהענן (נשלחו '+packed.length+')');
+  if(!got){
+    G._lastStatsSaveError='השרת קיבל את הבקשה אך לא שמר דבר — ייתכן שפעולת saveStats חסרה ב-Code.gs';
+    console.error('[v61 saveStatsCloud] ❌',G._lastStatsSaveError);
+    return false;
+  }
+  if(got<packed.length){
+    G._lastStatsSaveError='נשמרו רק '+got+' מתוך '+packed.length+' שורות';
+    console.warn('[v61 saveStatsCloud] ⚠️',G._lastStatsSaveError);
+    return false;
+  }
+  G._lastStatsSaveError='';
+  console.log('[v61 saveStatsCloud] ✅ נשמר ואומת בענן —',got,'שורות');
+  return true;
 }
 
 // v58: 🗑️ used to clear only localStorage, so the next boot pulled the stale
@@ -2241,11 +2356,27 @@ async function loadStatsCloud(){
       return false;
     }
   }
+  console.log('%c[v61 loadStatsCloud] מה חזר מהענן','color:#0369a1;font-weight:bold');
+  console.log('   ok           :',r&&r.ok,'| שגיאה:',(r&&r.error)||'—');
+  console.log('   שורות        :',(r&&r.rows&&r.rows.length)||0);
+  console.log('   cols         :',JSON.stringify((r&&r.cols)||{}).slice(0,220));
+  console.log('   שורה ראשונה  :',JSON.stringify((r&&r.rows&&r.rows[0])||{}).slice(0,300));
+
   if(r&&r.ok&&r.rows&&r.rows.length){
-    G.aliCols=r.cols||{};
-    G.csvRaw=r.rows;
+    var _rows=r.rows,_cols=r.cols||{};
+    if(_statsIsPacked(_cols,_rows)){
+      _rows=_statsUnpackRows(_rows);
+      _cols={};                       // canonical headers → let detection re-run
+      console.log('   פורמט        : דחוס (sp1) — פורק ל-'+_rows.length+' שורות');
+      console.log('   אחרי פירוק   :',JSON.stringify(_rows[0]||{}).slice(0,300));
+    }else{
+      console.log('   פורמט        : רגיל (עותק ישן)');
+    }
+    G.aliCols=_cols;
+    G.csvRaw=_rows;
+    G._qtyLogPending=true;            // v61: log the unit maths for this data
     try{localStorage.setItem('sp_statsData',JSON.stringify({cols:G.aliCols,rows:G.csvRaw}));}catch(e){}
-    console.log('[v59 loadStatsCloud] ☁️ נמשכו',r.rows.length,'שורות מהענן');
+    console.log('[v61 loadStatsCloud] ☁️ נטענו',_rows.length,'שורות מהענן');
     _showStatsDash();
     return true;
   }
@@ -2255,7 +2386,11 @@ async function loadStatsCloud(){
     if(saved){
       var parsed=JSON.parse(saved);
       if(parsed&&parsed.rows&&parsed.rows.length){
-        G.aliCols=parsed.cols||{};G.csvRaw=parsed.rows;
+        var lr=parsed.rows,lc=parsed.cols||{};
+        if(_statsIsPacked(lc,lr)){lr=_statsUnpackRows(lr);lc={};}
+        G.aliCols=lc;G.csvRaw=lr;
+        G._qtyLogPending=true;
+        console.log('[v61 loadStatsCloud] 💾 נטענו',lr.length,'שורות מהאחסון המקומי');
         _showStatsDash();return true;
       }
     }
@@ -2512,16 +2647,23 @@ async function deepRefresh(){
   // ── 3. pull the cloud copy again ──
   // clearing _csvUploadedAt lets the cloud stats win over this session's flag,
   // which is the whole point of asking for a global sync.
+  var gotStats=false;
   try{
     G._csvUploadedAt=0;
-    await Promise.all([
+    var rr=await Promise.all([
       loadStatsCloud().catch(function(){return false;}),
       loadFollowers().catch(function(){}),
       loadCompState().catch(function(){})
     ]);
+    gotStats=!!rr[0];
     if(G.csvRaw&&G.csvRaw.length)renderStatsDash();
     renderFCards();
   }catch(e){console.warn('[v60 deepRefresh] cloud',e&&e.message);}
+  // v61: an empty cloud is a real result — say so instead of a cheerful tick
+  if(!gotStats&&!(G.csvRaw&&G.csvRaw.length)){
+    console.warn('[v61 deepRefresh] ⚠️ אין נתוני סטטיסטיקה בענן');
+    toast('⚠️ אין נתוני סטטיסטיקה בענן — העלה קובץ מחדש במחשב ובדוק את הודעת הסנכרון','err');
+  }
 
   console.log('[v60 deepRefresh] מטמונים שנוקו:',cleared,'| שורות סטטיסטיקה:',(G.csvRaw||[]).length);
   toast('✅ נוקו '+cleared+' מטמונים — טוען מחדש...','ok');
@@ -5174,6 +5316,36 @@ function aliQtyCandidates(cols){
   });
   return out;
 }
+// ── v61: fallback for a file whose quantity header we don't recognise ──────
+// Runs ONLY when no header matched. It never overrides a header match, so it
+// cannot repeat the v58 mistake of rejecting the correct column; it can only
+// rescue a file that would otherwise count one unit per row.
+// A column qualifies when its values are small whole numbers AND at least one
+// of them is greater than 1 (a column of pure 1s tells us nothing).
+function aliGuessQtyCol(rows,keys){
+  rows=rows||[];keys=keys||[];
+  var best='',bestGain=0;
+  for(var k=0;k<keys.length;k++){
+    var col=keys[k],nm=aliNormHdr(col);
+    // never mistake money, rates, dates, ids or free text for a unit count
+    if(/(amount|price|commission|rate|total|value|time|date|id$|url|link|title|name|status|order$)/.test(nm))continue;
+    var filled=0,ints=0,sum=0,over=0,lim=Math.min(rows.length,400);
+    for(var i=0;i<lim;i++){
+      var txt=String(rows[i][col]===undefined||rows[i][col]===null?'':rows[i][col]).trim();
+      if(!txt)continue;
+      filled++;
+      if(!/^\d{1,3}(\.0+)?$/.test(txt))continue;
+      var n=parseInt(txt,10);
+      if(n>=1&&n<=999){ints++;sum+=n;if(n>1)over++;}
+    }
+    if(!filled||ints/filled<0.9||!over)continue;
+    var gain=sum-ints;                       // how many units beyond one-per-row
+    if(gain>bestGain){bestGain=gain;best=col;}
+  }
+  if(best)console.log('[v61] עמודת כמות זוהתה לפי הערכים (לא לפי הכותרת):',best,'— +'+bestGain+' יחידות מעבר לספירת שורות');
+  return best;
+}
+
 // every distinct header present in the rows (not just the first row)
 function aliRowKeys(rows){
   var seen={},keys=[],lim=Math.min((rows||[]).length,50);
@@ -5297,6 +5469,8 @@ function aliFinalizeCols(rows){
   if(!cands.length&&ac.qtyCandidates&&ac.qtyCandidates.length)
     cands=ac.qtyCandidates.filter(function(c){return keys.indexOf(c)>-1;});
   if(!cands.length&&ac.qty&&keys.indexOf(ac.qty)>-1)cands=[ac.qty];
+  // v61: still nothing? let the values speak.
+  if(!cands.length){var guess=aliGuessQtyCol(rows,keys);if(guess)cands=[guess];}
   var chosen=cands[0]||'';
   ac.qtyCandidates=cands;
   ac.qty=chosen;
@@ -5452,12 +5626,17 @@ function processAliCSV(file){
     aliFinalizeCols(rows);   // v58: validates the quantity column + logs the mapping
     G.csvRaw=rows;
     G._csvUploadedAt=Date.now();   // v57: marks this file as the freshest source
+    G._qtyLogPending=true;         // v61: trace the unit maths for this file
     // v59: push the processed rows + column map to the cloud so the SAME data
     // shows up on the phone after an upload on the PC (and the other way round).
     saveStatsCloud().then(function(ok){
-      if(ok)toast('☁️ הנתונים סונכרנו לענן — זמינים בכל המכשירים','ok');
-      else toast('⚠️ הנתונים נשמרו במכשיר, אך הסנכרון לענן נכשל','inf');
-    }).catch(function(){});
+      if(ok){toast('☁️ סונכרן ואומת בענן — זמין בכל המכשירים','ok');return;}
+      // v61: never claim success. Say what failed, and where to look.
+      var why=G._lastStatsSaveError||'השרת לא אישר את השמירה';
+      toast('❌ הסנכרון לענן נכשל: '+why+' — הנתונים קיימים במכשיר הזה בלבד','err');
+    }).catch(function(e){
+      toast('❌ שגיאה בסנכרון לענן: '+(e&&e.message||'לא ידוע'),'err');
+    });
     document.getElementById('csv-drop').style.display='none';
     document.getElementById('stats-dash').style.display='block';
     aliInitDateRange();
@@ -5668,6 +5847,13 @@ function aliGroupProducts(data,ac){
     const t0=aliNormTitle((ac.product&&r[ac.product])||'');
     if(t0.length>=8&&!titleToId[t0])titleToId[t0]=id0;
   });
+  // v61: trace the unit arithmetic for the first 5 products, once per dataset.
+  const dbg=!!G._qtyLogPending;
+  const dbgOrder=[],dbgLines={};
+  if(dbg){
+    console.log('%c[v61 סכימת כמויות] עמודת הכמות: '+(ac.qty||'לא זוהתה — כל שורה = יחידה אחת'),
+                'color:#15803d;font-weight:bold');
+  }
   (data||[]).forEach(function(r){
     const name=(((ac.product&&r[ac.product])||'')+'').trim()||'לא ידוע';
     const nt=aliNormTitle(name);
@@ -5684,11 +5870,32 @@ function aliGroupProducts(data,ac){
     g.sales+=aliRowSales(r,ac);
     g.commission+=aliRowComm(r,ac);
     g.incentive+=aliRowIncentive(r,ac);
-    g.count+=aliRowQty(r,ac);      // units, not rows
-    g.orders++;
+    // ── the unit maths: extract this row's quantity, ACCUMULATE it (+=) ──
+    const rowQty=aliRowQty(r,ac);
+    g.count+=rowQty;               // accumulate units — never a row count
+    g.orders++;                    // rows, kept only for the tooltip
+    if(dbg){
+      if(!dbgLines[key]&&dbgOrder.length<5){dbgLines[key]=[];dbgOrder.push(key);}
+      if(dbgLines[key])dbgLines[key].push({
+        raw:ac.qty?String(r[ac.qty]===undefined||r[ac.qty]===null?'':r[ac.qty]):'(אין עמודה)',
+        parsed:rowQty,running:g.count
+      });
+    }
     const rt=aliRowRate(r,ac);
     if(rt)g.rates[rt]=(g.rates[rt]||0)+1;
   });
+  if(dbg){
+    dbgOrder.forEach(function(key){
+      const g=map[key];
+      console.log('  ▸ '+g.name.slice(0,55)+(g.name.length>55?'…':''));
+      dbgLines[key].forEach(function(l,i){
+        console.log('      שורה '+(i+1)+': תא="'+l.raw+'" → parseInt='+l.parsed+' → מצטבר='+l.running);
+      });
+      console.log('      ── סה״כ '+g.count+' יחידות מתוך '+g.orders+' הזמנות'+
+                  (g.count===g.orders?'  ⚠️ זהה למספר ההזמנות — בדוק את עמודת הכמות':''));
+    });
+    G._qtyLogPending=false;
+  }
   Object.keys(map).forEach(function(k){
     const g=map[k];
     const keys=Object.keys(g.rates);
@@ -5700,6 +5907,27 @@ function aliGroupProducts(data,ac){
   });
   return map;
 }
+// v61: type spQtyReport() in the console to re-run the unit maths on demand.
+function spQtyReport(){
+  var ac=G.aliCols||{},rows=G.csvRaw||[];
+  if(!rows.length){console.log('אין נתוני CSV טעונים');return;}
+  var keys=aliRowKeys(rows);
+  console.log('%c[spQtyReport]','color:#d4541a;font-weight:bold');
+  console.log('  כותרות בקובץ :',keys.join(' | '));
+  console.log('  עמודת כמות   :',ac.qty||'לא זוהתה');
+  console.log('  מועמדים      :',(aliQtyCandidates(keys).join(' • ')||'אין התאמה לפי כותרת'));
+  var units=0;for(var i=0;i<rows.length;i++)units+=aliRowQty(rows[i],ac);
+  console.log('  סכום יחידות  :',units,'מתוך',rows.length,'שורות');
+  G._qtyLogPending=true;
+  var m=aliGroupProducts(rows,ac);
+  var list=Object.keys(m).map(function(k){return m[k];}).sort(function(a,b){return b.count-a.count;});
+  console.log('  10 המוצרים המובילים ביחידות:');
+  list.slice(0,10).forEach(function(d,i){
+    console.log('   '+(i+1)+'. '+d.count+' יחידות / '+d.orders+' הזמנות — '+d.name.slice(0,60));
+  });
+  return list;
+}
+
 function statSortVal(d,key){
   if(key==='count')return d.count||0;
   if(key==='orders')return d.orders||0;
