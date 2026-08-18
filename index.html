@@ -2077,8 +2077,26 @@ async function saveStatsCloud(){
   if(!G.csvRaw||!G.csvRaw.length)return;
   // Persist locally first
   try{localStorage.setItem('sp_statsData',JSON.stringify({cols:G.aliCols,rows:G.csvRaw}));}catch(e){}
+  // v58: a fresh upload lifts any previous delete tombstone
+  try{localStorage.removeItem('sp_statsCleared');}catch(e){}
   // Push to cloud (rows can be large — compress to avoid GAS limits)
   await _cloudPost({action:'saveStats',cols:G.aliCols,rows:G.csvRaw.slice(0,2000)});
+}
+
+// v58: 🗑️ used to clear only localStorage, so the next boot pulled the stale
+// cloud copy back ("Cloud sync complete" restoring the deleted file). Now the
+// delete is pushed to the server too, and a local tombstone keeps the deletion
+// sticky even if the server call fails (offline / older Apps Script version).
+function _statsTombstone(){try{return localStorage.getItem('sp_statsCleared')||'';}catch(e){return '';}}
+async function clearStatsCloud(){
+  try{localStorage.setItem('sp_statsCleared',String(Date.now()));}catch(e){}
+  // 'clearStats' for backends that implement it; the empty 'saveStats' payload
+  // is the guaranteed path — it overwrites whatever is stored with nothing.
+  var a=await _cloudPost({action:'clearStats',cols:{},rows:[]});
+  var b=await _cloudPost({action:'saveStats',cols:{},rows:[]});
+  var ok=!!((a&&a.ok)||(b&&b.ok));
+  console.log('[v58 clearStatsCloud] clearStats:',a&&a.ok,'saveStats(empty):',b&&b.ok);
+  return ok;
 }
 
 // Load stats from cloud on boot
@@ -2088,6 +2106,13 @@ async function loadStatsCloud(){
   // dropped a CSV in this session, that file wins — otherwise the stale cloud
   // copy would replace it and drag the date filter back to old dates.
   if(G._csvUploadedAt){console.log('[v57] skipping cloud stats — local CSV is newer');return true;}
+  // v58: the user deleted the stats. Never resurrect them from the cloud, and
+  // retry the server-side wipe in case the original attempt didn't land.
+  if(_statsTombstone()){
+    console.log('[v58] stats were deleted locally — ignoring cloud copy');
+    if(r&&r.ok&&r.rows&&r.rows.length)clearStatsCloud();
+    return false;
+  }
   if(r&&r.ok&&r.rows&&r.rows.length){
     G.aliCols=r.cols||{};
     G.csvRaw=r.rows;
@@ -4919,15 +4944,30 @@ function aliDetectCols(cols){
     re(/time|date/)
   ],[date]);
 
-  // v57: units bought in the transaction — a row is NOT always one unit.
+  // v58: units bought in the transaction — a row is NOT always one unit.
+  // Collected as an ORDERED CANDIDATE LIST; aliFinalizeCols then validates each
+  // against the real data and keeps the first one that actually holds counts.
   // Detected BEFORE price so a quantity column can never be mistaken for money.
-  var qty=aliPick(cols,[
-    re(/^itemcount$/),re(/^productcount$/),re(/^productamount$/),re(/^quantity$/),re(/^itemnum$/),
-    re(/itemcount|productcount|itemnum|itemqty|productqty/),
-    re(/^qty$|orderquantity|purchasequantity|quantity/),
-    re(/^productamount$|^itemamount$/)
-  ]);
-  var qEx=qty?[qty]:[];
+  var qtyTests=[
+    function(n){return n==='productcount';},
+    function(n){return n==='itemcount';},
+    function(n){return n==='productamount';},
+    function(n){return n==='quantity';},
+    function(n){return n==='productquantity'||n==='itemquantity';},
+    function(n){return n==='qty'||n==='itemnum'||n==='productnum';},
+    function(n){return /(productcount|itemcount|productquantity|itemquantity|buyquantity|purchasequantity|orderquantity)/.test(n);},
+    function(n){return /(productamount|itemamount)/.test(n);},
+    function(n){return /(quantity|qty)/.test(n)&&!/rate|price|amountusd/.test(n);}
+  ];
+  var qtyCandidates=[];
+  qtyTests.forEach(function(t){
+    for(var i=0;i<cols.length;i++){
+      var nm=aliNormHdr(cols[i]);
+      if(t(nm)&&qtyCandidates.indexOf(cols[i])===-1)qtyCandidates.push(cols[i]);
+    }
+  });
+  var qty=qtyCandidates[0]||'';
+  var qEx=qtyCandidates.slice();
   var price=aliPick(cols,[
     re(/^completedpaymentsamount$/),
     re(/completedpayment.*amount/),
@@ -4963,9 +5003,9 @@ function aliDetectCols(cols){
   ],[commission,commissionAlt,incentive]);
 
   return{
-    __v:57,
+    __v:58,
     date:date,dateAlt:dateAlt,
-    qty:qty,
+    qty:qty,qtyCandidates:qtyCandidates,
     // v57: product identity — grouping key and the key for the cross-reference
     // against my own catalogue. Titles drift, IDs don't.
     itemId:aliPick(cols,[
@@ -4988,7 +5028,7 @@ function aliDetectCols(cols){
 function aliEnsureCols(rows){
   rows=rows||G.csvRaw||[];
   var ac=G.aliCols||{};
-  if(ac.__v===57){G.aliDayFirst=aliDetectDayFirst(rows,ac.date);return ac;}
+  if(ac.__v===58){G.aliDayFirst=aliDetectDayFirst(rows,ac.date);aliFinalizeCols(rows);return G.aliCols;}
   var seen={},list=[],lim=Math.min(rows.length,50);
   for(var i=0;i<lim;i++){for(var k in rows[i]){if(!seen[k]){seen[k]=1;list.push(k);}}}
   var det=aliDetectCols(list);
@@ -4997,7 +5037,58 @@ function aliEnsureCols(rows){
   });
   G.aliCols=det;
   G.aliDayFirst=aliDetectDayFirst(rows,det.date);
-  return det;
+  aliFinalizeCols(rows);
+  return G.aliCols;
+}
+
+// ── v58: validate the quantity column against the actual data ───────────────
+// A header can look like a count and hold money (or the other way round), so
+// each candidate is scored on the real values: it only wins if the clear
+// majority of its non-empty values are whole numbers in a sane 1..999 range.
+function aliScoreQtyCol(rows,col){
+  if(!col)return{ok:false,filled:0,valid:0,sum:0};
+  var filled=0,valid=0,sum=0,lim=Math.min(rows.length,500);
+  for(var i=0;i<lim;i++){
+    var raw=rows[i][col];
+    var txt=String(raw===undefined||raw===null?'':raw).trim();
+    if(!txt)continue;
+    filled++;
+    if(!/^\d{1,4}(\.0+)?$/.test(txt))continue;   // integers only — "12.50" is money
+    var n=parseInt(txt,10);
+    if(n>=1&&n<=999){valid++;sum+=n;}
+  }
+  return{ok:filled>0&&(valid/filled)>=0.8,filled:filled,valid:valid,sum:sum};
+}
+// Resolves the winning quantity column and logs what was picked, so a missing
+// column is obvious in the console instead of silently costing units.
+function aliFinalizeCols(rows){
+  var ac=G.aliCols||{};
+  rows=rows||G.csvRaw||[];
+  if(!rows.length)return ac;
+  var cands=(ac.qtyCandidates&&ac.qtyCandidates.length)?ac.qtyCandidates:(ac.qty?[ac.qty]:[]);
+  var chosen='',report=[];
+  for(var i=0;i<cands.length;i++){
+    var sc=aliScoreQtyCol(rows,cands[i]);
+    report.push(cands[i]+' → '+sc.valid+'/'+sc.filled+' תקינים, סכום '+sc.sum+(sc.ok?' ✅':' ❌'));
+    if(!chosen&&sc.ok)chosen=cands[i];
+  }
+  ac.qty=chosen;
+  ac.qtyReport=report;
+  G.aliCols=ac;
+  console.log('%c[v58 CSV] עמודות שזוהו','color:#d4541a;font-weight:bold');
+  console.log('   כותרות בקובץ :',Object.keys(rows[0]||{}).join(' | '));
+  console.log('   עמודת כמות   :',chosen||'⚠️ לא נמצאה — כל שורה תיספר כיחידה אחת');
+  if(report.length)console.log('   מועמדים לכמות:',report.join('  •  '));
+  else console.log('   מועמדים לכמות: אין כותרת שנראית כמו כמות (Product count / Item Count / Product Amount / Quantity)');
+  console.log('   מזהה מוצר    :',ac.itemId||'(נגזר מ-ProductUrl)','| כותרת:',ac.product||'—','| סכום:',ac.price||'—');
+  console.log('   עמלה         :',ac.commission||ac.commissionAlt||'—','| תמריץ:',ac.incentive||ac.incentiveAlt||'—','| שיעור:',ac.commRate||'—');
+  if(ac.status){
+    var st={};
+    rows.forEach(function(r){var v=String(r[ac.status]||'—').trim()||'—';st[v]=(st[v]||0)+1;});
+    console.log('   סטטוסים      :',Object.keys(st).map(function(k){return k+'='+st[k];}).join(', '),
+                '— אף אחד מהם אינו מסונן, כל '+rows.length+' השורות נספרות');
+  }
+  return ac;
 }
 
 // ── per-row getters: no status filtering, settlement columns fall back ──
@@ -5027,8 +5118,11 @@ function aliRowComm(r,ac){
 function aliRowQty(r,ac){
   ac=ac||G.aliCols||{};
   if(!ac.qty)return 1;
-  var n=Math.round(aliNum(r[ac.qty]));
-  return (isFinite(n)&&n>0)?n:1;
+  var txt=String(r[ac.qty]===undefined||r[ac.qty]===null?'':r[ac.qty]).trim();
+  if(!txt)return 1;
+  var n=parseInt(txt.replace(/[^0-9.\-]/g,''),10);   // v58: value of the column
+  if(!isFinite(n)||n<1)return 1;
+  return n>999?1:n;
 }
 // ── v57: commission rate EXACTLY as it appears in the CSV (no maths) ──
 function aliRowRate(r,ac){
@@ -5056,16 +5150,26 @@ function aliRowIncentive(r,ac){
 // AliExpress' IsAffProduct flag is unreliable, so a product counts as
 // "mine" when its item id (or exact title) exists in the posts sheet.
 // ════════════════════════════════════════════════════════════════
+// v58: strips query strings, sub-ids and stray punctuation so the SAME product
+// never lands in two groups because one row carried a tracking parameter.
 function aliExtractItemId(txt){
   if(txt===undefined||txt===null)return '';
-  var s2=String(txt).trim();
+  var s2=String(txt).trim().replace(/^["'\s]+|["'\s]+$/g,'');
   if(!s2)return '';
-  if(/^\d{6,20}$/.test(s2))return s2;               // already a bare id
-  var m=s2.match(/\/item\/(?:[a-z\-]+\/)?(\d{6,20})/i)              // /item/1005006....html
-      ||s2.match(/[?&](?:productid|product_id|itemid|item_id|productids)=(\d{6,20})/i)
-      ||s2.match(/\/(\d{9,20})\.html/i)
-      ||s2.match(/(\d{10,20})/);                     // last resort: longest digit run
-  return m?m[1]:'';
+  if(/^\d{6,20}$/.test(s2))return s2.replace(/^0+(?=\d)/,'');   // already a bare id
+  var m=s2.match(/\/item\/(?:[a-z\-]+\/)?(\d{6,20})/i)          // /item/1005006....html
+      ||s2.match(/[?&](?:productid|product_id|itemid|item_id|productids|itemids)=(\d{6,20})/i)
+      ||s2.match(/\/(\d{9,20})\.html/i);
+  if(m)return m[1].replace(/^0+(?=\d)/,'');
+  // no URL pattern: work on the part before any query string / separator and
+  // take the first product-sized digit run (handles "1005006123_4001" sub-ids)
+  var head=s2.split('?')[0];
+  var runs=head.match(/\d{6,20}/g)||[];
+  if(!runs.length)return '';
+  for(var i=0;i<runs.length;i++)if(runs[i].length>=9)return runs[i].replace(/^0+(?=\d)/,'');
+  var best=runs[0];
+  for(var j=1;j<runs.length;j++)if(runs[j].length>best.length)best=runs[j];
+  return best.replace(/^0+(?=\d)/,'');
 }
 function aliRowItemId(r,ac){
   ac=ac||G.aliCols||{};
@@ -5157,6 +5261,7 @@ function processAliCSV(file){
     // commission, settlement-vs-paid columns). No status column is filtered.
     G.aliCols=aliDetectCols(cols);
     G.aliDayFirst=aliDetectDayFirst(rows,G.aliCols.date);
+    aliFinalizeCols(rows);   // v58: validates the quantity column + logs the mapping
     G.csvRaw=rows;
     G._csvUploadedAt=Date.now();   // v57: marks this file as the freshest source
     aliInvalidateCatalog();
@@ -5246,9 +5351,9 @@ function renderStatsDash(){
   // v57: grouped by ITEM ID (titles drift between orders) and quantities are
   // summed from the units column — a single row can hold several units.
   const prodMap=aliGroupProducts(filteredData,ac,false);
-  renderStatDiag(raw);
   // v56: keep the full aggregated list so the table can be re-sorted without a full re-render
   G._statProds=Object.keys(prodMap).map(function(k){return prodMap[k];});
+  renderStatDiag(raw);   // v58: after _statProds, so the unit count is the current one
 
   // KPIs from filteredData
   document.getElementById('stat-kpis').innerHTML=`
@@ -5361,11 +5466,21 @@ function renderStatsDash(){
 function aliGroupProducts(data,ac,splitByAff){
   ac=ac||G.aliCols||{};
   const map={};
+  // v58: first pass — remember which id each title belongs to, so rows that are
+  // missing an id still merge into the same group instead of splitting off.
+  const titleToId={};
   (data||[]).forEach(function(r){
-    const id=aliRowItemId(r,ac);
+    const id0=aliRowItemId(r,ac);
+    if(!id0)return;
+    const t0=aliNormTitle((ac.product&&r[ac.product])||'');
+    if(t0.length>=8&&!titleToId[t0])titleToId[t0]=id0;
+  });
+  (data||[]).forEach(function(r){
     const name=(((ac.product&&r[ac.product])||'')+'').trim()||'לא ידוע';
+    const nt=aliNormTitle(name);
+    const id=aliRowItemId(r,ac)||titleToId[nt]||'';
     const aff=aliRowAff(r,ac);
-    const base=id?('#'+id):('t:'+aliNormTitle(name));
+    const base=id?('#'+id):('t:'+nt);
     const key=splitByAff?(aff+'||'+base):base;
     if(!map[key]){
       map[key]={key:key,itemId:id,name:name,aff:aff,url:'',
@@ -5613,7 +5728,12 @@ function renderStatDiag(raw){
   const box=document.getElementById('stat-diag');
   if(!box)return;
   const n=(raw&&raw.length)||0;
-  box.innerHTML=`<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 11px;font-size:12px;font-weight:700;color:var(--t2)">📄 סה״כ שורות שנקראו מהקובץ: <b style="color:var(--tx)">${n}</b></div>`;
+  const ac=G.aliCols||{};
+  const units=(G._statProds||[]).reduce(function(a,d){return a+d.count;},0);
+  // v58: a quiet warning only when the units column is genuinely missing —
+  // that is exactly the case where counts would look too low.
+  const warn=(!ac.qty&&n)?`<div style="margin-top:5px;font-weight:700;color:#c2410c">⚠️ לא זוהתה עמודת כמות (Product count / Item Count / Product Amount / Quantity) — כל שורה נספרת כיחידה אחת</div>`:'';
+  box.innerHTML=`<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 11px;font-size:12px;font-weight:700;color:var(--t2)">📄 סה״כ שורות שנקראו מהקובץ: <b style="color:var(--tx)">${n}</b>${units?` · <b style="color:var(--tx)">${units}</b> יחידות`:''}${warn}</div>`;
 }
 
 // Fix 9+10 (v14): Pie chart drill-down — grouped, table layout, product images from G.posts, toFixed(2)
@@ -5704,7 +5824,13 @@ function resetCSV(){
   const dashEl=document.getElementById('stats-dash');
   if(dropEl)dropEl.style.display='block';
   if(dashEl)dashEl.style.display='none';
-  toast('🗑️ נתוני סטטיסטיקה נמחקו','inf');
+  const tb=document.getElementById('top-tbody');if(tb)tb.innerHTML='';
+  const kp=document.getElementById('stat-kpis');if(kp)kp.innerHTML='';
+  toast('🗑️ מוחק גם מהענן...','inf');
+  // v58: wipe the server copy as well, otherwise the next boot restores it
+  clearStatsCloud().then(function(ok){
+    toast(ok?'🗑️ נתוני הסטטיסטיקה נמחקו מהמכשיר ומהענן':'🗑️ נמחק מקומית — הענן לא הגיב, אך הנתונים לא ישוחזרו',ok?'ok':'inf');
+  });
 }
 
 // ════════════════════════════════════════════════
@@ -9416,7 +9542,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script>
 /* ── סימון גרסה: מאפשר לוודא בקונסול שנטענה הגרסה החדשה ולא מטמון ישן ── */
-var APP_BUILD = 'v-FBFLOW2 + CSV57';
+var APP_BUILD = 'v-FBFLOW2 + CSV58';
 console.log('%c[BUILD] ' + APP_BUILD + ' — copyPostToFB: desktop=אפס כתיבה | mobile=כתיבה רק אחרי share מוצלח',
             'background:#111;color:#0f0;padding:2px 6px;border-radius:3px;font-weight:bold');
 
