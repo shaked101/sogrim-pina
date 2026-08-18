@@ -70,6 +70,28 @@ textarea.sinput{height:auto}
 .btn.grn{background:var(--grn);color:#fff}
 .btn.sm{padding:4px 9px;font-size:11px}.btn.full{width:100%;justify-content:center}
 .sgrid4{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:15px}
+/* ── v59: STATS KPI STRIP — one single row on every screen size ──────────────
+   grid-auto-flow:column puts every card in the same row no matter how many
+   there are, and the 2-ID specificity beats the responsive .sgrid4 overrides
+   further down (1fr 1fr on tablet, 1fr on phone) that used to break the line. */
+#pg-stats #stat-kpis{display:grid!important;grid-auto-flow:column!important;grid-auto-columns:minmax(0,1fr)!important;grid-template-columns:none!important;gap:8px!important}
+#pg-stats #stat-kpis .scard{padding:12px 9px!important;min-width:0;overflow:hidden}
+#pg-stats #stat-kpis .slbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:8.5px!important;letter-spacing:.2px!important}
+#pg-stats #stat-kpis .sval{font-size:19px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pg-stats #stat-kpis .ssub{font-size:9px!important;line-height:1.25}
+@media(max-width:900px){
+  #pg-stats #stat-kpis{gap:6px!important}
+  #pg-stats #stat-kpis .scard{padding:9px 6px!important}
+  #pg-stats #stat-kpis .sval{font-size:16px!important}
+  #pg-stats #stat-kpis .ssub{display:none!important}
+}
+@media(max-width:520px){
+  #pg-stats #stat-kpis{gap:4px!important}
+  #pg-stats #stat-kpis .scard{padding:8px 4px!important;border-radius:10px!important;text-align:center}
+  #pg-stats #stat-kpis .scard::after{width:2px}
+  #pg-stats #stat-kpis .slbl{font-size:7px!important;margin-bottom:3px!important}
+  #pg-stats #stat-kpis .sval{font-size:13px!important}
+}
 .scard{background:var(--s1);border:1px solid var(--b1);border-radius:11px;padding:14px;position:relative;overflow:hidden}
 .scard::after{content:'';position:absolute;top:0;right:0;width:3px;height:100%;background:var(--cc,var(--acc))}
 .slbl{font-size:9px;color:var(--t2);font-weight:800;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
@@ -1217,7 +1239,6 @@ body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--a
             <button class="btn sec sm" id="reset-csv-btn">🗑️ נקה</button>
           </div>
           <div class="sgrid4" id="stat-kpis" style="margin-bottom:14px"></div>
-          <div id="stat-diag" style="margin-bottom:12px"></div>
           <div style="display:flex;gap:8px;margin-bottom:10px">
             <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2)"><span style="width:9px;height:9px;border-radius:2px;background:#d4541a;display:inline-block"></span>מכירות</span>
             <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2)"><span style="width:9px;height:9px;border-radius:2px;background:#15803d;display:inline-block"></span>עמלות</span>
@@ -2072,15 +2093,45 @@ function _saveBonusLog(log){try{localStorage.setItem('sp_bonuslog',JSON.stringif
 
 // ══ ③ STATS (CSV data) ═════════════════════════
 
+// ── v59: CROSS-DEVICE STATS SYNC ───────────────────────────────────────────
+// Only the columns the stats engine actually reads are sent to the cloud. An
+// AliExpress export carries ~40 columns of which we use ~14, so the payload
+// shrinks by roughly 80% — that is what makes the POST fit inside the Apps
+// Script limit and lets the phone actually receive a file uploaded on a PC.
+function _statsSlimRows(rows,ac){
+  rows=rows||[];ac=ac||{};
+  var keys=[];
+  ['date','dateAlt','qty','itemId','product','url','price','priceAlt',
+   'commission','commissionAlt','incentive','incentiveAlt','commRate','status']
+  .forEach(function(k){var c=ac[k];if(c&&keys.indexOf(c)===-1)keys.push(c);});
+  if(!keys.length)return rows;                       // mapping failed — send as-is
+  return rows.map(function(r){
+    var o={};
+    for(var i=0;i<keys.length;i++){
+      var v=r[keys[i]];
+      o[keys[i]]=(v===undefined||v===null)?'':v;
+    }
+    return o;
+  });
+}
+
 // Save stats to cloud when CSV is uploaded
 async function saveStatsCloud(){
-  if(!G.csvRaw||!G.csvRaw.length)return;
+  if(!G.csvRaw||!G.csvRaw.length)return false;
+  G.aliCols=G.aliCols||{};
+  // v59: the upload stamp travels inside `cols`, which the backend already
+  // stores and returns verbatim — no Apps Script change is needed for other
+  // devices to know how fresh this copy is.
+  G.aliCols.__savedAt=Date.now();
   // Persist locally first
   try{localStorage.setItem('sp_statsData',JSON.stringify({cols:G.aliCols,rows:G.csvRaw}));}catch(e){}
   // v58: a fresh upload lifts any previous delete tombstone
   try{localStorage.removeItem('sp_statsCleared');}catch(e){}
-  // Push to cloud (rows can be large — compress to avoid GAS limits)
-  await _cloudPost({action:'saveStats',cols:G.aliCols,rows:G.csvRaw.slice(0,2000)});
+  var slim=_statsSlimRows(G.csvRaw.slice(0,5000),G.aliCols);
+  var res=await _cloudPost({action:'saveStats',cols:G.aliCols,rows:slim,savedAt:G.aliCols.__savedAt});
+  var ok=!!(res&&res.ok!==false);
+  console.log('[v59 saveStatsCloud]',ok?'✅ נשמר בענן':'❌ שמירה בענן נכשלה',slim.length,'שורות');
+  return ok;
 }
 
 // v58: 🗑️ used to clear only localStorage, so the next boot pulled the stale
@@ -2108,15 +2159,27 @@ async function loadStatsCloud(){
   if(G._csvUploadedAt){console.log('[v57] skipping cloud stats — local CSV is newer');return true;}
   // v58: the user deleted the stats. Never resurrect them from the cloud, and
   // retry the server-side wipe in case the original attempt didn't land.
-  if(_statsTombstone()){
-    console.log('[v58] stats were deleted locally — ignoring cloud copy');
-    if(r&&r.ok&&r.rows&&r.rows.length)clearStatsCloud();
-    return false;
+  // v59 CROSS-DEVICE FIX: the tombstone is local, so a phone that once pressed
+  // 🗑️ used to ignore the cloud FOREVER — including a brand new file uploaded
+  // afterwards from the PC. Now the stamps are compared: an upload that is
+  // newer than the deletion wins, and lifts the tombstone.
+  var _cloudAt=Number((r&&r.cols&&r.cols.__savedAt)||(r&&r.savedAt)||0);
+  var _tomb=Number(_statsTombstone()||0);
+  if(_tomb){
+    if(_cloudAt&&_cloudAt>_tomb){
+      console.log('[v59] cloud copy is newer than the local delete — accepting it');
+      try{localStorage.removeItem('sp_statsCleared');}catch(e){}
+    }else{
+      console.log('[v58] stats were deleted locally — ignoring cloud copy');
+      if(r&&r.ok&&r.rows&&r.rows.length)clearStatsCloud();
+      return false;
+    }
   }
   if(r&&r.ok&&r.rows&&r.rows.length){
     G.aliCols=r.cols||{};
     G.csvRaw=r.rows;
     try{localStorage.setItem('sp_statsData',JSON.stringify({cols:G.aliCols,rows:G.csvRaw}));}catch(e){}
+    console.log('[v59 loadStatsCloud] ☁️ נמשכו',r.rows.length,'שורות מהענן');
     _showStatsDash();
     return true;
   }
@@ -2534,12 +2597,11 @@ async function loadData(){
     populateCartCatFilter();renderCartTable();renderCartItems();
     var nb=document.getElementById('nbposts');if(nb)nb.textContent=G.posts.length;
     _setLoadStep('');
-    // v57: the catalogue is what classifies "mine" vs "from the cart" — once the
-    // posts sheet is in, re-run the stats so the classification is correct.
+    // v59: no classification depends on the posts sheet any more, but a repaint
+    // keeps the stats tab in step with a fresh data load.
     try{
-      aliInvalidateCatalog();
       if(G.csvRaw&&G.csvRaw.length)renderStatsDash();
-    }catch(e){console.warn('[v57 stats refresh]',e);}
+    }catch(e){console.warn('[v59 stats refresh]',e);}
   });
 }
 // v44 PERF: dateMap helper — O(1) dedup with Set instead of indexOf O(n)
@@ -4944,9 +5006,11 @@ function aliDetectCols(cols){
     re(/time|date/)
   ],[date]);
 
-  // v58: units bought in the transaction — a row is NOT always one unit.
-  // Collected as an ORDERED CANDIDATE LIST; aliFinalizeCols then validates each
-  // against the real data and keeps the first one that actually holds counts.
+  // v59: units bought in the transaction — a row is NOT always one unit.
+  // The four headers the AliExpress export actually uses come first, in the
+  // order requested: Product count / Item Count / Product Amount / Quantity.
+  // The first header that matches WINS — no value-based sanity check any more
+  // (the old one rejected the correct column and fell back to counting rows).
   // Detected BEFORE price so a quantity column can never be mistaken for money.
   var qtyTests=[
     function(n){return n==='productcount';},
@@ -5013,8 +5077,8 @@ function aliDetectCols(cols){
       function(n){return /(itemid|productid)$/.test(n);},
       function(n){return /(itemid|productid)/.test(n);}
     ]),
-    // v56: kept only as a fallback — AliExpress fills this unreliably
-    isAff:aliPick(cols,[re(/^isaffproduct$/),re(/isaffproduct/),re(/isaff$/),re(/affiliateproduct|isaffiliate/),re(/isaff/)]),
+    // v59: IsAffProduct is gone for good — the mine/cart cross-reference was
+    // never accurate enough (item ids drift), and wrong data is worse than none.
     product:aliPick(cols,[re(/^producttitle$/),re(/producttitle|productname|itemtitle|itemname/),re(/title/),re(/^product$/),function(n){return /product/.test(n)&&!/id$|url|category|image/.test(n);}]),
     url:aliPick(cols,[re(/^producturl$/),re(/producturl|productdetailurl|itemurl|productlink/),re(/url|link/)]),
     price:price,priceAlt:priceAlt,
@@ -5041,45 +5105,23 @@ function aliEnsureCols(rows){
   return G.aliCols;
 }
 
-// ── v58: validate the quantity column against the actual data ───────────────
-// A header can look like a count and hold money (or the other way round), so
-// each candidate is scored on the real values: it only wins if the clear
-// majority of its non-empty values are whole numbers in a sane 1..999 range.
-function aliScoreQtyCol(rows,col){
-  if(!col)return{ok:false,filled:0,valid:0,sum:0};
-  var filled=0,valid=0,sum=0,lim=Math.min(rows.length,500);
-  for(var i=0;i<lim;i++){
-    var raw=rows[i][col];
-    var txt=String(raw===undefined||raw===null?'':raw).trim();
-    if(!txt)continue;
-    filled++;
-    if(!/^\d{1,4}(\.0+)?$/.test(txt))continue;   // integers only — "12.50" is money
-    var n=parseInt(txt,10);
-    if(n>=1&&n<=999){valid++;sum+=n;}
-  }
-  return{ok:filled>0&&(valid/filled)>=0.8,filled:filled,valid:valid,sum:sum};
-}
-// Resolves the winning quantity column and logs what was picked, so a missing
-// column is obvious in the console instead of silently costing units.
+// ── v59: NO sanity check — first matching header wins ──────────────────────
+// The v58 scorer demanded that 80% of the values be whole numbers in 1..999,
+// and the real Product-count column failed that test, so every row silently
+// counted as a single unit. The column is now taken purely from its header and
+// each value is read with parseInt(val,10)||1.
 function aliFinalizeCols(rows){
   var ac=G.aliCols||{};
   rows=rows||G.csvRaw||[];
   if(!rows.length)return ac;
   var cands=(ac.qtyCandidates&&ac.qtyCandidates.length)?ac.qtyCandidates:(ac.qty?[ac.qty]:[]);
-  var chosen='',report=[];
-  for(var i=0;i<cands.length;i++){
-    var sc=aliScoreQtyCol(rows,cands[i]);
-    report.push(cands[i]+' → '+sc.valid+'/'+sc.filled+' תקינים, סכום '+sc.sum+(sc.ok?' ✅':' ❌'));
-    if(!chosen&&sc.ok)chosen=cands[i];
-  }
+  var chosen=cands[0]||'';
   ac.qty=chosen;
-  ac.qtyReport=report;
   G.aliCols=ac;
-  console.log('%c[v58 CSV] עמודות שזוהו','color:#d4541a;font-weight:bold');
+  console.log('%c[v59 CSV] עמודות שזוהו','color:#d4541a;font-weight:bold');
   console.log('   כותרות בקובץ :',Object.keys(rows[0]||{}).join(' | '));
-  console.log('   עמודת כמות   :',chosen||'⚠️ לא נמצאה — כל שורה תיספר כיחידה אחת');
-  if(report.length)console.log('   מועמדים לכמות:',report.join('  •  '));
-  else console.log('   מועמדים לכמות: אין כותרת שנראית כמו כמות (Product count / Item Count / Product Amount / Quantity)');
+  console.log('   עמודת כמות   :',chosen||'לא נמצאה — כל שורה תיספר כיחידה אחת');
+  if(cands.length>1)console.log('   מועמדים נוספים:',cands.slice(1).join(' • '));
   console.log('   מזהה מוצר    :',ac.itemId||'(נגזר מ-ProductUrl)','| כותרת:',ac.product||'—','| סכום:',ac.price||'—');
   console.log('   עמלה         :',ac.commission||ac.commissionAlt||'—','| תמריץ:',ac.incentive||ac.incentiveAlt||'—','| שיעור:',ac.commRate||'—');
   if(ac.status){
@@ -5114,15 +5156,16 @@ function aliRowComm(r,ac){
   if(!inc&&ac.incentiveAlt)inc=aliNum(r[ac.incentiveAlt]);
   return base+inc;
 }
-// ── v57: units bought in this transaction (never fewer than 1) ──
+// ── v59: units bought in this transaction — parseInt(val,10)||1, nothing else.
+// No upper cap, no plausibility filter: whatever the quantity column states is
+// what gets counted, and only a missing/unparsable value falls back to 1.
 function aliRowQty(r,ac){
   ac=ac||G.aliCols||{};
   if(!ac.qty)return 1;
   var txt=String(r[ac.qty]===undefined||r[ac.qty]===null?'':r[ac.qty]).trim();
   if(!txt)return 1;
-  var n=parseInt(txt.replace(/[^0-9.\-]/g,''),10);   // v58: value of the column
-  if(!isFinite(n)||n<1)return 1;
-  return n>999?1:n;
+  var n=parseInt(txt.replace(/[^0-9.\-]/g,''),10)||1;
+  return (isFinite(n)&&n>=1)?n:1;
 }
 // ── v57: commission rate EXACTLY as it appears in the CSV (no maths) ──
 function aliRowRate(r,ac){
@@ -5146,9 +5189,11 @@ function aliRowIncentive(r,ac){
 }
 
 // ════════════════════════════════════════════════════════════════
-// v57 — PRODUCT IDENTITY + CROSS-REFERENCE AGAINST MY OWN CATALOGUE
-// AliExpress' IsAffProduct flag is unreliable, so a product counts as
-// "mine" when its item id (or exact title) exists in the posts sheet.
+// v59 — PRODUCT IDENTITY (grouping key only)
+// The "my products vs. from the cart" cross-reference was removed: item ids
+// drift between the posts sheet and the AliExpress export, so the split was
+// never reliable. Item ids are still used — but ONLY to merge rows of the same
+// product into one line, which is exact and needs no external lookup.
 // ════════════════════════════════════════════════════════════════
 // v58: strips query strings, sub-ids and stray punctuation so the SAME product
 // never lands in two groups because one row carried a tracking parameter.
@@ -5179,50 +5224,6 @@ function aliRowItemId(r,ac){
 }
 function aliNormTitle(t){
   return String(t===undefined||t===null?'':t).toLowerCase().replace(/\s+/g,' ').trim();
-}
-// index of everything I have published — rebuilt whenever the posts sheet reloads
-function aliMyCatalog(){
-  if(G._myCatalog&&G._myCatalogPosts===(G.posts?G.posts.length:0))return G._myCatalog;
-  var ids={},titles={},n=0;
-  (G.posts||[]).forEach(function(p){
-    var row=p&&p.data;if(!row)return;
-    for(var c=0;c<row.length;c++){
-      var cell=row[c];
-      // only mine cells that actually look like a product reference — avoids
-      // picking up timestamps or other long digit runs as fake product ids
-      var txt=String(cell===undefined||cell===null?'':cell);
-      if(!/^\s*\d{6,20}\s*$/.test(txt)&&!/aliexpress|item\/|productid|product_id/i.test(txt))continue;
-      var id=aliExtractItemId(cell);
-      if(id&&!ids[id]){ids[id]=1;n++;}
-    }
-    [COL.HEB,COL.ENG].forEach(function(ci){
-      var t=aliNormTitle(gc(p,ci));
-      if(t.length>=12)titles[t]=1;
-    });
-  });
-  G._myCatalog={ids:ids,titles:titles,idCount:n,postCount:(G.posts||[]).length};
-  G._myCatalogPosts=(G.posts||[]).length;
-  return G._myCatalog;
-}
-function aliInvalidateCatalog(){G._myCatalog=null;G._myCatalogPosts=-1;}
-// 'y' = published by me, 'n' = came along in the buyer's cart
-function aliRowAff(r,ac){
-  ac=ac||G.aliCols||{};
-  var cat=aliMyCatalog();
-  if(cat.postCount){
-    var id=aliRowItemId(r,ac);
-    if(id&&cat.ids[id])return 'y';
-    var t=aliNormTitle(ac.product?r[ac.product]:'');
-    if(t.length>=12&&cat.titles[t])return 'y';
-    return 'n';
-  }
-  // catalogue not loaded yet — fall back to the CSV flag rather than guessing
-  if(!ac.isAff)return '?';
-  var v=String(r[ac.isAff]===undefined||r[ac.isAff]===null?'':r[ac.isAff]).trim().toLowerCase();
-  if(!v)return '?';
-  if(v==='y'||v==='yes'||v==='1'||v==='true'||v==='t')return 'y';
-  if(v==='n'||v==='no'||v==='0'||v==='false'||v==='f')return 'n';
-  return '?';
 }
 // default range built from real Date objects (min/max), local time
 function aliInitDateRange(){
@@ -5264,9 +5265,12 @@ function processAliCSV(file){
     aliFinalizeCols(rows);   // v58: validates the quantity column + logs the mapping
     G.csvRaw=rows;
     G._csvUploadedAt=Date.now();   // v57: marks this file as the freshest source
-    aliInvalidateCatalog();
-    // v54: save to cloud so mobile can see stats too
-    saveStatsCloud(); // async, fire and forget
+    // v59: push the processed rows + column map to the cloud so the SAME data
+    // shows up on the phone after an upload on the PC (and the other way round).
+    saveStatsCloud().then(function(ok){
+      if(ok)toast('☁️ הנתונים סונכרנו לענן — זמינים בכל המכשירים','ok');
+      else toast('⚠️ הנתונים נשמרו במכשיר, אך הסנכרון לענן נכשל','inf');
+    }).catch(function(){});
     document.getElementById('csv-drop').style.display='none';
     document.getElementById('stats-dash').style.display='block';
     aliInitDateRange();
@@ -5348,18 +5352,20 @@ function renderStatsDash(){
   const total=filteredData.reduce((s,r)=>s+aliRowSales(r,ac),0);
   const totalComm=filteredData.reduce((s,r)=>s+aliRowComm(r,ac),0);
   const avgOrder=filteredData.length?total/filteredData.length:0;
+  // v59: average commission per transaction — total commission / all deals
+  const avgComm=filteredData.length?totalComm/filteredData.length:0;
   // v57: grouped by ITEM ID (titles drift between orders) and quantities are
   // summed from the units column — a single row can hold several units.
-  const prodMap=aliGroupProducts(filteredData,ac,false);
+  const prodMap=aliGroupProducts(filteredData,ac);
   // v56: keep the full aggregated list so the table can be re-sorted without a full re-render
   G._statProds=Object.keys(prodMap).map(function(k){return prodMap[k];});
-  renderStatDiag(raw);   // v58: after _statProds, so the unit count is the current one
 
   // KPIs from filteredData
   document.getElementById('stat-kpis').innerHTML=`
     <div class="scard" style="--cc:var(--acc)"><div class="slbl">סה״כ מכירות</div><div class="sval">$${Math.round(total).toLocaleString()}</div><div class="ssub">${filteredData.length} עסקאות מתוך ${raw.length} שורות</div></div>
     <div class="scard" style="--cc:var(--grn)"><div class="slbl">סה״כ עמלות</div><div class="sval">$${totalComm.toFixed(2)}</div><div class="ssub">כולל עמלות תמריץ · ${total?Math.round(totalComm/total*100):0}% מהמכירות</div></div>
     <div class="scard" style="--cc:var(--blue)"><div class="slbl">ממוצע הזמנה</div><div class="sval">$${Math.round(avgOrder)}</div><div class="ssub">לכל עסקה בטווח</div></div>
+    <div class="scard" style="--cc:#7c3aed"><div class="slbl">ממוצע עמלה להזמנה</div><div class="sval">$${avgComm.toFixed(2)}</div><div class="ssub">סך העמלות ÷ ${filteredData.length} עסקאות</div></div>
     <div class="scard" style="--cc:#d97706"><div class="slbl">מוצרים שונים</div><div class="sval">${Object.keys(prodMap).length}</div><div class="ssub">${G._statProds.reduce(function(a,d){return a+d.count;},0)} יחידות נרכשו</div></div>
   `;
 
@@ -5463,7 +5469,7 @@ function renderStatsDash(){
 // ── v57: one grouping routine for the dashboard table and the modal ──
 // key = Item ID when available (falls back to the normalised title), quantities
 // summed from the units column, commission rate taken verbatim from the CSV.
-function aliGroupProducts(data,ac,splitByAff){
+function aliGroupProducts(data,ac){
   ac=ac||G.aliCols||{};
   const map={};
   // v58: first pass — remember which id each title belongs to, so rows that are
@@ -5479,11 +5485,10 @@ function aliGroupProducts(data,ac,splitByAff){
     const name=(((ac.product&&r[ac.product])||'')+'').trim()||'לא ידוע';
     const nt=aliNormTitle(name);
     const id=aliRowItemId(r,ac)||titleToId[nt]||'';
-    const aff=aliRowAff(r,ac);
-    const base=id?('#'+id):('t:'+nt);
-    const key=splitByAff?(aff+'||'+base):base;
+    // v59: one key per product, full stop — no "mine / from the cart" branch.
+    const key=id?('#'+id):('t:'+nt);
     if(!map[key]){
-      map[key]={key:key,itemId:id,name:name,aff:aff,url:'',
+      map[key]={key:key,itemId:id,name:name,url:'',
                 sales:0,commission:0,incentive:0,count:0,orders:0,rates:{}};
     }
     const g=map[key];
@@ -5567,14 +5572,17 @@ function aliFmtRate(d){
 }
 
 // ════════════════════════════════════════════════════════════════
-// v56 — full product list modal + "מוצרים שלי / מסל הקניות" analysis
+// v59 — full product list modal: ONE plain, accurate list
+// The "מוצרים שלי / מהסל" split, its green/orange summary cards and its
+// filter tabs are gone — the cross-reference could not be trusted, and no data
+// beats wrong data. What is left is every product in the range, sorted by the
+// ordinary column headers, plus a free-text search.
 // ════════════════════════════════════════════════════════════════
 function buildAllProdList(){
   const ac=G.aliCols||{},data=G._statFiltered||G.csvRaw||[];
-  const map=aliGroupProducts(data,ac,true);   // split by "mine / cart"
+  const map=aliGroupProducts(data,ac);
   return Object.keys(map).map(function(k){return map[k];});
 }
-function setAllProdTab(t){G.allProdTab=t;renderAllProds();}
 function setAllProdQuery(q){G.allProdQ=q;renderAllProds();}
 function setAllProdSort(key){
   var st=G.allProdSort||{key:'sales',dir:'desc'};
@@ -5583,42 +5591,13 @@ function setAllProdSort(key){
   G.allProdSort=st;
   renderAllProds();
 }
-function apAffBadge(aff){
-  if(aff==='y')return'<span class="ap-badge" style="background:#dcfce7;color:#15803d">שלי</span>';
-  if(aff==='n')return'<span class="ap-badge" style="background:#ffedd5;color:#c2410c">מהסל</span>';
-  return'<span class="ap-badge" style="background:var(--s2);color:var(--t3)">—</span>';
-}
 function renderAllProds(){
   const wrap=document.getElementById('ap-table-wrap');if(!wrap)return;
   const all=G._allProds||[];
   const st=G.allProdSort||(G.allProdSort={key:'sales',dir:'desc'});
-  const tab=G.allProdTab||'all';
   const q=((G.allProdQ||'')+'').trim().toLowerCase();
 
-  // summary over the WHOLE list (independent of the active tab)
-  const sum={y:{p:0,c:0,o:0,comm:0,sales:0},n:{p:0,c:0,o:0,comm:0,sales:0},'?':{p:0,c:0,o:0,comm:0,sales:0}};
-  all.forEach(function(d){const b=sum[d.aff]||sum['?'];b.p++;b.c+=d.count;b.o+=d.orders;b.comm+=d.commission;b.sales+=d.sales;});
-  const card=function(ttl,clr,bg,b){
-    return`<div style="background:${bg};border-radius:9px;padding:9px 11px">
-      <div style="font-size:11px;font-weight:800;color:${clr}">${ttl}</div>
-      <div style="font-size:17px;font-weight:900;color:var(--tx);margin-top:2px">${b.p} מוצרים</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:2px">${b.c} יחידות · ${b.o} עסקאות</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:1px">עמלה <b style="color:var(--grn)">$${b.comm.toFixed(2)}</b></div>
-    </div>`;};
-  const sumEl=document.getElementById('ap-summary');
-  if(sumEl){
-    sumEl.innerHTML=card('🟢 המוצרים שלי','#15803d','#f0fdf4',sum.y)
-      +card('🟠 מסל הקניות','#c2410c','#fff7ed',sum.n)
-      +(sum['?'].p?card('⚪ ללא סיווג','#64748b','var(--s2)',sum['?']):'');
-  }
-  const tabsRoot=document.getElementById('ap-tabs');
-  if(tabsRoot){
-    const btns=tabsRoot.querySelectorAll('[data-ap]');
-    for(var i=0;i<btns.length;i++)btns[i].classList.toggle('on',btns[i].getAttribute('data-ap')===tab);
-  }
-
   let list=all.filter(function(d){
-    if(tab!=='all'&&d.aff!==tab)return false;
     if(q&&d.name.toLowerCase().indexOf(q)===-1)return false;
     return true;
   });
@@ -5626,11 +5605,6 @@ function renderAllProds(){
     if(st.key==='name'){
       const c=a.name.localeCompare(b.name,'he');
       return st.dir==='asc'?c:-c;
-    }
-    if(st.key==='aff'){
-      const c=a.aff.localeCompare(b.aff);
-      if(c!==0)return st.dir==='asc'?c:-c;
-      return b.sales-a.sales;
     }
     const va=statSortVal(a,st.key),vb=statSortVal(b,st.key);
     if(va===vb)return b.sales-a.sales;
@@ -5646,13 +5620,12 @@ function renderAllProds(){
 
   const hasInc=list.some(function(d){return d.incentive>0;});
   const tInc=list.reduce(function(s2,d){return s2+d.incentive;},0);
-  const cols=hasInc?9:8;
+  const cols=hasInc?8:7;
   wrap.innerHTML=`
-  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:${hasInc?660:600}px">
+  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:${hasInc?600:540}px">
     <thead><tr>
       <th style="padding:7px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800;background:var(--s2);width:28px">#</th>
       ${th('name','מוצר')}
-      ${th('aff','סוג','width:60px;text-align:center')}
       ${th('count','יחידות','width:58px;text-align:center')}
       ${th('orders','עסקאות','width:58px;text-align:center')}
       ${th('sales','מכירות','width:78px')}
@@ -5664,11 +5637,10 @@ function renderAllProds(){
     ${list.map(function(d,i){
       return`<tr style="border-bottom:1px solid rgba(226,232,240,.5)">
         <td style="padding:7px 8px;color:var(--acc);font-weight:800">${i+1}</td>
-        <td style="padding:7px 8px;font-weight:700;max-width:260px" title="${esc(d.name)}${d.itemId?' · ID '+d.itemId:''}">
+        <td style="padding:7px 8px;font-weight:700;max-width:280px" title="${esc(d.name)}${d.itemId?' · ID '+d.itemId:''}">
           ${d.url?`<a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">${esc(d.name)}</a>`:esc(d.name)}
           ${d.itemId?`<div style="font-size:9px;color:var(--t3);font-family:monospace">ID ${esc(d.itemId)}</div>`:''}
         </td>
-        <td style="padding:7px 8px;text-align:center">${apAffBadge(d.aff)}</td>
         <td style="padding:7px 8px;text-align:center"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 6px;font-weight:800">×${d.count}</span></td>
         <td style="padding:7px 8px;text-align:center;color:var(--t2)">${d.orders}</td>
         <td style="padding:7px 8px;font-family:monospace;font-weight:700;color:var(--acc)">$${d.sales.toFixed(2)}</td>
@@ -5680,7 +5652,6 @@ function renderAllProds(){
     ${list.length?`<tfoot><tr style="background:var(--s2);font-weight:900">
       <td style="padding:8px"></td>
       <td style="padding:8px">סה״כ ${list.length} מוצרים</td>
-      <td style="padding:8px"></td>
       <td style="padding:8px;text-align:center">×${tCount}</td>
       <td style="padding:8px;text-align:center">${tOrders}</td>
       <td style="padding:8px;font-family:monospace;color:var(--acc)">$${tSales.toFixed(2)}</td>
@@ -5694,27 +5665,12 @@ function openAllProductsModal(){
   if(!G.csvRaw||!G.csvRaw.length){toast('לא נטענו נתוני CSV','err');return;}
   G._allProds=buildAllProdList();
   G.allProdSort={key:'sales',dir:'desc'};
-  G.allProdTab='all';
   G.allProdQ='';
-  // v57: classification comes from cross-referencing my own catalogue, not from
-  // the CSV flag. Say which source is actually in play.
-  const cat=aliMyCatalog();
-  const hasAff=!!(G.aliCols&&G.aliCols.isAff);
-  const srcNote=cat.postCount
-    ? `<div style="background:#f0f9ff;color:#0369a1;border-radius:8px;padding:7px 10px;font-size:11px;margin-bottom:9px">הסיווג נקבע בהצלבה מול מאגר המוצרים שלי — <b>${cat.postCount}</b> פוסטים, <b>${cat.idCount}</b> מזהי מוצר.</div>`
-    : (hasAff
-      ? '<div style="background:#fff7ed;color:#c2410c;border-radius:8px;padding:7px 10px;font-size:11px;margin-bottom:9px">מאגר המוצרים עדיין נטען — הסיווג מסתמך זמנית על עמודת <b>IsAffProduct</b> שבקובץ.</div>'
-      : '<div style="background:#fff7ed;color:#c2410c;border-radius:8px;padding:7px 10px;font-size:11px;margin-bottom:9px">מאגר המוצרים לא נטען ולא נמצאה עמודת <b>IsAffProduct</b> — המוצרים מוצגים ללא סיווג.</div>');
   const body=`
-    <div id="ap-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px;margin-bottom:11px"></div>
-    ${srcNote}
-    <div id="ap-tabs" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      <button class="ptab on" type="button" data-ap="all" onclick="setAllProdTab('all')">כל המוצרים</button>
-      <button class="ptab" type="button" data-ap="y" onclick="setAllProdTab('y')">🟢 המוצרים שלי</button>
-      <button class="ptab" type="button" data-ap="n" onclick="setAllProdTab('n')">🟠 מסל הקניות</button>
-      <input id="ap-search" class="ifield" placeholder="🔎 חיפוש מוצר…" style="flex:1;min-width:130px" oninput="setAllProdQuery(this.value)">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input id="ap-search" class="ifield" placeholder="🔎 חיפוש מוצר…" style="flex:1;min-width:150px" oninput="setAllProdQuery(this.value)">
     </div>
-    <div id="ap-table-wrap" style="overflow:auto;max-height:50vh;border:1px solid var(--b1);border-radius:9px"></div>`;
+    <div id="ap-table-wrap" style="overflow:auto;max-height:52vh;border:1px solid var(--b1);border-radius:9px"></div>`;
   openModal('📋 כל המוצרים',body,'<button class="btn sec" onclick="closeModal()">סגור</button>');
   const box=document.querySelector('#modal-root > div');
   if(box)box.style.maxWidth='900px';
@@ -5723,17 +5679,12 @@ function openAllProductsModal(){
   renderAllProds();
 }
 
-// v56: one clean line — how many rows were read from the file. Nothing else.
-function renderStatDiag(raw){
+// v59: the on-screen diagnostics strip is gone — the row count already appears
+// under the sales chart and in the first KPI card, and the missing-quantity
+// warning was noise. Kept as a no-op so any stray caller stays harmless.
+function renderStatDiag(){
   const box=document.getElementById('stat-diag');
-  if(!box)return;
-  const n=(raw&&raw.length)||0;
-  const ac=G.aliCols||{};
-  const units=(G._statProds||[]).reduce(function(a,d){return a+d.count;},0);
-  // v58: a quiet warning only when the units column is genuinely missing —
-  // that is exactly the case where counts would look too low.
-  const warn=(!ac.qty&&n)?`<div style="margin-top:5px;font-weight:700;color:#c2410c">⚠️ לא זוהתה עמודת כמות (Product count / Item Count / Product Amount / Quantity) — כל שורה נספרת כיחידה אחת</div>`:'';
-  box.innerHTML=`<div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:8px 11px;font-size:12px;font-weight:700;color:var(--t2)">📄 סה״כ שורות שנקראו מהקובץ: <b style="color:var(--tx)">${n}</b>${units?` · <b style="color:var(--tx)">${units}</b> יחידות`:''}${warn}</div>`;
+  if(box)box.innerHTML='';
 }
 
 // Fix 9+10 (v14): Pie chart drill-down — grouped, table layout, product images from G.posts, toFixed(2)
