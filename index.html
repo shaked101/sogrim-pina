@@ -1213,6 +1213,7 @@ body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--a
               <button class="ptab" data-p="month">חודשי</button>
             </div>
             <button class="btn sm" id="apply-filter-btn">החל</button>
+            <button class="btn sec sm" id="full-range-btn" title="חזרה לטווח המלא של הקובץ">📅 טווח מלא</button>
             <button class="btn sec sm" id="reset-csv-btn">🗑️ נקה</button>
           </div>
           <div class="sgrid4" id="stat-kpis" style="margin-bottom:14px"></div>
@@ -2083,6 +2084,10 @@ async function saveStatsCloud(){
 // Load stats from cloud on boot
 async function loadStatsCloud(){
   var r=await _cloudGet('getStats');
+  // v57: the boot-time cloud fetch resolves asynchronously. If the user already
+  // dropped a CSV in this session, that file wins — otherwise the stale cloud
+  // copy would replace it and drag the date filter back to old dates.
+  if(G._csvUploadedAt){console.log('[v57] skipping cloud stats — local CSV is newer');return true;}
   if(r&&r.ok&&r.rows&&r.rows.length){
     G.aliCols=r.cols||{};
     G.csvRaw=r.rows;
@@ -2504,6 +2509,12 @@ async function loadData(){
     populateCartCatFilter();renderCartTable();renderCartItems();
     var nb=document.getElementById('nbposts');if(nb)nb.textContent=G.posts.length;
     _setLoadStep('');
+    // v57: the catalogue is what classifies "mine" vs "from the cart" — once the
+    // posts sheet is in, re-run the stats so the classification is correct.
+    try{
+      aliInvalidateCatalog();
+      if(G.csvRaw&&G.csvRaw.length)renderStatsDash();
+    }catch(e){console.warn('[v57 stats refresh]',e);}
   });
 }
 // v44 PERF: dateMap helper — O(1) dedup with Set instead of indexOf O(n)
@@ -4908,18 +4919,27 @@ function aliDetectCols(cols){
     re(/time|date/)
   ],[date]);
 
+  // v57: units bought in the transaction — a row is NOT always one unit.
+  // Detected BEFORE price so a quantity column can never be mistaken for money.
+  var qty=aliPick(cols,[
+    re(/^itemcount$/),re(/^productcount$/),re(/^productamount$/),re(/^quantity$/),re(/^itemnum$/),
+    re(/itemcount|productcount|itemnum|itemqty|productqty/),
+    re(/^qty$|orderquantity|purchasequantity|quantity/),
+    re(/^productamount$|^itemamount$/)
+  ]);
+  var qEx=qty?[qty]:[];
   var price=aliPick(cols,[
     re(/^completedpaymentsamount$/),
     re(/completedpayment.*amount/),
     re(/^paidamount$/),
     function(n){return /(orderamount|paidamount|totalamount|customerpaid|settle.*amount)/.test(n)&&!/commission/.test(n);},
-    function(n){return /amount/.test(n)&&!/commission/.test(n);}
-  ]);
+    function(n){return /amount/.test(n)&&!/commission|count|quantity|qty|num$/.test(n);}
+  ],qEx);
   var priceAlt=aliPick(cols,[
     re(/^paidamount$/),
     function(n){return /(paidamount|orderamount|customerpaid|totalamount)/.test(n)&&!/commission/.test(n);},
-    function(n){return /amount/.test(n)&&!/commission/.test(n);}
-  ],[price]);
+    function(n){return /amount/.test(n)&&!/commission|count|quantity|qty|num$/.test(n);}
+  ],qEx.concat([price]));
 
   var commission=aliPick(cols,[
     function(n){return n==='estimatedpaymentscommission';},
@@ -4943,9 +4963,17 @@ function aliDetectCols(cols){
   ],[commission,commissionAlt,incentive]);
 
   return{
-    __v:56,
+    __v:57,
     date:date,dateAlt:dateAlt,
-    // v56: "y" = a product I published myself, "n" = it was already in the buyer's cart
+    qty:qty,
+    // v57: product identity — grouping key and the key for the cross-reference
+    // against my own catalogue. Titles drift, IDs don't.
+    itemId:aliPick(cols,[
+      re(/^itemid$/),re(/^productid$/),re(/^itemcode$/),
+      function(n){return /(itemid|productid)$/.test(n);},
+      function(n){return /(itemid|productid)/.test(n);}
+    ]),
+    // v56: kept only as a fallback — AliExpress fills this unreliably
     isAff:aliPick(cols,[re(/^isaffproduct$/),re(/isaffproduct/),re(/isaff$/),re(/affiliateproduct|isaffiliate/),re(/isaff/)]),
     product:aliPick(cols,[re(/^producttitle$/),re(/producttitle|productname|itemtitle|itemname/),re(/title/),re(/^product$/),function(n){return /product/.test(n)&&!/id$|url|category|image/.test(n);}]),
     url:aliPick(cols,[re(/^producturl$/),re(/producturl|productdetailurl|itemurl|productlink/),re(/url|link/)]),
@@ -4960,7 +4988,7 @@ function aliDetectCols(cols){
 function aliEnsureCols(rows){
   rows=rows||G.csvRaw||[];
   var ac=G.aliCols||{};
-  if(ac.__v===56){G.aliDayFirst=aliDetectDayFirst(rows,ac.date);return ac;}
+  if(ac.__v===57){G.aliDayFirst=aliDetectDayFirst(rows,ac.date);return ac;}
   var seen={},list=[],lim=Math.min(rows.length,50);
   for(var i=0;i<lim;i++){for(var k in rows[i]){if(!seen[k]){seen[k]=1;list.push(k);}}}
   var det=aliDetectCols(list);
@@ -4995,9 +5023,96 @@ function aliRowComm(r,ac){
   if(!inc&&ac.incentiveAlt)inc=aliNum(r[ac.incentiveAlt]);
   return base+inc;
 }
-// v56: which bucket a row belongs to — 'y' mine, 'n' from the buyer's cart, '?' unknown
+// ── v57: units bought in this transaction (never fewer than 1) ──
+function aliRowQty(r,ac){
+  ac=ac||G.aliCols||{};
+  if(!ac.qty)return 1;
+  var n=Math.round(aliNum(r[ac.qty]));
+  return (isFinite(n)&&n>0)?n:1;
+}
+// ── v57: commission rate EXACTLY as it appears in the CSV (no maths) ──
+function aliRowRate(r,ac){
+  ac=ac||G.aliCols||{};
+  if(!ac.commRate)return '';
+  return String(r[ac.commRate]===undefined||r[ac.commRate]===null?'':r[ac.commRate]).trim();
+}
+function aliRateNum(txt){
+  var n=aliNum(txt);
+  if(!n)return 0;
+  // "0.05" style rates are stored as a fraction — normalise to percent for sorting
+  if(n>0&&n<=1&&String(txt).indexOf('%')===-1)n=n*100;
+  return n;
+}
+// ── v57: incentive commission on its own, so it can be shown separately ──
+function aliRowIncentive(r,ac){
+  ac=ac||G.aliCols||{};
+  var inc=ac.incentive?aliNum(r[ac.incentive]):0;
+  if(!inc&&ac.incentiveAlt)inc=aliNum(r[ac.incentiveAlt]);
+  return inc;
+}
+
+// ════════════════════════════════════════════════════════════════
+// v57 — PRODUCT IDENTITY + CROSS-REFERENCE AGAINST MY OWN CATALOGUE
+// AliExpress' IsAffProduct flag is unreliable, so a product counts as
+// "mine" when its item id (or exact title) exists in the posts sheet.
+// ════════════════════════════════════════════════════════════════
+function aliExtractItemId(txt){
+  if(txt===undefined||txt===null)return '';
+  var s2=String(txt).trim();
+  if(!s2)return '';
+  if(/^\d{6,20}$/.test(s2))return s2;               // already a bare id
+  var m=s2.match(/\/item\/(?:[a-z\-]+\/)?(\d{6,20})/i)              // /item/1005006....html
+      ||s2.match(/[?&](?:productid|product_id|itemid|item_id|productids)=(\d{6,20})/i)
+      ||s2.match(/\/(\d{9,20})\.html/i)
+      ||s2.match(/(\d{10,20})/);                     // last resort: longest digit run
+  return m?m[1]:'';
+}
+function aliRowItemId(r,ac){
+  ac=ac||G.aliCols||{};
+  var id=ac.itemId?aliExtractItemId(r[ac.itemId]):'';
+  if(!id&&ac.url)id=aliExtractItemId(r[ac.url]);
+  return id;
+}
+function aliNormTitle(t){
+  return String(t===undefined||t===null?'':t).toLowerCase().replace(/\s+/g,' ').trim();
+}
+// index of everything I have published — rebuilt whenever the posts sheet reloads
+function aliMyCatalog(){
+  if(G._myCatalog&&G._myCatalogPosts===(G.posts?G.posts.length:0))return G._myCatalog;
+  var ids={},titles={},n=0;
+  (G.posts||[]).forEach(function(p){
+    var row=p&&p.data;if(!row)return;
+    for(var c=0;c<row.length;c++){
+      var cell=row[c];
+      // only mine cells that actually look like a product reference — avoids
+      // picking up timestamps or other long digit runs as fake product ids
+      var txt=String(cell===undefined||cell===null?'':cell);
+      if(!/^\s*\d{6,20}\s*$/.test(txt)&&!/aliexpress|item\/|productid|product_id/i.test(txt))continue;
+      var id=aliExtractItemId(cell);
+      if(id&&!ids[id]){ids[id]=1;n++;}
+    }
+    [COL.HEB,COL.ENG].forEach(function(ci){
+      var t=aliNormTitle(gc(p,ci));
+      if(t.length>=12)titles[t]=1;
+    });
+  });
+  G._myCatalog={ids:ids,titles:titles,idCount:n,postCount:(G.posts||[]).length};
+  G._myCatalogPosts=(G.posts||[]).length;
+  return G._myCatalog;
+}
+function aliInvalidateCatalog(){G._myCatalog=null;G._myCatalogPosts=-1;}
+// 'y' = published by me, 'n' = came along in the buyer's cart
 function aliRowAff(r,ac){
   ac=ac||G.aliCols||{};
+  var cat=aliMyCatalog();
+  if(cat.postCount){
+    var id=aliRowItemId(r,ac);
+    if(id&&cat.ids[id])return 'y';
+    var t=aliNormTitle(ac.product?r[ac.product]:'');
+    if(t.length>=12&&cat.titles[t])return 'y';
+    return 'n';
+  }
+  // catalogue not loaded yet — fall back to the CSV flag rather than guessing
   if(!ac.isAff)return '?';
   var v=String(r[ac.isAff]===undefined||r[ac.isAff]===null?'':r[ac.isAff]).trim().toLowerCase();
   if(!v)return '?';
@@ -5009,7 +5124,7 @@ function aliRowAff(r,ac){
 function aliInitDateRange(){
   var rows=G.csvRaw||[];
   var fromEl=document.getElementById('stat-from'),toEl=document.getElementById('stat-to');
-  if(!fromEl||!toEl)return;
+  if(!fromEl||!toEl)return null;
   var min=null,max=null;
   for(var i=0;i<rows.length;i++){
     var d=aliRowDate(rows[i],G.aliCols);
@@ -5017,8 +5132,19 @@ function aliInitDateRange(){
     if(!min||d<min)min=d;
     if(!max||d>max)max=d;
   }
+  // v57: ALWAYS overwrite — the range belongs to the file that is loaded right
+  // now, never to whatever happened to be in the inputs from a previous file.
   fromEl.value=min?aliYMD(min):'';
   toEl.value=max?aliYMD(max):'';
+  G._statRange={from:fromEl.value,to:toEl.value};
+  return G._statRange;
+}
+// v57: manual escape hatch — snap back to the full span of the loaded file
+function resetStatRange(){
+  if(!G.csvRaw||!G.csvRaw.length){toast('לא נטענו נתוני CSV','err');return;}
+  var r=aliInitDateRange();
+  renderStatsDash();
+  toast(r&&r.from?('📅 טווח מלא: '+r.from+' → '+r.to):'📅 הסינון נוקה','ok');
 }
 
 function processAliCSV(file){
@@ -5032,6 +5158,8 @@ function processAliCSV(file){
     G.aliCols=aliDetectCols(cols);
     G.aliDayFirst=aliDetectDayFirst(rows,G.aliCols.date);
     G.csvRaw=rows;
+    G._csvUploadedAt=Date.now();   // v57: marks this file as the freshest source
+    aliInvalidateCatalog();
     // v54: save to cloud so mobile can see stats too
     saveStatsCloud(); // async, fire and forget
     document.getElementById('csv-drop').style.display='none';
@@ -5115,29 +5243,19 @@ function renderStatsDash(){
   const total=filteredData.reduce((s,r)=>s+aliRowSales(r,ac),0);
   const totalComm=filteredData.reduce((s,r)=>s+aliRowComm(r,ac),0);
   const avgOrder=filteredData.length?total/filteredData.length:0;
-  const prodMap={};
-  filteredData.forEach(r=>{
-    const pn=(ac.product&&r[ac.product])||'לא ידוע';
-    const pUrl=(ac.url&&r[ac.url])||'';
-    const cr=(ac.commRate&&r[ac.commRate])||'';
-    if(!prodMap[pn])prodMap[pn]={sales:0,commission:0,count:0,url:pUrl,cr};
-    prodMap[pn].sales+=aliRowSales(r,ac);
-    prodMap[pn].commission+=aliRowComm(r,ac);
-    prodMap[pn].count++;
-  });
+  // v57: grouped by ITEM ID (titles drift between orders) and quantities are
+  // summed from the units column — a single row can hold several units.
+  const prodMap=aliGroupProducts(filteredData,ac,false);
   renderStatDiag(raw);
   // v56: keep the full aggregated list so the table can be re-sorted without a full re-render
-  G._statProds=Object.keys(prodMap).map(function(k){
-    var d=prodMap[k];
-    return{name:k,sales:d.sales,commission:d.commission,count:d.count,url:d.url,cr:d.cr};
-  });
+  G._statProds=Object.keys(prodMap).map(function(k){return prodMap[k];});
 
   // KPIs from filteredData
   document.getElementById('stat-kpis').innerHTML=`
     <div class="scard" style="--cc:var(--acc)"><div class="slbl">סה״כ מכירות</div><div class="sval">$${Math.round(total).toLocaleString()}</div><div class="ssub">${filteredData.length} עסקאות מתוך ${raw.length} שורות</div></div>
     <div class="scard" style="--cc:var(--grn)"><div class="slbl">סה״כ עמלות</div><div class="sval">$${totalComm.toFixed(2)}</div><div class="ssub">כולל עמלות תמריץ · ${total?Math.round(totalComm/total*100):0}% מהמכירות</div></div>
     <div class="scard" style="--cc:var(--blue)"><div class="slbl">ממוצע הזמנה</div><div class="sval">$${Math.round(avgOrder)}</div><div class="ssub">לכל עסקה בטווח</div></div>
-    <div class="scard" style="--cc:#d97706"><div class="slbl">מוצרים שונים</div><div class="sval">${Object.keys(prodMap).length}</div><div class="ssub">בטווח הנבחר</div></div>
+    <div class="scard" style="--cc:#d97706"><div class="slbl">מוצרים שונים</div><div class="sval">${Object.keys(prodMap).length}</div><div class="ssub">${G._statProds.reduce(function(a,d){return a+d.count;},0)} יחידות נרכשו</div></div>
   `;
 
   // Chart data from filteredData
@@ -5237,11 +5355,51 @@ function renderStatsDash(){
 // ════════════════════════════════════════════════════════════════
 // v56 — sortable "top products" table
 // ════════════════════════════════════════════════════════════════
+// ── v57: one grouping routine for the dashboard table and the modal ──
+// key = Item ID when available (falls back to the normalised title), quantities
+// summed from the units column, commission rate taken verbatim from the CSV.
+function aliGroupProducts(data,ac,splitByAff){
+  ac=ac||G.aliCols||{};
+  const map={};
+  (data||[]).forEach(function(r){
+    const id=aliRowItemId(r,ac);
+    const name=(((ac.product&&r[ac.product])||'')+'').trim()||'לא ידוע';
+    const aff=aliRowAff(r,ac);
+    const base=id?('#'+id):('t:'+aliNormTitle(name));
+    const key=splitByAff?(aff+'||'+base):base;
+    if(!map[key]){
+      map[key]={key:key,itemId:id,name:name,aff:aff,url:'',
+                sales:0,commission:0,incentive:0,count:0,orders:0,rates:{}};
+    }
+    const g=map[key];
+    if(!g.url&&ac.url&&r[ac.url])g.url=r[ac.url];
+    if(g.name==='לא ידוע'&&name!=='לא ידוע')g.name=name;
+    g.sales+=aliRowSales(r,ac);
+    g.commission+=aliRowComm(r,ac);
+    g.incentive+=aliRowIncentive(r,ac);
+    g.count+=aliRowQty(r,ac);      // units, not rows
+    g.orders++;
+    const rt=aliRowRate(r,ac);
+    if(rt)g.rates[rt]=(g.rates[rt]||0)+1;
+  });
+  Object.keys(map).forEach(function(k){
+    const g=map[k];
+    const keys=Object.keys(g.rates);
+    keys.sort(function(a,b){return g.rates[b]-g.rates[a];});
+    g.cr=keys.length?keys[0]:'';                    // straight from the file
+    g.crAll=keys.join(' · ');
+    g.crMixed=keys.length>1;
+    g.crNum=aliRateNum(g.cr);
+  });
+  return map;
+}
 function statSortVal(d,key){
   if(key==='count')return d.count||0;
+  if(key==='orders')return d.orders||0;
   if(key==='sales')return d.sales||0;
   if(key==='commission')return d.commission||0;
-  if(key==='pct')return d.sales?(d.commission/d.sales*100):0;
+  if(key==='incentive')return d.incentive||0;
+  if(key==='pct')return d.crNum||0;   // v57: the CSV rate, never a computed one
   return 0;
 }
 function setTopSort(key){
@@ -5266,18 +5424,31 @@ function renderTopProducts(){
     if(th)th.classList.toggle('act',st.key===k);
   });
   tb.innerHTML=list.slice(0,10).map(function(d,i){
-    const pct=d.sales?((d.commission/d.sales)*100).toFixed(1):'0.0';
-    const crTitle=d.cr?('שיעור עמלה בקובץ: '+d.cr):'';
+    // v57: rate exactly as the CSV states it — no derived percentage
+    const crTxt=aliFmtRate(d);
+    const commTitle=d.incentive?('עמלה בסיסית $'+(d.commission-d.incentive).toFixed(2)+' + תמריץ $'+d.incentive.toFixed(2)):'';
     return`<tr>
       <td style="font-weight:800;color:var(--acc);font-size:11px">${i+1}</td>
-      <td style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px" title="${esc(d.name)}">
+      <td style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px" title="${esc(d.name)}${d.itemId?' · ID '+d.itemId:''}">
         ${d.url?`<a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none;font-weight:700">${esc(d.name)}</a>`:esc(d.name)}
       </td>
-      <td style="font-size:11px;text-align:center"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 5px;font-weight:800">×${d.count}</span></td>
+      <td style="font-size:11px;text-align:center" title="${d.orders} עסקאות"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 5px;font-weight:800">×${d.count}</span></td>
       <td style="font-family:monospace;font-weight:700;font-size:11px">$${d.sales.toFixed(2)}</td>
-      <td style="font-family:monospace;color:var(--grn);font-size:11px">$${d.commission.toFixed(2)}</td>
-      <td style="font-size:11px;color:var(--t2)" title="${esc(crTitle)}">${pct}%</td>
+      <td style="font-family:monospace;color:var(--grn);font-size:11px" title="${esc(commTitle)}">$${d.commission.toFixed(2)}${d.incentive?'<span style="color:#d97706">*</span>':''}</td>
+      <td style="font-size:11px;color:var(--t2)" title="${esc(d.crMixed?('שיעורים בקובץ: '+d.crAll):'')}">${esc(crTxt)}</td>
     </tr>`;}).join('')||'<tr><td colspan="6" style="padding:12px;text-align:center;color:var(--t3);font-size:11px">אין נתונים בטווח</td></tr>';
+}
+// v57: render the rate string straight from the file, only adding a % sign when
+// the file omitted it. Never recomputed from commission/sales.
+function aliFmtRate(d){
+  if(!d||!d.cr)return '—';
+  var t=String(d.cr).trim();
+  if(t.indexOf('%')===-1){
+    var n=aliNum(t);
+    if(n>0&&n<=1)t=(n*100).toFixed(2).replace(/\.?0+$/,'')+'%';
+    else if(n)t=t+'%';
+  }
+  return t+(d.crMixed?' *':'');
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -5285,17 +5456,7 @@ function renderTopProducts(){
 // ════════════════════════════════════════════════════════════════
 function buildAllProdList(){
   const ac=G.aliCols||{},data=G._statFiltered||G.csvRaw||[];
-  const map={};
-  data.forEach(function(r){
-    const name=(((ac.product&&r[ac.product])||'')+'').trim()||'לא ידוע';
-    const aff=aliRowAff(r,ac);
-    const key=aff+'||'+name;
-    if(!map[key])map[key]={name:name,aff:aff,url:'',sales:0,commission:0,count:0};
-    if(!map[key].url&&ac.url&&r[ac.url])map[key].url=r[ac.url];
-    map[key].sales+=aliRowSales(r,ac);
-    map[key].commission+=aliRowComm(r,ac);
-    map[key].count++;
-  });
+  const map=aliGroupProducts(data,ac,true);   // split by "mine / cart"
   return Object.keys(map).map(function(k){return map[k];});
 }
 function setAllProdTab(t){G.allProdTab=t;renderAllProds();}
@@ -5320,18 +5481,19 @@ function renderAllProds(){
   const q=((G.allProdQ||'')+'').trim().toLowerCase();
 
   // summary over the WHOLE list (independent of the active tab)
-  const sum={y:{p:0,c:0,comm:0,sales:0},n:{p:0,c:0,comm:0,sales:0},'?':{p:0,c:0,comm:0,sales:0}};
-  all.forEach(function(d){const b=sum[d.aff]||sum['?'];b.p++;b.c+=d.count;b.comm+=d.commission;b.sales+=d.sales;});
+  const sum={y:{p:0,c:0,o:0,comm:0,sales:0},n:{p:0,c:0,o:0,comm:0,sales:0},'?':{p:0,c:0,o:0,comm:0,sales:0}};
+  all.forEach(function(d){const b=sum[d.aff]||sum['?'];b.p++;b.c+=d.count;b.o+=d.orders;b.comm+=d.commission;b.sales+=d.sales;});
   const card=function(ttl,clr,bg,b){
     return`<div style="background:${bg};border-radius:9px;padding:9px 11px">
       <div style="font-size:11px;font-weight:800;color:${clr}">${ttl}</div>
       <div style="font-size:17px;font-weight:900;color:var(--tx);margin-top:2px">${b.p} מוצרים</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:2px">${b.c} רכישות · עמלה <b style="color:var(--grn)">$${b.comm.toFixed(2)}</b></div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">${b.c} יחידות · ${b.o} עסקאות</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:1px">עמלה <b style="color:var(--grn)">$${b.comm.toFixed(2)}</b></div>
     </div>`;};
   const sumEl=document.getElementById('ap-summary');
   if(sumEl){
-    sumEl.innerHTML=card('🟢 המוצרים שלי (y)','#15803d','#f0fdf4',sum.y)
-      +card('🟠 מסל הקניות (n)','#c2410c','#fff7ed',sum.n)
+    sumEl.innerHTML=card('🟢 המוצרים שלי','#15803d','#f0fdf4',sum.y)
+      +card('🟠 מסל הקניות','#c2410c','#fff7ed',sum.n)
       +(sum['?'].p?card('⚪ ללא סיווג','#64748b','var(--s2)',sum['?']):'');
   }
   const tabsRoot=document.getElementById('ap-tabs');
@@ -5362,44 +5524,54 @@ function renderAllProds(){
   const tSales=list.reduce(function(s2,d){return s2+d.sales;},0);
   const tComm=list.reduce(function(s2,d){return s2+d.commission;},0);
   const tCount=list.reduce(function(s2,d){return s2+d.count;},0);
+  const tOrders=list.reduce(function(s2,d){return s2+d.orders;},0);
   const arrow=function(k){return st.key===k?(st.dir==='asc'?' ▲':' ▼'):'';};
   const th=function(k,lbl,extra){
     return`<th class="sortable-th${st.key===k?' act':''}" onclick="setAllProdSort('${k}')" style="padding:7px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800;background:var(--s2);${extra||''}">${lbl}${arrow(k)}</th>`;};
 
+  const hasInc=list.some(function(d){return d.incentive>0;});
+  const tInc=list.reduce(function(s2,d){return s2+d.incentive;},0);
+  const cols=hasInc?9:8;
   wrap.innerHTML=`
-  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:560px">
+  <table style="width:100%;border-collapse:collapse;font-size:11px;min-width:${hasInc?660:600}px">
     <thead><tr>
       <th style="padding:7px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800;background:var(--s2);width:28px">#</th>
       ${th('name','מוצר')}
       ${th('aff','סוג','width:60px;text-align:center')}
-      ${th('count','כמות','width:58px;text-align:center')}
+      ${th('count','יחידות','width:58px;text-align:center')}
+      ${th('orders','עסקאות','width:58px;text-align:center')}
       ${th('sales','מכירות','width:78px')}
       ${th('commission','עמלה','width:72px')}
-      ${th('pct','%','width:52px')}
+      ${hasInc?th('incentive','תמריץ','width:66px'):''}
+      ${th('pct','% מהקובץ','width:66px')}
     </tr></thead>
     <tbody>
     ${list.map(function(d,i){
-      const pct=d.sales?((d.commission/d.sales)*100).toFixed(1):'0.0';
       return`<tr style="border-bottom:1px solid rgba(226,232,240,.5)">
         <td style="padding:7px 8px;color:var(--acc);font-weight:800">${i+1}</td>
-        <td style="padding:7px 8px;font-weight:700;max-width:280px" title="${esc(d.name)}">
+        <td style="padding:7px 8px;font-weight:700;max-width:260px" title="${esc(d.name)}${d.itemId?' · ID '+d.itemId:''}">
           ${d.url?`<a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">${esc(d.name)}</a>`:esc(d.name)}
+          ${d.itemId?`<div style="font-size:9px;color:var(--t3);font-family:monospace">ID ${esc(d.itemId)}</div>`:''}
         </td>
         <td style="padding:7px 8px;text-align:center">${apAffBadge(d.aff)}</td>
         <td style="padding:7px 8px;text-align:center"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 6px;font-weight:800">×${d.count}</span></td>
+        <td style="padding:7px 8px;text-align:center;color:var(--t2)">${d.orders}</td>
         <td style="padding:7px 8px;font-family:monospace;font-weight:700;color:var(--acc)">$${d.sales.toFixed(2)}</td>
         <td style="padding:7px 8px;font-family:monospace;color:var(--grn)">$${d.commission.toFixed(2)}</td>
-        <td style="padding:7px 8px;color:var(--t2)">${pct}%</td>
-      </tr>`;}).join('')||'<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--t3)">לא נמצאו מוצרים לסינון הנוכחי</td></tr>'}
+        ${hasInc?`<td style="padding:7px 8px;font-family:monospace;color:#d97706">$${d.incentive.toFixed(2)}</td>`:''}
+        <td style="padding:7px 8px;color:var(--t2)" title="${esc(d.crMixed?('שיעורים בקובץ: '+d.crAll):'')}">${esc(aliFmtRate(d))}</td>
+      </tr>`;}).join('')||`<tr><td colspan="${cols}" style="padding:16px;text-align:center;color:var(--t3)">לא נמצאו מוצרים לסינון הנוכחי</td></tr>`}
     </tbody>
     ${list.length?`<tfoot><tr style="background:var(--s2);font-weight:900">
       <td style="padding:8px"></td>
       <td style="padding:8px">סה״כ ${list.length} מוצרים</td>
       <td style="padding:8px"></td>
       <td style="padding:8px;text-align:center">×${tCount}</td>
+      <td style="padding:8px;text-align:center">${tOrders}</td>
       <td style="padding:8px;font-family:monospace;color:var(--acc)">$${tSales.toFixed(2)}</td>
       <td style="padding:8px;font-family:monospace;color:var(--grn)">$${tComm.toFixed(2)}</td>
-      <td style="padding:8px;color:var(--t2)">${tSales?((tComm/tSales)*100).toFixed(1):'0.0'}%</td>
+      ${hasInc?`<td style="padding:8px;font-family:monospace;color:#d97706">$${tInc.toFixed(2)}</td>`:''}
+      <td style="padding:8px"></td>
     </tr></tfoot>`:''}
   </table>`;
 }
@@ -5409,10 +5581,18 @@ function openAllProductsModal(){
   G.allProdSort={key:'sales',dir:'desc'};
   G.allProdTab='all';
   G.allProdQ='';
+  // v57: classification comes from cross-referencing my own catalogue, not from
+  // the CSV flag. Say which source is actually in play.
+  const cat=aliMyCatalog();
   const hasAff=!!(G.aliCols&&G.aliCols.isAff);
+  const srcNote=cat.postCount
+    ? `<div style="background:#f0f9ff;color:#0369a1;border-radius:8px;padding:7px 10px;font-size:11px;margin-bottom:9px">הסיווג נקבע בהצלבה מול מאגר המוצרים שלי — <b>${cat.postCount}</b> פוסטים, <b>${cat.idCount}</b> מזהי מוצר.</div>`
+    : (hasAff
+      ? '<div style="background:#fff7ed;color:#c2410c;border-radius:8px;padding:7px 10px;font-size:11px;margin-bottom:9px">מאגר המוצרים עדיין נטען — הסיווג מסתמך זמנית על עמודת <b>IsAffProduct</b> שבקובץ.</div>'
+      : '<div style="background:#fff7ed;color:#c2410c;border-radius:8px;padding:7px 10px;font-size:11px;margin-bottom:9px">מאגר המוצרים לא נטען ולא נמצאה עמודת <b>IsAffProduct</b> — המוצרים מוצגים ללא סיווג.</div>');
   const body=`
     <div id="ap-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:8px;margin-bottom:11px"></div>
-    ${hasAff?'':'<div style="background:#fff7ed;color:#c2410c;border-radius:8px;padding:7px 10px;font-size:11px;margin-bottom:9px">לא נמצאה עמודת <b>IsAffProduct</b> בקובץ — כל המוצרים מוצגים ללא סיווג.</div>'}
+    ${srcNote}
     <div id="ap-tabs" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       <button class="ptab on" type="button" data-ap="all" onclick="setAllProdTab('all')">כל המוצרים</button>
       <button class="ptab" type="button" data-ap="y" onclick="setAllProdTab('y')">🟢 המוצרים שלי</button>
@@ -5513,7 +5693,9 @@ function openCatDrillDown(catName){
 
 function resetCSV(){
   G.csvRaw=[];G.aliCols={};G.aliDayFirst=true;
-  G._statProds=[];G._allProds=[];G._statFiltered=[];
+  G._statProds=[];G._allProds=[];G._statFiltered=[];G._csvUploadedAt=0;
+  var _f=document.getElementById('stat-from'),_t=document.getElementById('stat-to');
+  if(_f)_f.value='';if(_t)_t.value='';
   const diagEl=document.getElementById('stat-diag');if(diagEl)diagEl.innerHTML='';
   try{localStorage.removeItem('sp_statsData');}catch(e){}
   if(G.salesChart){G.salesChart.destroy();G.salesChart=null;}
@@ -8928,6 +9110,7 @@ document.addEventListener('DOMContentLoaded',function(){
   on('apply-filter-btn','click',renderStatsDash);
   on('reset-csv-btn','click',resetCSV);
   on('all-prods-btn','click',openAllProductsModal);
+  on('full-range-btn','click',resetStatRange);
   ['count','sales','commission','pct'].forEach(function(k){on('tsth-'+k,'click',function(){setTopSort(k);});});
   document.querySelectorAll('.ptab[data-p]').forEach(function(tab){
     tab.addEventListener('click',function(){
@@ -9233,7 +9416,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script>
 /* ── סימון גרסה: מאפשר לוודא בקונסול שנטענה הגרסה החדשה ולא מטמון ישן ── */
-var APP_BUILD = 'v-FBFLOW2 + CSV56';
+var APP_BUILD = 'v-FBFLOW2 + CSV57';
 console.log('%c[BUILD] ' + APP_BUILD + ' — copyPostToFB: desktop=אפס כתיבה | mobile=כתיבה רק אחרי share מוצלח',
             'background:#111;color:#0f0;padding:2px 6px;border-radius:3px;font-weight:bold');
 
