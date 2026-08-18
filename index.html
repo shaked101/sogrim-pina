@@ -1327,7 +1327,7 @@ body.dark-mode #pl-svg .pl-dot.on,body.dark-mode #ps-svg .pl-dot.on{fill:var(--a
                 <table style="table-layout:fixed">
                   <thead><tr>
                     <th style="width:26px">#</th><th>מוצר</th>
-                    <th id="tsth-count" class="sortable-th" style="width:55px" title="מיון לפי כמות יחידות">כמות<span id="tsar-count"></span></th>
+                    <th id="tsth-count" class="sortable-th" style="width:55px" title="מיון לפי מספר עסקאות">עסקאות<span id="tsar-count"></span></th>
                     <th id="tsth-sales" class="sortable-th" style="width:70px" title="מיון לפי מכירות">מכירות<span id="tsar-sales"></span></th>
                     <th id="tsth-commission" class="sortable-th" style="width:60px" title="מיון לפי עמלה">עמלה<span id="tsar-commission"></span></th>
                     <th id="tsth-pct" class="sortable-th" style="width:48px" title="מיון לפי אחוז עמלה">%<span id="tsar-pct"></span></th>
@@ -2122,6 +2122,26 @@ async function _cloudGet(action,extra){
   }
 }
 
+// ── v62: 504-tolerant read ─────────────────────────────────────────────────
+// The stats payload is the heaviest call in the app, and a cold Apps Script
+// deployment behind the Vercel proxy regularly answers the FIRST request with
+// a 504 Gateway Timeout — the second one, with the script already warm, comes
+// back in well under a second. apiFetch and the request logic are untouched;
+// this only decides whether to ask again.
+async function _cloudGetRetry(action,extra,tries){
+  tries=tries||3;
+  var r=null;
+  for(var i=0;i<tries;i++){
+    r=await _cloudGet(action,extra);
+    if(r&&r.ok!==false&&!(r.error||'').match(/HTTP 5\d\d|Failed to fetch|NetworkError|Load failed|JSON/i))return r;
+    if(i<tries-1){
+      console.log('[v62 cloudGet] '+action+' — ניסיון '+(i+1)+' נכשל ('+((r&&r.error)||'—')+'), מנסה שוב…');
+      await new Promise(function(res){setTimeout(res,900*(i+1));});
+    }
+  }
+  return r||{ok:false,error:'no response'};
+}
+
 // ══ ① FOLLOWERS ════════════════════════════════
 
 async function saveFollowers(){
@@ -2234,7 +2254,14 @@ function _statsPackRows(rows,ac,titleMax){
 }
 // unpack: compact objects → rows with canonical headers our detector knows
 function _statsUnpackRows(rows){
-  return (rows||[]).map(function(o){
+  rows=rows||[];
+  // v62: was the source file carrying a REAL quantity column? If every packed
+  // row says 1, the original CSV had no units column (AliExpress order exports
+  // do not), so we must not invent one — otherwise a cloud-loaded copy would
+  // label the same data "יחידות" while a freshly dropped file says "עסקאות".
+  // The arithmetic is identical either way: no column → one unit per row.
+  var hasRealQty=rows.some(function(o){return o&&o.q!==undefined&&String(o.q).trim()!==''&&String(o.q).trim()!=='1';});
+  return rows.map(function(o){
     var out={};
     for(var k in _SP_KEYS){
       var v=o[k];
@@ -2242,8 +2269,11 @@ function _statsUnpackRows(rows){
     }
     if(!out['Product URL']&&out['Product ID'])
       out['Product URL']='https://www.aliexpress.com/item/'+out['Product ID']+'.html';
-    // the units column must always exist, so a row can never silently become 1
-    if(out['Product count']===undefined)out['Product count']='1';
+    if(hasRealQty){
+      if(out['Product count']===undefined)out['Product count']='1';
+    }else{
+      delete out['Product count'];
+    }
     return out;
   });
 }
@@ -2297,7 +2327,7 @@ async function saveStatsCloud(){
   }
 
   // ── verification read-back: the only proof that the server really kept it ──
-  var back=await _cloudGet('getStats');
+  var back=await _cloudGetRetry('getStats',null,3);
   var got=(back&&back.rows&&back.rows.length)||0;
   console.log('   אימות קריאה  :',got,'שורות חזרו מהענן (נשלחו '+packed.length+')');
   if(!got){
@@ -2333,7 +2363,7 @@ async function clearStatsCloud(){
 
 // Load stats from cloud on boot
 async function loadStatsCloud(){
-  var r=await _cloudGet('getStats');
+  var r=await _cloudGetRetry('getStats',null,3);
   // v57: the boot-time cloud fetch resolves asynchronously. If the user already
   // dropped a CSV in this session, that file wins — otherwise the stale cloud
   // copy would replace it and drag the date filter back to old dates.
@@ -5342,8 +5372,7 @@ function aliGuessQtyCol(rows,keys){
     var gain=sum-ints;                       // how many units beyond one-per-row
     if(gain>bestGain){bestGain=gain;best=col;}
   }
-  if(best)console.log('[v61] עמודת כמות זוהתה לפי הערכים (לא לפי הכותרת):',best,'— +'+bestGain+' יחידות מעבר לספירת שורות');
-  return best;
+  return best;   // v62: silent — no console note either way
 }
 
 // every distinct header present in the rows (not just the first row)
@@ -5459,6 +5488,26 @@ function aliEnsureCols(rows){
 // saved by v58 carried qty:'' (its sanity check had rejected the real column),
 // and every later render inherited that empty value, so each row scored 1 unit
 // and the totals looked like a transaction count. Now the headers win, always.
+// ── v62: one honest label for the units column ─────────────────────────────
+// When the CSV really carries a quantity column we say "יחידות"; when it does
+// not (AliExpress order exports do not), every row is exactly one transaction
+// and the UI says "עסקאות". No warnings, no console noise — just the truth.
+function aliUnitLabel(ac){
+  ac=ac||G.aliCols||{};
+  return ac.qty?'יחידות':'עסקאות';
+}
+function _applyUnitLabels(){
+  try{
+    var lbl=aliUnitLabel();
+    var th=document.getElementById('tsth-count');
+    if(th){
+      var sp=document.getElementById('tsar-count');
+      th.textContent=lbl;
+      if(sp)th.appendChild(sp);
+      th.title='מיון לפי '+(lbl==='יחידות'?'כמות יחידות':'מספר עסקאות');
+    }
+  }catch(e){}
+}
 function aliFinalizeCols(rows){
   var ac=G.aliCols||{};
   rows=rows||G.csvRaw||[];
@@ -5478,19 +5527,12 @@ function aliFinalizeCols(rows){
   // units vs rows, so the difference is visible at a glance in the console
   var units=0;
   for(var u=0;u<rows.length;u++)units+=aliRowQty(rows[u],ac);
-  console.log('%c[v60 CSV] עמודות שזוהו','color:#d4541a;font-weight:bold');
-  console.log('   כותרות בקובץ :',keys.join(' | '));
-  console.log('   עמודת כמות   :',chosen||'לא נמצאה — כל שורה תיספר כיחידה אחת');
-  console.log('   ספירה        :',units,'יחידות מתוך',rows.length,'שורות');
-  if(cands.length>1)console.log('   מועמדים נוספים:',cands.slice(1).join(' • '));
-  console.log('   מזהה מוצר    :',ac.itemId||'(נגזר מ-ProductUrl)','| כותרת:',ac.product||'—','| סכום:',ac.price||'—');
-  console.log('   עמלה         :',ac.commission||ac.commissionAlt||'—','| תמריץ:',ac.incentive||ac.incentiveAlt||'—','| שיעור:',ac.commRate||'—');
-  if(ac.status){
-    var st={};
-    rows.forEach(function(r){var v=String(r[ac.status]||'—').trim()||'—';st[v]=(st[v]||0)+1;});
-    console.log('   סטטוסים      :',Object.keys(st).map(function(k){return k+'='+st[k];}).join(', '),
-                '— אף אחד מהם אינו מסונן, כל '+rows.length+' השורות נספרות');
-  }
+  ac.__units=units;
+  // v62: one compact line. No "quantity column not found" warning — when the
+  // file has no such column each row IS one transaction, and that is normal.
+  console.log('[v62 CSV] '+rows.length+' שורות · '+units+' '+aliUnitLabel(ac)+
+              ' · עמלה: '+(ac.commission||ac.commissionAlt||'—'));
+  _applyUnitLabels();
   return ac;
 }
 
@@ -5732,7 +5774,7 @@ function renderStatsDash(){
     <div class="scard" style="--cc:var(--grn)"><div class="slbl">סה״כ עמלות</div><div class="sval">$${totalComm.toFixed(2)}</div><div class="ssub">כולל עמלות תמריץ · ${total?Math.round(totalComm/total*100):0}% מהמכירות</div></div>
     <div class="scard" style="--cc:var(--blue)"><div class="slbl">ממוצע הזמנה</div><div class="sval">$${Math.round(avgOrder)}</div><div class="ssub">לכל עסקה בטווח</div></div>
     <div class="scard" style="--cc:#7c3aed"><div class="slbl">ממוצע עמלה להזמנה</div><div class="sval">$${avgComm.toFixed(2)}</div><div class="ssub">סך העמלות ÷ ${filteredData.length} עסקאות</div></div>
-    <div class="scard" style="--cc:#d97706"><div class="slbl">מוצרים שונים</div><div class="sval">${Object.keys(prodMap).length}</div><div class="ssub">${G._statProds.reduce(function(a,d){return a+d.count;},0)} יחידות נרכשו</div></div>
+    <div class="scard" style="--cc:#d97706"><div class="slbl">מוצרים שונים</div><div class="sval">${Object.keys(prodMap).length}</div><div class="ssub">${G._statProds.reduce(function(a,d){return a+d.count;},0)} ${aliUnitLabel(ac)}</div></div>
   `;
 
   // Chart data from filteredData
@@ -5847,13 +5889,6 @@ function aliGroupProducts(data,ac){
     const t0=aliNormTitle((ac.product&&r[ac.product])||'');
     if(t0.length>=8&&!titleToId[t0])titleToId[t0]=id0;
   });
-  // v61: trace the unit arithmetic for the first 5 products, once per dataset.
-  const dbg=!!G._qtyLogPending;
-  const dbgOrder=[],dbgLines={};
-  if(dbg){
-    console.log('%c[v61 סכימת כמויות] עמודת הכמות: '+(ac.qty||'לא זוהתה — כל שורה = יחידה אחת'),
-                'color:#15803d;font-weight:bold');
-  }
   (data||[]).forEach(function(r){
     const name=(((ac.product&&r[ac.product])||'')+'').trim()||'לא ידוע';
     const nt=aliNormTitle(name);
@@ -5873,29 +5908,11 @@ function aliGroupProducts(data,ac){
     // ── the unit maths: extract this row's quantity, ACCUMULATE it (+=) ──
     const rowQty=aliRowQty(r,ac);
     g.count+=rowQty;               // accumulate units — never a row count
-    g.orders++;                    // rows, kept only for the tooltip
-    if(dbg){
-      if(!dbgLines[key]&&dbgOrder.length<5){dbgLines[key]=[];dbgOrder.push(key);}
-      if(dbgLines[key])dbgLines[key].push({
-        raw:ac.qty?String(r[ac.qty]===undefined||r[ac.qty]===null?'':r[ac.qty]):'(אין עמודה)',
-        parsed:rowQty,running:g.count
-      });
-    }
+    g.orders++;                    // rows = transactions
     const rt=aliRowRate(r,ac);
     if(rt)g.rates[rt]=(g.rates[rt]||0)+1;
   });
-  if(dbg){
-    dbgOrder.forEach(function(key){
-      const g=map[key];
-      console.log('  ▸ '+g.name.slice(0,55)+(g.name.length>55?'…':''));
-      dbgLines[key].forEach(function(l,i){
-        console.log('      שורה '+(i+1)+': תא="'+l.raw+'" → parseInt='+l.parsed+' → מצטבר='+l.running);
-      });
-      console.log('      ── סה״כ '+g.count+' יחידות מתוך '+g.orders+' הזמנות'+
-                  (g.count===g.orders?'  ⚠️ זהה למספר ההזמנות — בדוק את עמודת הכמות':''));
-    });
-    G._qtyLogPending=false;
-  }
+  G._qtyLogPending=false;   // v62: the audit dump is gone; the flag stays harmless
   Object.keys(map).forEach(function(k){
     const g=map[k];
     const keys=Object.keys(g.rates);
@@ -5907,23 +5924,18 @@ function aliGroupProducts(data,ac){
   });
   return map;
 }
-// v61: type spQtyReport() in the console to re-run the unit maths on demand.
+// v62: spQtyReport() stays available in the console as a plain summary —
+// no warnings, no per-row trace. It never runs on its own.
 function spQtyReport(){
   var ac=G.aliCols||{},rows=G.csvRaw||[];
   if(!rows.length){console.log('אין נתוני CSV טעונים');return;}
-  var keys=aliRowKeys(rows);
-  console.log('%c[spQtyReport]','color:#d4541a;font-weight:bold');
-  console.log('  כותרות בקובץ :',keys.join(' | '));
-  console.log('  עמודת כמות   :',ac.qty||'לא זוהתה');
-  console.log('  מועמדים      :',(aliQtyCandidates(keys).join(' • ')||'אין התאמה לפי כותרת'));
-  var units=0;for(var i=0;i<rows.length;i++)units+=aliRowQty(rows[i],ac);
-  console.log('  סכום יחידות  :',units,'מתוך',rows.length,'שורות');
-  G._qtyLogPending=true;
+  var lbl=aliUnitLabel(ac),units=0;
+  for(var i=0;i<rows.length;i++)units+=aliRowQty(rows[i],ac);
+  console.log('[spQtyReport] '+rows.length+' שורות · '+units+' '+lbl);
   var m=aliGroupProducts(rows,ac);
   var list=Object.keys(m).map(function(k){return m[k];}).sort(function(a,b){return b.count-a.count;});
-  console.log('  10 המוצרים המובילים ביחידות:');
   list.slice(0,10).forEach(function(d,i){
-    console.log('   '+(i+1)+'. '+d.count+' יחידות / '+d.orders+' הזמנות — '+d.name.slice(0,60));
+    console.log('   '+(i+1)+'. '+d.count+' '+lbl+' — '+d.name.slice(0,60));
   });
   return list;
 }
@@ -5946,6 +5958,7 @@ function setTopSort(key){
 }
 function renderTopProducts(){
   const tb=document.getElementById('top-tbody');if(!tb)return;
+  _applyUnitLabels();   // v62: header reads "עסקאות" unless a real qty column exists
   const st=G.topSort||(G.topSort={key:'sales',dir:'desc'});
   const list=(G._statProds||[]).slice().sort(function(a,b){
     const va=statSortVal(a,st.key),vb=statSortVal(b,st.key);
@@ -6041,7 +6054,7 @@ function renderAllProds(){
     <thead><tr>
       <th style="padding:7px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800;background:var(--s2);width:28px">#</th>
       ${th('name','מוצר')}
-      ${th('count','יחידות','width:64px;text-align:center')}
+      ${th('count',aliUnitLabel(),'width:64px;text-align:center')}
       ${th('sales','מכירות','width:78px')}
       ${th('commission','עמלה','width:72px')}
       ${hasInc?th('incentive','תמריץ','width:66px'):''}
@@ -6055,7 +6068,7 @@ function renderAllProds(){
           ${d.url?`<a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:none">${esc(d.name)}</a>`:esc(d.name)}
           ${d.itemId?`<div style="font-size:9px;color:var(--t3);font-family:monospace">ID ${esc(d.itemId)}</div>`:''}
         </td>
-        <td style="padding:7px 8px;text-align:center" title="${d.count} יחידות מתוך ${d.orders} הזמנות"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 6px;font-weight:800">×${d.count}</span></td>
+        <td style="padding:7px 8px;text-align:center" title="${d.orders} עסקאות"><span style="background:#eff6ff;color:var(--blue);border-radius:4px;padding:1px 6px;font-weight:800">×${d.count}</span></td>
         <td style="padding:7px 8px;font-family:monospace;font-weight:700;color:var(--acc)">$${d.sales.toFixed(2)}</td>
         <td style="padding:7px 8px;font-family:monospace;color:var(--grn)">$${d.commission.toFixed(2)}</td>
         ${hasInc?`<td style="padding:7px 8px;font-family:monospace;color:#d97706">$${d.incentive.toFixed(2)}</td>`:''}
@@ -6138,7 +6151,7 @@ function openCatDrillDown(catName){
     <thead><tr style="background:var(--s2)">
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">#</th>
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">מוצר</th>
-      <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">כמות</th>
+      <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">${aliUnitLabel()}</th>
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">מכירות</th>
       <th style="padding:6px 8px;text-align:right;border-bottom:1px solid var(--b1);color:var(--t3);font-weight:800">עמלה</th>
     </tr></thead>
@@ -9918,7 +9931,7 @@ document.addEventListener('DOMContentLoaded',function(){
 </script>
 <script>
 /* ── סימון גרסה: מאפשר לוודא בקונסול שנטענה הגרסה החדשה ולא מטמון ישן ── */
-var APP_BUILD = 'v-FBFLOW2 + CSV58';
+var APP_BUILD = 'v-FBFLOW2 + CSV62';
 console.log('%c[BUILD] ' + APP_BUILD + ' — copyPostToFB: desktop=אפס כתיבה | mobile=כתיבה רק אחרי share מוצלח',
             'background:#111;color:#0f0;padding:2px 6px;border-radius:3px;font-weight:bold');
 
