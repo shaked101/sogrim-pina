@@ -2016,14 +2016,69 @@ const POSTS_GAS_URL_DEFAULT = '/api/posts'; // v-SEC1: proxied via Vercel Server
    (הסיסמה/הסימון שהוזן) בכותרת X-App-Secret. הפרוקסי ב-Vercel
    משווה אותו מול APP_SECRET_TOKEN ומחזיר 401 אם אין התאמה.
    הסוד נשמר ב-sessionStorage בלבד (נמחק בהתנתקות/סגירת טאב).
+
+   v65 — SEC-HARDEN: העדכון הזה חוסם עכשיו גם את Code.gs עצמו (מאחורי
+   הפרוקסי), לא רק את הפרוקסי. ה-X-App-Secret למעלה נועד לוודא של-Vercel;
+   גוגל לא רואה Headers מותאמים אישית באמינות דרך הנתיב הזה, אז בדיוק כמו
+   בערוץ הישיר של הסטטיסטיקה — ה-token (ה-Hash) חייב לרכוב על ה-URL
+   (GET) או בתוך גוף ה-JSON/payload עצמו (POST). apiFetch משמש גם קריאות
+   ל-Webhooks של Make (‎/api/publish, /api/rewrite וכו') שלא בודקים
+   token בכלל — שדה token נוסף שם הוא לא מזיק, פשוט מתעלמים ממנו.
 ═══════════════════════════════════════════════════════════ */
 const _origFetch = window.fetch.bind(window);
 let _sec401Warned = false;
 async function apiFetch(url, opts){
   opts = opts || {};
   const headers = Object.assign({}, opts.headers || {});
-  headers['X-App-Secret'] = sessionStorage.getItem('sp_secret') || '';
-  const resp = await _origFetch(url, Object.assign({}, opts, { headers }));
+  const secret = sessionStorage.getItem('sp_secret') || '';
+  headers['X-App-Secret'] = secret;
+
+  const tok = await _spHashToken_(secret);
+  const finalOpts = Object.assign({}, opts, { headers });
+  let finalUrl = url;
+  let mergedIntoBody = false;
+
+  if(opts.body !== undefined && opts.body !== null){
+    if(typeof opts.body === 'string'){
+      const trimmed = opts.body.trim();
+      if(trimmed.charAt(0) === '{'){
+        // גוף JSON רגיל — {action:'...', ...} → מוסיפים token לתוך האובייקט
+        try{
+          const parsed = JSON.parse(opts.body);
+          if(parsed && typeof parsed === 'object' && !Array.isArray(parsed)){
+            parsed.token = tok;
+            finalOpts.body = JSON.stringify(parsed);
+            mergedIntoBody = true;
+          }
+        }catch(e){ /* לא JSON תקין — ניפול חזרה לצירוף ב-URL למטה */ }
+      } else {
+        // גוף form-urlencoded בפורמט payload=<json> (כמו ב-_cloudPost)
+        const m = opts.body.match(/(?:^|&)payload=([^&]*)/);
+        if(m){
+          try{
+            const decoded = decodeURIComponent(m[1].replace(/\+/g, ' '));
+            const payloadObj = JSON.parse(decoded);
+            payloadObj.token = tok;
+            const prefix = m[0].charAt(0) === '&' ? '&' : '';
+            const replacement = prefix + 'payload=' + encodeURIComponent(JSON.stringify(payloadObj));
+            finalOpts.body = opts.body.replace(m[0], replacement);
+            mergedIntoBody = true;
+          }catch(e){ /* ניפול חזרה לצירוף ב-URL למטה */ }
+        }
+      }
+    } else if(typeof FormData !== 'undefined' && opts.body instanceof FormData){
+      opts.body.append('token', tok);
+      finalOpts.body = opts.body;
+      mergedIntoBody = true;
+    }
+  }
+
+  if(!mergedIntoBody){
+    // בקשות GET, או POST שלא הצלחנו לשלב לתוכן — הטוקן מצטרף ל-URL עצמו
+    finalUrl += (finalUrl.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(tok);
+  }
+
+  const resp = await _origFetch(finalUrl, finalOpts);
   if(resp.status === 401 && !_sec401Warned){
     _sec401Warned = true;
     try{ toast('🔒 אימות נכשל (401) — התחבר מחדש או ודא ש-APP_SECRET_TOKEN תואם לסיסמה','err'); }catch(e){}
