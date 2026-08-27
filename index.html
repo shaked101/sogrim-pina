@@ -4270,7 +4270,7 @@ function _fbDesktopImageHelper(p){
     + '<div style="font-size:10px;color:var(--t3);margin-top:8px;font-weight:700">'
       + 'ℹ️ במחשב לא מתבצע עדכון בגיליון — הפוסט מיועד לתזמון עתידי.</div>',
     '<button class="btn" onclick="_fbCopyDesktopImgUrl()">🔗 העתק קישור תמונה</button>'
-    + '<button class="btn sec" onclick="window.open(_FB_DESKTOP_IMG_URL,\'_blank\')">↗️ פתח בטאב חדש</button>'
+    + '<button class="btn sec" onclick="window.open(_FB_DESKTOP_IMG_URL,\'_blank\',\'noopener,noreferrer\')">↗️ פתח בטאב חדש</button>'
     + '<button class="btn sec" onclick="closeModal()">סגור</button>'
   );
 }
@@ -5009,7 +5009,7 @@ function triggerPublish(rowNum,target){
     `<div class="ibox" style="font-size:11px;margin-bottom:12px">✏️ ניתן לערוך את הטקסט לפני השיגור. <strong>השינוי לא יישמר בשיטס</strong> — פעולה חד-פעמית בלבד.</div>
     <div class="fg" style="margin-bottom:9px"><label>טקסט לשיגור (ניתן לעריכה)</label>
     <textarea class="tedit" id="publish-txt" style="min-height:200px;font-size:12px;line-height:1.7">${esc(content)}</textarea></div>
-    ${link?`<div style="font-size:11px;color:var(--t2);margin-bottom:6px">🔗 קישור: <a href="${esc(link)}" target="_blank" style="color:var(--blue)">${esc(link)}</a></div>`:''}
+    ${link?`<div style="font-size:11px;color:var(--t2);margin-bottom:6px">🔗 קישור: <a href="${esc(link)}" target="_blank" rel="noopener" style="color:var(--blue)">${esc(link)}</a></div>`:''}
     <div style="font-size:11px;color:var(--t3)">שורה: ${rowNum} · פלטפורמה: ${target}</div>`,
     `<button class="btn sec" onclick="closeModal()">ביטול</button>
     <button class="btn" onclick="confirmPublish(${rowNum},'${target}')">🚀 אישור שיגור</button>`
@@ -6476,9 +6476,13 @@ async function fetchCommunityData(){
   if(btn){ btn.disabled=true; btn.textContent='⏳ מסנכרן...'; }
   _setLoadStep('טוען קהילה...');
   try{
-    const resp = await apiFetch(url+'?action=leaderboard&_t='+Date.now(),{
-      method:'GET', mode:'cors', redirect:'follow',
-      headers:{'Accept':'application/json'},
+    // v65 — SEC-FIX: leaderboard חושף שמות משתתפים אמיתיים + קישורי פרופיל
+    // פייסבוק (מידע רגיש) — הועבר מ-GET ל-POST כדי שלא יהיה נגיש דרך
+    // Prefetch/Link-Preview של צד שלישי (ר' דוח האבטחה, "קריאת מידע רגיש דרך GET").
+    const resp = await apiFetch(url,{
+      method:'POST', mode:'cors', redirect:'follow',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({action:'leaderboard'})
     });
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     const text=await resp.text();
@@ -7383,10 +7387,15 @@ async function loadRaffleData(){
   if(wrap)wrap.innerHTML='<div class="comm-loading"><div class="spin" style="width:22px;height:22px;border-width:3px;border-color:var(--b1);border-top-color:var(--acc)"></div><span>טוען נתוני הגרלה...</span></div>';
 
   // Try GAS fetch
-  var url=COMMUNITY_GAS_URL+'?action=getRaffleAll&_t='+Date.now();
+  // v65 — SEC-FIX: getRaffleAll חושף שמות משתתפים אמיתיים (מידע רגיש) —
+  // הועבר מ-GET ל-POST מאותה סיבה בדיוק כמו leaderboard למעלה.
   var fetched=false;
   try{
-    var resp=await apiFetch(url,{method:'GET',mode:'cors',redirect:'follow',headers:{'Accept':'application/json'}});
+    var resp=await apiFetch(COMMUNITY_GAS_URL,{
+      method:'POST',mode:'cors',redirect:'follow',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({action:'getRaffleAll'})
+    });
     if(resp.ok){
       var json=await resp.json();
       if(json&&json.ok){
@@ -9647,7 +9656,8 @@ async function _wsShareStory(){
   }
 
   // Fallback 2: דסקטופ ללא Web Share — פתיחת התמונה בטאב חדש
-  window.open(_wsLastImageUrl, '_blank');
+  // v65 — SEC-FIX: הוספת noopener,noreferrer (Reverse Tabnabbing).
+  window.open(_wsLastImageUrl, '_blank', 'noopener,noreferrer');
   toast('נפתחה התמונה בטאב חדש — שמור ושתף ידנית (הקישור כבר בלוח)','inf');
 }
 
