@@ -2302,6 +2302,23 @@ function _statsIsPacked(cols,rows){
 // kept for backward compatibility with anything still calling it
 function _statsSlimRows(rows,ac){return _statsPackRows(rows,ac);}
 
+/* ── v64: SEC-HARDEN — token auth for the direct stats channel ─────────────
+   ה-Backend חסום עכשיו מול בקשות אנונימיות (ראה SECRET_TOKEN ב-Code.gs).
+   הטוקן הוא סיסמת ההתחברות (sp_secret), אבל לעולם לא עובר כמות שהוא: הוא
+   מגיע ל-SHA-256 בדפדפן (Web Crypto — זמין רק ב-HTTPS/localhost, בדיוק
+   הסביבה שבה האפליקציה רצה), והשרת שומר/מחשב את אותו hash מ-SECRET_TOKEN
+   ומשווה. כך גם אם מישהו יראה את ה-URL של בקשת GET (היסטוריית דפדפן, לוג
+   ביצוע ב-Apps Script וכו') — הוא מקבל hash ולא את הסיסמה עצמה.
+   נופל בחזרה לשליחת המחרוזת הגולמית רק בסביבה נדירה בלי crypto.subtle. */
+async function _spHashToken_(str){
+  str=String(str||'');
+  try{
+    var enc=new TextEncoder().encode(str);
+    var buf=await crypto.subtle.digest('SHA-256',enc);
+    return Array.prototype.map.call(new Uint8Array(buf),function(b){return b.toString(16).padStart(2,'0');}).join('');
+  }catch(e){return str;} // fallback (אין Web Crypto): עדיף טוקן גולמי מאשר בקשה בלי טוקן בכלל
+}
+
 /* ── v63: direct transport — the two rules that make CORS a non-issue ──────
    ① Content-Type is text/plain. It is a CORS-safelisted value, so the browser
       sends the POST straight away with no OPTIONS preflight — which is exactly
@@ -2312,17 +2329,21 @@ function _statsSlimRows(rows,ac){return _statsPackRows(rows,ac);}
       helpers call _origFetch and never apiFetch.
    redirect:'follow' lets the browser walk the 302 to googleusercontent.com,
    which is where Google puts Access-Control-Allow-Origin: *.
+   v64: the auth token rides INSIDE the JSON body (POST) or in the querystring
+   (GET) — never as a header, or it re-arms the preflight described above.
 ────────────────────────────────────────────────────────────────────────── */
 async function _statsDirectPost(payload){
   var out={ok:false,status:0,raw:'',json:null,error:''};
   try{
+    var tok=await _spHashToken_(sessionStorage.getItem('sp_secret')||'');
+    var body=Object.assign({},payload,{token:tok});
     var resp=await _origFetch(STATS_GAS_URL,{
       method:'POST',
       mode:'cors',
       redirect:'follow',
       credentials:'omit',
       headers:{'Content-Type':'text/plain;charset=utf-8'},   // ← no preflight
-      body:JSON.stringify(payload)
+      body:JSON.stringify(body)
     });
     out.status=resp.status;
     out.raw=await resp.text();
@@ -2330,12 +2351,14 @@ async function _statsDirectPost(payload){
     try{out.json=JSON.parse(out.raw);}catch(e){out.error='התשובה מהשרת אינה JSON';return out;}
     out.ok=(out.json&&out.json.ok!==false);
     if(!out.ok)out.error=(out.json&&out.json.error)||'השרת החזיר ok:false';
+    if(out.status===401||(out.json&&out.json.error==='Unauthorized Access'))out.error='Unauthorized Access';
     return out;
   }catch(e){out.error=e.message||'שגיאת רשת';return out;}
 }
 
 async function _statsDirectGet(action,extra){
-  var qs='?action='+encodeURIComponent(action)+'&_t='+Date.now();
+  var tok=await _spHashToken_(sessionStorage.getItem('sp_secret')||'');
+  var qs='?action='+encodeURIComponent(action)+'&token='+encodeURIComponent(tok)+'&_t='+Date.now();
   if(extra)for(var k in extra)qs+='&'+encodeURIComponent(k)+'='+encodeURIComponent(extra[k]);
   try{
     // no headers at all → a plain simple request, no preflight
