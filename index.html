@@ -2600,7 +2600,18 @@ function saveCats(){localStorage.setItem('sp_cats',JSON.stringify(G.cats));}
 // UTILS
 // ════════════════════════════════════════════════
 const gc=(p,c)=>(p.data[c]||'').toString().trim();
-const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// v65 — SEC-FIX (H3/M2): נוסף סינון/קידוד לגרש בודד (') בנוסף למה שכבר קיים.
+// הערה מקצועית חשובה (לא לדלג בקריאה): הקידוד ל-&#39; מנטרל באופן מלא הזרקה
+// לתוך attribute רגיל תחום-מרכאות (למשל src="..."/value="..." — זה בדיוק מה
+// שמתקן את H3 ואת M4 למטה). הוא *לא* מנטרל באופן מלא הזרקה לתוך מחרוזת JS
+// יחידת-גרש בתוך onclick="...('...')" (התבנית שזוהתה כ-M2): הדפדפן מפענח
+// ישויות HTML כמו &#39; בזמן פיענוח ה-attribute, עוד *לפני* שהתוכן המפוענח
+// משמש כקוד JS עבור מאזין ה-onclick — כך שהישות חוזרת להיות גרש רגיל בדיוק
+// כשה-JS parser רואה אותה. נכון להיום אין נתיב ניצול פעיל ל-M2 (cat.id
+// נוצר תמיד כ-'cat_'+Date.now() ולא מקבל קלט חיצוני), אבל אם בעתיד יוזרם
+// דרך תבנית onclick דומה קלט פחות-נשלט — יש להימנע מ-inline onclick עם מחרוזת
+// דינמית, או לבצע JS-escaping ייעודי (למשל דרך JSON.stringify) לפני ההזרקה.
+const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const gv=id=>{const e=document.getElementById(id);return e?e.value.trim():''};
 const gvRaw=id=>{const e=document.getElementById(id);return e?e.value.replace(/,/g,'').trim():''};
 const getCfg=()=>JSON.parse(localStorage.getItem('sp_cfg')||'{}');
@@ -9954,7 +9965,9 @@ document.addEventListener('DOMContentLoaded',function(){
       }).slice(0,8);
 
       if(!results.length){
-        drop.innerHTML='<div class="gsearch-empty">אין תוצאות עבור "'+q+'"</div>';
+        // v65 — SEC-FIX (M4): esc(q) — q הוא קלט חופשי מתיבת החיפוש; היה מוזרק
+        // בעבר ל-innerHTML ללא בריחה (Reflected/Self-XSS).
+        drop.innerHTML='<div class="gsearch-empty">אין תוצאות עבור "'+esc(q)+'"</div>';
         drop.classList.add('open');
         return;
       }
@@ -9962,8 +9975,10 @@ document.addEventListener('DOMContentLoaded',function(){
         var heb   = esc(gc(p,COL.HEB)||'');
         var price = getPostPrice(p);
         var img   = getPostImg(p);
+        // v65 — SEC-FIX (H3): esc(img) — הערך מגיע מעמודת IMG בגיליון ונכנס
+        // ישירות ל-attribute; ללא בריחה זו הייתה נקודת Stored XSS.
         var imgEl = img
-          ? '<img class="gsearch-drop-img" src="'+img+'" loading="lazy" onerror="this.style.display=\'none\'">'
+          ? '<img class="gsearch-drop-img" src="'+esc(img)+'" loading="lazy" onerror="this.style.display=\'none\'">'
           : '<div class="gsearch-drop-img" style="display:flex;align-items:center;justify-content:center;font-size:14px">📦</div>';
         var priceEl = price ? '<span class="gsearch-drop-price">$'+price+'</span>' : '';
         // מעביר row (מספר) — לא אובייקט — כדי למנוע [object Object]
